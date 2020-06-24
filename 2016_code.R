@@ -29,7 +29,8 @@ create_targets <- function (target_design, target_formula) {
 
 ## SURVEY DATA (PEW)
 ### Load
-pew <- readRDS("data/pew.rds")
+#This needs to be loaded from dropbox/local not github bc it's too big
+pew <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/pew.rds")
 ### Make survey design 
 pew_srs <- svydesign(ids = ~1, data = pew)
 
@@ -50,7 +51,8 @@ vote_contrast <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /
 
 ## AUXILIARY INFORMATION (CCES)
 ### Load
-cces <- readRDS("./data/cces.rds")
+#This needs to be loaded from dropbox/local not github bc it's too big
+cces <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/cces.rds")
 ### Drop invalid cases
 cces <- cces %>%
     filter((CC16_401 == "I definitely voted in the General Election.") &
@@ -839,21 +841,22 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 
 #NOTE: can load the weights and the survey designs rather than the huge kabl objects:
 #then do not need to run code in get weights section
-load("surveys_NoPID.Rdata")
-load("surveys_wPID.Rdata")
+load("cleaned data/surveys_NoPID.Rdata")
+load("cleaned data/surveys_wPID.Rdata")
 
-load("weights_NoPid.Rdata")
-load("weights_wPid.Rdata")
+load("cleaned data/weights_NoPid.Rdata")
+load("cleaned data/weights_wPid.Rdata")
 
-load("numdims_wPid_varyb.Rdata")
-load("numdims_NoPid_varyb.Rdata")
+load("cleaned data/numdims_wPid_varyb.Rdata")
+load("cleaned data/numdims_NoPid_varyb.Rdata")
 
 
 ################################ PLOTS ##########################
 ## Presidential vote estimates
 
 ### Actual results
-pres <- readRDS("data/election.rds")
+#this needs to be loaded from local/dropbox 
+pres <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/election.rds")
 natl_margin <- pres %>%
     summarise(margin = (sum(demtotal) - sum(reptotal)) /
                   (sum(demtotal) + sum(reptotal))) %>%

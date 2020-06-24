@@ -1,0 +1,246 @@
+---
+title: "A Look at the Weights: NO PID"
+output:
+  pdf_document: default
+---
+
+```{r libs, messages = F, warnings = F,  include =F}
+suppressMessages(library(tidyverse))
+library(survey)
+suppressMessages(library(kableExtra))
+```
+
+# 1. Check Mean Weights in Pew4 Strata: 
+
+- Age
+- Female
+- Special Interaction:  if white =  race x educ x region, if notwhite =  race x region
+    
+```{r echo = F}
+#Looking at how the weights compare:
+
+#USE THIS
+#load("master_weights.Rdata")
+#load("master_surveydesigns.Rdata")
+#weights weights LA here
+# weights_LA <- pew %>% mutate(pew4_wt = wts$wt4,
+#                              k_wt = wts$wtkbal_nopid,
+#                              k_mf_wt = wts$wtkbal_mf_nopid)
+
+
+#load("weights_dat.Rdata")
+#rerunning as is no using nopid
+load("weights_dat_nopid.Rdata")
+kbal_wt_b.25x <- kbal_wt_b.25x_nopid
+kbal_wt_mf <- kbal_wt_mf_nopid
+
+#Look at: Age
+mean_comp_age <- weights_LA %>% ungroup() %>%
+    group_by(recode_age_bucket) %>%
+    summarise(mu_pew4 = mean(pew4_wt), 
+              mu_kbal = mean(k_wt), 
+              mu_kbal_mf = mean(k_mf_wt))
+
+mean_comp_age <- mean_comp_age %>% mutate(diff_kbal = round(mu_kbal -mu_pew4, 6),
+                                          diff_mf = round(mu_kbal_mf-mu_pew4, 6))
+#View(mean_comp_age) #meanfirst is exactly the same as pew4?
+
+#Look at: Female
+mean_comp_female <- weights_LA %>% ungroup() %>%
+    group_by(recode_female) %>%
+    summarise(mu_pew4 = mean(pew4_wt), 
+              mu_kbal = mean(k_wt), 
+              mu_kbal_mf = mean(k_mf_wt))
+
+mean_comp_female <- mean_comp_female %>% mutate(diff_kbal = round(mu_kbal -mu_pew4, 6),
+                                                diff_mf = round(mu_kbal_mf-mu_pew4, 6))
+#View(mean_comp_female) #again meanfirst and pew4 the same
+
+mean_comp_interaction <- weights_LA %>% ungroup() %>%
+    group_by(recode_race_educ_reg) %>%
+    summarise(mu_pew4 = mean(pew4_wt), 
+              mu_kbal = mean(k_wt), 
+              mu_kbal_mf = mean(k_mf_wt))
+
+mean_comp_interaction <- mean_comp_interaction %>% 
+    mutate(diff_kbal = round(mu_kbal -mu_pew4, 6),
+           diff_mf = round(mu_kbal_mf-mu_pew4, 6))
+#View(mean_comp_interaction) 
+
+#kable:
+kable_age <- mean_comp_age
+kable_female <- mean_comp_female
+kable_interaction<- mean_comp_interaction
+
+colnames(kable_age) <- c("Age Bucket", "Pew4", "KPOP", "KPOP+MF",
+                             "Pew4-KPOP", "Pew4  - KPOP+MF")
+kable(kable_age,
+      format = "latex", caption = "Mean Weight Across Age Bucket"
+, booktabs = T, digits= 5) %>%
+kable_styling(position = "center", latex_options = "hold_position")
+
+colnames(kable_female) <- c("Female", "Pew4", "KPOP", "KPOP+MF",
+                             "Pew4 - KPOP", "Pew4 - KPOP+MF")
+kable(kable_female,
+      format = "latex", caption = "Mean Weight Across Gender"
+, booktabs = T, digits= 5) %>%
+kable_styling(position = "center", latex_options = "hold_position")
+
+colnames(kable_interaction) <- c("Interaction", "Pew4", "KPOP", "KPOP+MF",
+                             "Pew4 - KPOP", "Pew4 - KPOP+MF") 
+kable(kable_interaction,
+      format = "latex", caption = "Mean Weight Across Interaction"
+, booktabs = T, digits= 5) %>%
+kable_styling(position = "center", latex_options = "hold_position")
+```
+
+## A Slightly Closer Look at How the Mean Weights within strata diverge
+
+
+### KPOP vs Pew4
+Below just outputs a quick summary of the differences between the KPOP weights and the Pew4 weights for each different strata
+
+```{r}
+summary(mean_comp_age$diff_kbal)
+summary(mean_comp_female$diff_kbal)
+summary(mean_comp_interaction$diff_kbal)
+```
+
+
+### KPOP+MF vs Pew4
+Below just outputs a quick summary of the differences between the KPOP+MF weights and the Pew4 weights
+
+```{r}
+summary(mean_comp_age$diff_mf)
+summary(mean_comp_female$diff_mf)
+summary(mean_comp_interaction$diff_mf)
+```
+
+
+
+# 2. Check Correlations
+```{r}
+
+#2. Check correlations w pew4 and kbal
+cor(weights_LA$pew4_wt, weights_LA$k_wt)
+cor(weights_LA$pew4_wt, weights_LA$k_mf_wt)
+```
+
+
+# 3. Check Balance on Strata/Outcome
+
+Below, we can take a look at what balance the weights produce on the strata used in pew4. It's best to poke around to see the outputs directly in the .Rdm file, but I've also printed out the results. As expected we get essentially perfect balance on female and age using kpop+mf and pew4. For now, I've outputted the difference in the weighted estimate using each different weighting scheme and the target CCES (weighted). Of course, since pew4 was make to rake on the strata in question, it gets essentially perfect balance on these strata and is not displayed. 
+
+
+```{r}
+#3. Check balance on means and any interactions used in pew4
+
+#Balance on mean of female, age and interaction
+check_bal <- function(variable, pew4 = pew_lwt_4, kbal = kbal_wt_b.25x, kbal_mf = kbal_wt_mf) {
+    bal_p4 = as.matrix(svymean(~pew_lwt_4$variables[,variable], pew_lwt_4, na.rm = TRUE))
+    bal_k = as.matrix(svymean(~kbal_wt_b.25x$variables[,variable], kbal_wt_b.25x, na.rm = TRUE))
+    bal_kmf = as.matrix(svymean(~kbal_wt_mf$variables[,variable], kbal_wt_mf, na.rm = TRUE))
+    bal_CCES = as.matrix(svymean(~cces_awt$variables[,variable], cces_awt, na.rm = TRUE))
+    
+    rownames(bal_CCES) <- sub('.*\\]', '', rownames(bal_CCES))
+    rownames(bal_kmf) <- sub('.*\\]', '', rownames(bal_CCES))
+    rownames(bal_k) <- sub('.*\\]', '', rownames(bal_CCES))
+    rownames(bal_p4) <- sub('.*\\]', '', rownames(bal_CCES))
+    
+    
+    difference = list(diff_p4 = round(bal_CCES[,1] - bal_p4[,1], 5),
+                      diff_k = round(bal_CCES[,1]- bal_k[,1],5),
+                      diff_kmf = round(bal_CCES[,1] - bal_kmf[,1],5))
+    return(list(mean_diff = difference, 
+                bal_p4 = bal_p4, 
+                bal_k = bal_k, 
+                bal_kmf = bal_kmf,
+                bal_CCES = bal_CCES))
+}
+
+outcome_bal <- check_bal("recode_vote_2016")
+female_bal <- check_bal("recode_female")
+age_bal <- check_bal("recode_age_bucket")
+interaction_bal <- check_bal("recode_race_educ_reg")
+
+
+```
+
+
+## How does Regular Kbal do? (with b =.25xncol)
+
+Here just compare the weighted mean estimates using the kpop weights to the CCES target means across the pew4 strata.
+```{r}
+#these objects specifically show the difference in means between the weighted CCES target and
+#the different weighting schemes, to see the actual numbers check out the balance objects
+
+female_bal$mean_diff$diff_k
+age_bal$mean_diff$diff_k
+interaction_bal$mean_diff$diff_k
+```
+
+## How does Kbal+MF do? (with b =.25xncol)
+
+Here just compare the weighted mean estimates using the kpop+mf weights to the CCES target means across the pew4 strata. It's basically perfect wiht respect to female and age as expected
+```{r}
+#these objects specifically show the difference in means between the weighted CCES target and
+#the different weighting schemes, to see the actual numbers check out the balance objects
+
+female_bal$mean_diff$diff_kmf
+age_bal$mean_diff$diff_kmf
+interaction_bal$mean_diff$diff_kmf
+```
+
+
+
+## How do Kbal+MF and Kbal compare to eachother on the interaction?
+
+It's pretty hard to compare all those numbers for the many different categories of the interaction. So how different are they really? Taking the absolute difference of their absolute values, we find that only only one (of 36) category has a difference greater than 0.01. 31 categories are differeny by 0.001 or more. So generally they have very similar performance in terms of matching the CCES target margins on these categories out to the hundreth, not too bad.
+
+
+```{r}
+#how different are these really?
+sum(abs(abs(interaction_bal$mean_diff$diff_kmf) - 
+            abs(interaction_bal$mean_diff$diff_k)) >= 0.01)
+#increasing precision
+sum(abs(abs(interaction_bal$mean_diff$diff_kmf) - 
+            abs(interaction_bal$mean_diff$diff_k)) >= 0.001)
+
+
+sum(abs(interaction_bal$mean_diff$diff_k) - 
+            abs(interaction_bal$mean_diff$diff_kmf) >= 0.001)
+
+```
+
+## Compare Balance on 2016 Vote Margin
+
+```{r}
+abs(outcome_bal$mean_diff$diff_k)- abs(outcome_bal$mean_diff$diff_kmf)
+
+```
+```{r echo = F}
+kable_out <- data.frame( cbind(outcome_bal$bal_CCES, 
+                               outcome_bal$bal_p4,
+                               outcome_bal$bal_k,
+                               outcome_bal$bal_kmf)) 
+
+Two_party_vote <- c(outcome_bal$bal_CCES[1]+outcome_bal$bal_CCES[3],
+                    outcome_bal$bal_p4[1]+outcome_bal$bal_p4[3],
+                    outcome_bal$bal_k[1]+outcome_bal$bal_k[3],
+                    outcome_bal$bal_kmf[1]+outcome_bal$bal_kmf[3])
+Two_party_Dmargin <- c(outcome_bal$bal_CCES[1]-outcome_bal$bal_CCES[3],
+                    outcome_bal$bal_p4[1]-outcome_bal$bal_p4[3],
+                    outcome_bal$bal_k[1]-outcome_bal$bal_k[3],
+                    outcome_bal$bal_kmf[1]-outcome_bal$bal_kmf[3])
+
+kable_out <- rbind(kable_out, Two_party_vote, Two_party_Dmargin, Two_party_Dmargin/Two_party_vote)
+    
+colnames(kable_out) <- c("CCES target", "Pew4", "KPOP","KPOP+MF")
+rownames(kable_out) <- c("Democrat", "Other", "Reublican", "2party_vshare", "2party_vtdiff", 
+                         "Dem Vote Margin")
+
+kable(kable_out,
+      format = "latex", caption = "Balance on 2016 Vote"
+, booktabs = T, digits= 7) %>%
+kable_styling(position = "center", latex_options = "hold_position")
+```

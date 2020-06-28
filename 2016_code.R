@@ -30,7 +30,7 @@ create_targets <- function (target_design, target_formula) {
 ## SURVEY DATA (PEW)
 ### Load
 #This needs to be loaded from dropbox/local not github bc it's too big
-pew <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/pew1.rds")
+pew <- readRDS("../data/pew.rds")
 ### Make survey design 
 pew_srs <- svydesign(ids = ~1, data = pew)
 
@@ -52,7 +52,7 @@ vote_contrast <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /
 ## AUXILIARY INFORMATION (CCES)
 ### Load
 #This needs to be loaded from dropbox/local not github bc it's too big
-cces <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/cces.rds")
+cces <- readRDS("../data/cces.rds")
 ### Drop invalid cases
 cces <- cces %>%
     filter((CC16_401 == "I definitely voted in the General Election.") &
@@ -996,6 +996,9 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 #for full plot all you need to load is
 load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 
+#full svd runs with out K and ksvd are here:
+load("cleaned data/Full SVD/fullruns_noKsvd.Rdata")
+
 #but if you want to build it internally use:
 load("cleaned data/Full SVD/surveys_NoPID_full.Rdata")
 load("cleaned data/Full SVD/surveys_wPID_full.Rdata")
@@ -1017,7 +1020,7 @@ load("cleaned data/Full Max SVD/numdims_NoPid_full.Rdata")
 
 ### Actual results
 #this needs to be loaded from local/dropbox 
-pres <- readRDS("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/data/election.rds")
+pres <- readRDS("../data/election.rds")
 natl_margin <- pres %>%
     summarise(margin = (sum(demtotal) - sum(reptotal)) /
                   (sum(demtotal) + sum(reptotal))) %>%
@@ -1303,14 +1306,77 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 # comp_df$MF[1:9]<- "NA" #making CCES target different color
 
 
+# comp_df %>%  #filter(PID != "No PID") %>%
+#     ggplot() +
+#     aes(x = source, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE, color = as.factor(PID),shape=as.factor(MF)) +
+#     
+#     geom_hline(yintercept = c(0, natl_margin, comp_df$est[comp_df$source == "CCES\n(Target)"]),
+#                linetype = c("solid", "dashed", "longdash"),
+#                color = c("black", "gray", "black")) +
+#     geom_pointrange() +
+#     scale_y_continuous(breaks = c(natl_margin, seq(-.05, .1, .05)),
+#                        minor_breaks = NULL,
+#                        labels = scales::percent_format()) +
+#     theme_bw() +
+#     theme(plot.title = element_text(hjust = 0.5)) +
+#     
+#     labs(x = NULL, y = "Estimated Margin (95% CI)") +
+#     ggtitle("Estimates of Clinton National Popular Vote Margin") +
+#     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
+#     annotate(geom = "text", x = 31.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
+#     annotate(geom = "text", x = 31.35, y = comp_df$est[comp_df$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
+#     theme(legend.title = element_blank())
+
+#ggsave("plots/fullSVD.pdf", width = 12, height = 6)
 
 
+######################## Cleaned Plots #######################
+#################################################
+# Clean Plot:
+##### (1) w PID: MF and no MF at optimal B + all raking/stratifying
 
-comp_df %>%  #filter(PID != "No PID") %>%
+#get optimal b's:
+load("Biasbound Tables/bb_dat_wEst_full.Rdata")
+
+### MF = F + Pid: 0.5 is best
+#best in terms of bias bound ratio
+rownames(bb_comp)[which(abs(bb_comp$bb_ratio) == max(abs(bb_comp$bb_ratio)))]
+
+### MF = T + Pid: 2 is best
+#best in terms of bias bound ratio
+rownames(bb_comp_mf)[which(abs(bb_comp_mf$bb_ratio) == max(abs(bb_comp_mf$bb_ratio)))]
+
+#load big df: 
+load("cleaned data/Full SVD/comp_df_table_full.Rdata")
+
+comp_df$b <- NA
+comp_df[grep("b", levels(comp_df$source)), "b"] <- c(rep(2,4), 
+                                                rep(1,4),
+                                                rep(.5, 4),
+                                                rep(.25,4),
+                                                rep(.125,4))
+
+# a verrrrrrryyy stupid way to do this
+comp_clean <- comp_df %>% filter(PID != "No PID" & b %in% c(NA, 2,0.5)) %>% 
+    filter(!(source %in% c("Pew KPOP + PID: b=2x\n                                           (dimKu = 13)","Pew KPOP + MF + PID: b=0.5x\n                                           (dimXu = 18, dimKu = 17)"))) %>% 
+    mutate(source_clean = factor(source, 
+                                 levels = c(as.character(comp_clean$source)),
+                                 labels = c("CCES\n(Target)", 
+                            "Pew\nUnweighted", 
+                            "Pew Raking\n(demographics)",
+                            "Pew Raking\n(demographics + education)",
+                            "Pew Raking\n(Post-Hoc)", 
+                            "Pew KPOP + MF",
+                            "Pew KPOP\n")))
+
+
+#### !!! issue bc still do not have working post-stratificaiton with pid
+
+comp_clean %>%
     ggplot() +
-    aes(x = source, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE, color = as.factor(PID),shape=as.factor(MF)) +
-    
-    geom_hline(yintercept = c(0, natl_margin, comp_df$est[comp_df$source == "CCES\n(Target)"]),
+    aes(x = source_clean, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE) +
+
+    geom_hline(yintercept = c(0, natl_margin, comp_clean$est[comp_clean$source == "CCES\n(Target)"]),
                linetype = c("solid", "dashed", "longdash"),
                color = c("black", "gray", "black")) +
     geom_pointrange() +
@@ -1319,200 +1385,13 @@ comp_df %>%  #filter(PID != "No PID") %>%
                        labels = scales::percent_format()) +
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5)) +
-    
+
     labs(x = NULL, y = "Estimated Margin (95% CI)") +
     ggtitle("Estimates of Clinton National Popular Vote Margin") +
     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-    annotate(geom = "text", x = 31.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
-    annotate(geom = "text", x = 31.35, y = comp_df$est[comp_df$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
+    annotate(geom = "text", x = 8.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
+    annotate(geom = "text", x = 8.35, y = comp_clean$est[comp_clean$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
     theme(legend.title = element_blank())
 
-ggsave("plots/everyrun_ever.pdf", width = 12, height = 6)
-
-
-
-############# Demvote only ####06/23 NOT UPDATED YET
-
-# vote_dem<- quote((recode_vote_2016Democrat) /
-#                            (recode_vote_2016Democrat + recode_vote_2016Republican + 
-#                                 recode_vote_2016Other))
-# 
-# demvote_df <- data.frame(
-#     CCES = svycontrast(svymean(~recode_vote_2016, cces_awt, na.rm = TRUE),
-#                        vote_dem),
-#     
-#     Pew_0 = svycontrast(svymean(~recode_vote_2016, pew_srs, na.rm = TRUE),
-#                         vote_dem),
-#     
-#     Pew_1 = svycontrast(svymean(~recode_vote_2016, pew_lwt_1, na.rm = TRUE),
-#                         vote_dem),
-#     Pew_1_pid = svycontrast(svymean(~recode_vote_2016, pew_lwt_1_pid, na.rm = TRUE),
-#                             vote_dem),
-#     
-#     Pew_2 = svycontrast(svymean(~recode_vote_2016, pew_lwt_2, na.rm = TRUE),
-#                         vote_dem),
-#     Pew_2_pid = svycontrast(svymean(~recode_vote_2016, pew_lwt_2_pid, na.rm = TRUE),
-#                             vote_dem),
-#     
-#     Pew_3 = svycontrast(svymean(~recode_vote_2016, pew_ps_3, na.rm = TRUE),
-#                         vote_dem),
-#     
-#     Pew_4 = svycontrast(svymean(~recode_vote_2016, pew_lwt_4, na.rm = TRUE),
-#                         vote_dem),
-#     Pew_4_pid = svycontrast(svymean(~recode_vote_2016, pew_lwt_4_pid, na.rm = TRUE),
-#                             vote_dem),
-#     
-#     
-#     Pew_kbal_b.5x_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                               kbal_wt_b.5x_nopid, na.rm = TRUE),
-#                                       vote_dem),
-#     Pew_kbal_b.5x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.5x,
-#                                         na.rm = TRUE), vote_dem),
-#     
-#     
-#     Pew_kbal_b.25x_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                                kbal_wt_b.25x_nopid, na.rm = TRUE),
-#                                        vote_dem),
-#     Pew_kbal_b.25x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.25x, 
-#                                          na.rm = TRUE), vote_dem),
-#     
-#     
-#     Pew_kbal_b.125x_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                                 kbal_wt_b.125x_nopid, na.rm = TRUE),
-#                                         vote_dem),
-#     Pew_kbal_b.125x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.125x, 
-#                                           na.rm = TRUE), vote_dem),
-#     
-#     
-#     Pew_kbal_mf_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                             kbal_wt_mf_nopid, na.rm = TRUE),
-#                                     vote_dem),
-#     Pew_kbal_mf = svycontrast(svymean(~recode_vote_2016, kbal_wt_mf, na.rm = TRUE),
-#                               vote_dem),
-#     
-#     
-#     Pew_kbal_Nebal_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                                kbal_wt_nebal_nopid, na.rm = TRUE),
-#                                        vote_dem),
-#     Pew_kbal_Nebal = svycontrast(svymean(~recode_vote_2016, kbal_wt_nebal, na.rm = TRUE),
-#                                  vote_dem)
-# 
-# ) %>%
-#     pivot_longer(cols = everything(),
-#                  names_to = c("source", ".value"), 
-#                  names_pattern = "(.*)\\.(.*)")  %>%
-#     mutate(est = nlcon) %>%
-#     mutate(err = est - natl_dvote,
-#            source = str_replace(source, "_", " ")) %>%
-#     mutate(err_target = est - est[source == "CCES"]) %>%
-#     mutate(source = factor(source,
-#                            levels = c("CCES",
-#                                       "Pew 0",
-#                                       "Pew 1",
-#                                       "Pew 1_pid",
-#                                       "Pew 2",
-#                                       "Pew 2_pid",
-#                                       "Pew 3",
-#                                       "Pew 4",
-#                                       "Pew 4_pid" ,
-#                                       "Pew kbal_b.5x_nopid",
-#                                       "Pew kbal_b.5x",
-#                                       "Pew kbal_b.25x_nopid",
-#                                       "Pew kbal_b.25x",
-#                                       "Pew kbal_b.125x_nopid",
-#                                       "Pew kbal_b.125x",
-#                                       "Pew kbal_mf_nopid",
-#                                       "Pew kbal_mf",
-#                                       "Pew kbal_Nebal_nopid",
-#                                       "Pew kbal_Nebal"
-#                            ),
-#                            labels = c("CCES\n(Target)",
-#                                       "Pew\nUnweighted",
-#                                       "Pew\nRaking (demographics)",
-#                                       "Pew+PID \nRaking(demographics)",
-#                                       "Pew\nRaking (demographics +\neducation)",
-#                                       "Pew+PID\nRaking (demographics +\neducation)",
-#                                       "Pew\nPost-Stratification",
-#                                       "Pew\nRaking (Post-Hoc)",
-#                                       "Pew+PID\nRaking  (Post-Hoc)" ,
-# 
-# 
-#                                       paste0("Pew\nKPOP: b=0.5x 
-#                                              (NoConv) (dimKu = ",
-#                                              kbalout_nopid_b.5x$numdims,")"),
-#                                       paste0("Pew+PID\nKPOP: b=0.5x 
-#                                              (NoConv) (dimKu = ",
-#                                              kbal_b.5x$numdims,")"),
-# 
-# 
-#                                       paste0("Pew\nKPOP: b=0.25x 
-#                                              (NoConv) (dimKu = ",
-#                                              kbalout_nopid_b.25x$numdims,")"),
-#                                       paste0("Pew+PID\nKPOP: b=0.25x
-#                                              (NoConv) (dimKu = ",
-#                                              kbal_b.25x$numdims,")"),
-# 
-# 
-#                                       paste0("Pew\nKPOP: b=0.125x 
-#                                              (NoConv) (dimKu = ",
-#                                              kbalout_nopid_b.125x$numdims,")"),
-#                                       paste0("Pew+PID\nKPOP: b=0.125x 
-#                                              (NoConv) (dimKu = ",
-#                                              kbal_b.125x$numdims,")"),
-# 
-# 
-#                                       paste0("Pew\nKPOP + MF: b=0.25x 
-#                                              (Conv) (dimXu = ",
-#                                              kbalout_mf_nopid$meanfirst.dims, ", dimKu = ",
-#                                              kbalout_mf_nopid$numdims,")"),
-#                                       paste0("Pew+PID\nKPOP + MF: b=0.25x
-#                                              (Conv) (dimXu = ",
-#                                            kbalout_mf$meanfirst.dims, ", dimKu = ",
-#                                            kbalout_mf$numdims,")"),
-# 
-# 
-#                                     paste0("Pew\nKPOP + MF: b=0.25x
-#                                            (NoConv) (dimXu = ",
-#                                            kbalout_mf_nebal_nopid$meanfirst.dims,
-#                                            ", dimKu = ",
-#                                            kbalout_mf_nebal_nopid$numdims,")"),
-#                                     paste0("Pew+PID\nKPOP + MF: b=0.25x 
-#                                            (NoConv) (dimXu = ",
-#                                            kbalout_mf_nebal$meanfirst.dims,
-#                                            ", dimKu = ",
-#                                            kbalout_mf_nebal_nopid$numdims,")")
-#                          )
-#                 ))
-# demvote_df$PID[grep("PID", levels(demvote_df$source))] <- "PID"
-# demvote_df$PID[-grep("PID", levels(demvote_df$source)) ]<- "No PID"
-# demvote_df$PID[1:2]<- "Not Weighted" #making CCES target different color
-# 
-# #took out SEs cause they came from svyconstrast
-# demvote_df %>% filter(PID != "PID") %>%
-#     ggplot() +
-#     aes(x = source, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
-#         color = as.factor(PID)) +
-#     geom_hline(yintercept = c(natl_dvote, demvote_df$est[demvote_df$source == "CCES\n(Target)"]),
-#             linetype = c( "dashed", "longdash"),
-#               color = c("gray", "black")) +
-#     geom_pointrange() +
-#     scale_y_continuous(breaks = c(natl_dvote, seq(-.05, .1, .05)),
-#                      minor_breaks = NULL,
-#                    labels = scales::percent_format()) +
-#     theme_bw() +
-#     theme(plot.title = element_text(hjust = 0.5)) +
-#     labs(x = NULL, y = "Estimated Margin (95% CI)") +
-#     ggtitle("Estimates of Clinton National Popular Vote + PID NOT Included") +
-#     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-#    annotate(geom = "text", x = 11.25, y = natl_dvote, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
-#    annotate(geom = "text", x = 11.35, y =demvote_df$est[demvote_df$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
-#     theme(legend.title = element_blank())
-# 
-# 
-# ggsave("plots/estimates_0619.pdf", width = 12, height = 6)
-
-
-
-
-
+ggsave("plots/cleaned_v1.pdf", width = 12, height = 6)
 

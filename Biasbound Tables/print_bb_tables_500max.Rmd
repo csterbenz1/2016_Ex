@@ -6,7 +6,8 @@ header-includes:
   - \usepackage{makecell}
 ---
 
-# Updated: Full SVD Runs
+# First 500 Singular Values/Vectors
+
 ### Note that all ratios are original:optimal
 
 
@@ -15,17 +16,13 @@ suppressMessages(library(kableExtra))
 suppressMessages(library(tidyverse))
 suppressMessages(library(survey))
 #suppressMessages(library(dplyr))
+load("bb_dat_wEst.Rdata")
 ```
 
 
-```{r, echo  = F, eval = F}
-######### this chunk just used to add estimates for vote margin to the biasbound tables
-#but to save time resaved in bb_dat_wEst_full above
-#resaved bb_dat to update these
-load("../cleaned data/Full SVD/bb_dat_full.Rdata")
-load("../cleaned data/Full SVD/comp_df_table_full.Rdata")
-
-
+```{r, echo = F, eval = F}
+#used to add est to bb_tables but unncess if loading wEst file
+load("../cleaned data/500 Max SVD/comp_df_500.Rdata")
 #merging to bb_comps: kpop + pid + no mf
 bb_comp <- bb_comp %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
                                   filter(PID == "PID" & MF == "No MF") 
@@ -59,15 +56,14 @@ bb_comp_nopid <- bb_comp_nopid %>% mutate(Est_VoteMargin = as.matrix(comp_df %>%
                               Diff_from_Target = as.matrix(comp_df %>% 
                                   filter(PID == "No PID" & MF == "No MF") %>%
                                   select(err_target))[,] )
-    
 rownames(bb_comp_nopid) <- c("b=2x",
                        "b=1x",
                        "b=.5x",
                        "b=.25x",
-                       "b=.125x") #,
-                       #"b=0.0625")
+                       "b=.125x",
+                       "b=0.0625")
 
-bb_comp_mf_nopid <- bb_comp_mf_nopid %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
+bb_comp_mf_nopid <-  bb_comp_mf_nopid %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
                                   filter(PID == "No PID" & MF == "MF") 
                                   %>% select(est))[,],
                               Diff_from_Target = as.matrix(comp_df %>% 
@@ -79,19 +75,10 @@ rownames(bb_comp_mf_nopid) <- c("b=2x",
                                 "b=.25x",
                                 "b=.125x")
 
-save(bb_comp_nopid,bb_comp_mf_nopid, bb_comp, bb_comp_mf, file = "bb_dat_wEst_full.Rdata")
+save(bb_comp_nopid, bb_comp, bb_comp_mf, file = "bb_dat_wEst.Rdata")
 
 
 ```
-
-```{r, echo =F}
-#for full SVD
-load("bb_dat_wEst_full.Rdata")
-#for 500 max
-#load("bb_dat_wEst.Rdata")
-
-```
-
 
 # With Party Id
 
@@ -176,7 +163,7 @@ kable(bb_comp_nopid[c(1,2,7,8)],
 ### KPOP with meanfirst
 
 
-```{r, echo  = F, results = "asis"}
+```{r, echo  = F, eval= T, results = "asis"}
 
 kable(bb_comp_mf_nopid[1:6],
       format = "latex",
@@ -198,37 +185,6 @@ kable(bb_comp_mf_nopid[c(1,2,7,8)],
 #save(bb_comp, bb_comp_mf, bb_comp_nopid, bb_comp_mf_nopid,file = "bb_dat_wEst.Rdata")
 
 ```
-
-
-```{r echo = F}
-#best
-#bb_comp: best in terms of balance on target
-rownames(bb_comp)[which(abs(bb_comp$Diff_from_Target) == min(abs(bb_comp$Diff_from_Target)))]
-#best in terms of bias bound ratio
-rownames(bb_comp)[which(abs(bb_comp$bb_ratio) == max(abs(bb_comp$bb_ratio)))]
-
-
-#best
-#bb_comp_mf: best in terms of balance on target
-rownames(bb_comp_mf)[which(abs(bb_comp_mf$Diff_from_Target) == min(abs(bb_comp_mf$Diff_from_Target)))]
-#best in terms of bias bound ratio
-rownames(bb_comp_mf)[which(abs(bb_comp_mf$bb_ratio) == max(abs(bb_comp_mf$bb_ratio)))]
-
-
-#best
-#bb_comp_nopid: best in terms of balance on target
-rownames(bb_comp_nopid)[which(abs(bb_comp_nopid$Diff_from_Target) == min(abs(bb_comp_nopid$Diff_from_Target)))]
-#best in terms of bias bound ratio
-rownames(bb_comp_nopid)[which(abs(bb_comp_nopid$bb_ratio) == max(abs(bb_comp_nopid$bb_ratio)))]
-
-#best
-#bb_comp_mf_nopid
-rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$Diff_from_Target) == min(abs(bb_comp_mf_nopid$Diff_from_Target)))]
-#best in terms of bias bound ratio
-rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$bb_ratio) == max(abs(bb_comp_mf_nopid$bb_ratio)))]
-
-```
-
 
 
 ## Best Choice of B
@@ -271,44 +227,6 @@ rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$Diff_from_Target) == min(a
 rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$bb_ratio) == max(abs(bb_comp_mf_nopid$bb_ratio)))]
 
 ```
-
-
-
-# How did things change by moving to fullSVD?
-
-```{r, echo = F, eval = F}
-#so I don't write over this when loading the 500
-bb_comp_full <- bb_comp
-bb_comp_mf_full <- bb_comp_mf
-bb_comp_nopid_full <- bb_comp_nopid
-bb_comp_mf_nopid_full <- bb_comp_mf_nopid
-
-#for 500 max
-load("bb_dat_wEst.Rdata")
-diff_bbcomp <- bb_comp_full-bb_comp
-diff_bbcomp_mf <- bb_comp_mf_full-bb_comp_mf
-diff_bbcomp_nopid <- bb_comp_nopid_full-bb_comp_nopid[1:5,]
-diff_bbcomp_mf_nopid <- bb_comp_mf_nopid_full-bb_comp_mf_nopid
-
-#see how much the estimates changed:
-#this moves alot for larger b
-bb_comp$Est_VoteMargin
-bb_comp_full$Est_VoteMargin
-
-bb_comp_mf$Est_VoteMargin
-bb_comp_mf_full$Est_VoteMargin
-
-#what the fuck why is bb_comp_mf the same as bb_comp_full
-
-diff_bbcomp$Est_VoteMargin
-diff_bbcomp_mf$Est_VoteMargin
-diff_bbcomp_nopid$Est_VoteMargin
-diff_bbcomp_mf_nopid$Est_VoteMargin
-
-
-```
-
-
 
 
 

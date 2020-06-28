@@ -1,5 +1,5 @@
 ---
-title: "A Look at the Weights: NO PID"
+title: "A Look at the Weights: PID"
 output:
   pdf_document: default
 ---
@@ -10,6 +10,41 @@ library(survey)
 suppressMessages(library(kableExtra))
 ```
 
+
+
+## This is currently set up to look at the weights for pew4, kpop at b = .5, and kpop + mf=T at b=2 (optimal biasbound ratio choices) all with pid included
+
+```{r, echo =F}
+#need to load this from elsewhere (in dropbox) too big for git
+pew <- readRDS("../data/pew.rds")
+#what weights to look at:
+#full SVD weights are:
+#w pid and selecting optimal b's
+load("cleaned data/Full SVD/weights_wPid_full.Rdata")
+#put weights in this object so rest of code uses it
+#optimal choice w pid: no mf = 0.5, mf = 2
+weights_LA <- pew %>% mutate(pew4_wt = wts_wPid$wt4,
+                             k_wt = wts_wPid$wtkbal_b.5x,
+                             k_mf_wt = wts_wPid$wtkbal_mf_b2x)
+
+
+#need to load the corresponding survey desigsn as well
+load("cleaned data/Full SVD/surveys_wPID_full.Rdata")
+load("surveys_others_wPid.Rdata")
+
+
+#can look at without pid using this, changing names in weights_LA etc where needed (should only be in the call of the check_bal function)
+#load("cleaned data/Full SVD/weights_NoPid_full.Rdata")
+#and 
+#older 500 max
+#load("master_weights.Rdata")
+#load("master_surveydesigns.Rdata")
+
+```
+
+
+
+
 # 1. Check Mean Weights in Pew4 Strata: 
 
 - Age
@@ -19,23 +54,8 @@ suppressMessages(library(kableExtra))
 ```{r echo = F}
 #Looking at how the weights compare:
 
-#USE THIS
-#load("master_weights.Rdata")
-#load("master_surveydesigns.Rdata")
-#weights weights LA here
-# weights_LA <- pew %>% mutate(pew4_wt = wts$wt4,
-#                              k_wt = wts$wtkbal_nopid,
-#                              k_mf_wt = wts$wtkbal_mf_nopid)
-
-
-#load("weights_dat.Rdata")
-#rerunning as is no using nopid
-load("weights_dat_nopid.Rdata")
-kbal_wt_b.25x <- kbal_wt_b.25x_nopid
-kbal_wt_mf <- kbal_wt_mf_nopid
-
 #Look at: Age
-mean_comp_age <- weights_LA %>% ungroup() %>%
+mean_comp_age <- weights_LA  %>%
     group_by(recode_age_bucket) %>%
     summarise(mu_pew4 = mean(pew4_wt), 
               mu_kbal = mean(k_wt), 
@@ -133,13 +153,14 @@ Below, we can take a look at what balance the weights produce on the strata used
 
 
 ```{r}
+#need survey designs here
 #3. Check balance on means and any interactions used in pew4
 
 #Balance on mean of female, age and interaction
-check_bal <- function(variable, pew4 = pew_lwt_4, kbal = kbal_wt_b.25x, kbal_mf = kbal_wt_mf) {
-    bal_p4 = as.matrix(svymean(~pew_lwt_4$variables[,variable], pew_lwt_4, na.rm = TRUE))
-    bal_k = as.matrix(svymean(~kbal_wt_b.25x$variables[,variable], kbal_wt_b.25x, na.rm = TRUE))
-    bal_kmf = as.matrix(svymean(~kbal_wt_mf$variables[,variable], kbal_wt_mf, na.rm = TRUE))
+check_bal <- function(variable, pew4, kbal, kbal_mf) {
+    bal_p4 = as.matrix(svymean(~pew4$variables[,variable], pew4, na.rm = TRUE))
+    bal_k = as.matrix(svymean(~kbal$variables[,variable], kbal, na.rm = TRUE))
+    bal_kmf = as.matrix(svymean(~kbal_mf$variables[,variable], kbal_mf, na.rm = TRUE))
     bal_CCES = as.matrix(svymean(~cces_awt$variables[,variable], cces_awt, na.rm = TRUE))
     
     rownames(bal_CCES) <- sub('.*\\]', '', rownames(bal_CCES))
@@ -158,10 +179,14 @@ check_bal <- function(variable, pew4 = pew_lwt_4, kbal = kbal_wt_b.25x, kbal_mf 
                 bal_CCES = bal_CCES))
 }
 
-outcome_bal <- check_bal("recode_vote_2016")
-female_bal <- check_bal("recode_female")
-age_bal <- check_bal("recode_age_bucket")
-interaction_bal <- check_bal("recode_race_educ_reg")
+outcome_bal <- check_bal("recode_vote_2016", pew4 = pew_lwt_4_pid, 
+                         kbal = kbal_wt_b.5x, kbal_mf = kbal_mf_wt_b2x)
+female_bal <- check_bal("recode_female", pew4 = pew_lwt_4_pid, 
+                         kbal = kbal_wt_b.5x, kbal_mf = kbal_mf_wt_b2x)
+age_bal <- check_bal("recode_age_bucket",pew4 = pew_lwt_4_pid, 
+                         kbal = kbal_wt_b.5x, kbal_mf = kbal_mf_wt_b2x)
+interaction_bal <- check_bal("recode_race_educ_reg",pew4 = pew_lwt_4_pid, 
+                         kbal = kbal_wt_b.5x, kbal_mf = kbal_mf_wt_b2x)
 
 
 ```
@@ -218,6 +243,7 @@ sum(abs(interaction_bal$mean_diff$diff_k) -
 abs(outcome_bal$mean_diff$diff_k)- abs(outcome_bal$mean_diff$diff_kmf)
 
 ```
+
 ```{r echo = F}
 kable_out <- data.frame( cbind(outcome_bal$bal_CCES, 
                                outcome_bal$bal_p4,

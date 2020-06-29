@@ -111,8 +111,8 @@ formula_3_pid <- ~recode_age_3way * recode_female * recode_race *
     recode_region * recode_educ_3way * recode_pid_3way
 formula_4_pid <- ~recode_age_bucket + recode_female + recode_race_educ_reg + recode_pid_3way
 #add interaction with pid
-formula_5_pid <- ~recode_age_bucket:recode_pid_3way + recode_female:recode_pid_3way+
-    recode_race_educ_reg:recode_pid_3way
+#formula_5_pid <- ~recode_age_bucket:recode_pid_3way + recode_female:recode_pid_3way+
+ #   recode_race_educ_reg:recode_pid_3way
 #sum(svytable(formula_5_pid, pew_srs) == 0) 
 
 ### Population targets
@@ -126,7 +126,7 @@ targets_2_pid <- create_targets(cces_awt, formula_2_pid)
 targets_3_pid <- create_targets(cces_awt, formula_3_pid) # will have to modify below
 targets_4_pid <- create_targets(cces_awt, formula_4_pid)
 
-targets_5_pid <- create_targets(cces_awt, formula_5_pid)
+#targets_5_pid <- create_targets(cces_awt, formula_5_pid)
 
 #### Weighted survey designs
 # NO PID
@@ -180,24 +180,8 @@ pew_lwt_2_pid <- calibrate(design = pew_srs,
                        population = targets_2_pid,
                        calfun = "raking")
 
-#### (3)
-##### Still can't compute below because some cells are empty.
-try(pew_lwt_3_pid <- calibrate(design = pew_srs,
-                           formula = formula_3_pid,
-                           population = targets_3_pid,
-                           calfun = "linear"),
-    silent = T)
-#Try using postStratify() with partial = TRUE to ignore empty cells but we end up with 56 NA weights
-formula_3_ps_pid <- as.formula(str_replace_all(formula_3_pid, "\\*", "+"))
-targets_3_ps_pid <- svytable(formula = formula_3_ps_pid, design = cces_awt)
-sum(svytable(formula_3_ps_pid, pew_srs) == 0) # 265 empty cells -> 870 with pid
-pew_ps_3_pid <- postStratify(design = pew_srs,
-                         strata = formula_3_ps_pid,
-                         population = targets_3_ps_pid,
-                         partial = TRUE)
+#### (3) IS BELOW! after the manual postStratify function
 
-#this gives 56 na's 
-sum(is.na((weights(pew_ps_3_pid ))))
 
 #### (4) our "post-hoc" 
 pew_lwt_4_pid <- calibrate(design = pew_srs,
@@ -207,15 +191,132 @@ pew_lwt_4_pid <- calibrate(design = pew_srs,
 
 
 
-###(5) not working with pid interacted with the huge interaction
-pew_lwt_5_pid <- calibrate(design = pew_srs,
-                           formula = formula_5_pid,
-                           population = targets_5_pid,
-                           calfun = "raking")
-#how many empty cells? riiight need to make this target in cces too
-formula_5_ps_pid <- as.formula(str_replace_all(formula_5_pid, "\\:", "+"))
-targets_5_ps_pid <- svytable(formula = formula_5_ps_pid, design = cces_awt)
-sum(svytable(formula_5_ps_pid, pew_srs) == 0)  #325 :()
+# ###(5) not working with pid interacted with the huge interaction
+# pew_lwt_5_pid <- calibrate(design = pew_srs,
+#                            formula = formula_5_pid,
+#                            population = targets_5_pid,
+#                            calfun = "raking")
+# #how many empty cells? riiight need to make this target in cces too
+# formula_5_ps_pid <- as.formula(str_replace_all(formula_5_pid, "\\:", "+"))
+# targets_5_ps_pid <- svytable(formula = formula_5_ps_pid, design = cces_awt)
+# sum(svytable(formula_5_ps_pid, pew_srs) == 0)  #325 :()
+
+
+
+# save(cces_awt,pew_srs, pew_lwt_1, pew_lwt_2, pew_ps_3, pew_lwt_4, 
+#      file = "cleaned data/Other Methods/surveys_others_NoPid.Rdata")
+
+
+############################# Erin's Stratification Code (Edited)########################
+
+postStratify_edit <- function (design, strata, population, partial = FALSE, ...) 
+{
+    #test internally: 
+    # design = pew_srs
+    # strata = formula_3_ps_pid
+    # population = targets_3_ps_pid
+    # partial = TRUE
+    
+    
+    if (inherits(strata, "formula")) {
+        mf <- substitute(model.frame(strata, data = design$variables, 
+                                     na.action = na.fail))
+        strata <- eval.parent(mf)
+    }
+    strata <- as.data.frame(strata)
+    sampletable <- xtabs(I(1/design$prob) ~ ., data = strata)
+    sampletable <- as.data.frame(sampletable)
+    if (inherits(population, "table")) { 
+        population <- as.data.frame(population)
+    } else if (is.data.frame(population)) {
+        population$Freq <- as.vector(population$Freq)
+    } else {stop("population must be a table or dataframe")}
+    
+    if (!all(names(strata) %in% names(population))) {
+        stop("Stratifying variables don't match")
+    }
+    
+    nn <- names(population) %in% names(strata)
+    if (sum(!nn) != 1)  {
+        stop("stratifying variables don't match")
+    }
+    
+    names(population)[which(!nn)] <- "Pop.Freq"
+    both <- merge(sampletable, population, by = names(strata), 
+                  all = TRUE)
+    samplezero <- both$Freq %in% c(0, NA)
+    popzero <- both$Pop.Freq %in% c(0, NA)
+    
+    if (any(onlysample <- popzero & !samplezero)) {
+        print(both[onlysample, ])
+        stop("Strata in sample absent from population. This Can't Happen")
+    }
+    if (any(onlypop <- samplezero & !popzero)) {
+        if (partial) {
+            both <- both[!onlypop, ]
+            warning("Some strata absent from sample: ignored")
+            ##### EDITS HERE:
+            #adjusting the length of these now that we'v dropped rows
+            samplezero <- both$Freq %in% c(0, NA)
+            popzero <- both$Pop.Freq %in% c(0, NA)
+        }
+        else {
+            print(both[onlypop, ])
+            stop("Some strata absent from sample: use partial=TRUE to ignore them.")
+        }
+    }
+    #this is now fixed
+    both <- both[!(samplezero & popzero), ]
+    reweight <- both$Pop.Freq/both$Freq
+    
+    both$label <- do.call("interaction", list(both[, names(strata)]))
+    designlabel <- do.call("interaction", strata)
+    index <- match(designlabel, both$label)
+    attr(index, "oldweights") <- 1/design$prob
+    design$prob <- design$prob/reweight[index]
+    attr(index, "weights") <- 1/design$prob
+    design$postStrata <- c(design$postStrata, list(index))
+    design$call <- sys.call(-1)
+    design
+}
+
+
+##### Still can't compute below because some cells are empty.
+try(pew_lwt_3_pid <- calibrate(design = pew_srs,
+                               formula = formula_3_pid,
+                               population = targets_3_pid,
+                               calfun = "linear"),
+    silent = T)
+#Try using postStratify() with partial = TRUE to ignore empty cells but we end up with 56 NA weights
+formula_3_ps_pid <- as.formula(str_replace_all(formula_3_pid, "\\*", "+"))
+targets_3_ps_pid <- svytable(formula = formula_3_ps_pid, design = cces_awt)
+sum(svytable(formula_3_ps_pid, pew_srs) == 0) # 265 empty cells -> 870 with pid
+#this gives NAs
+# pew_ps_3_pid <- survey::postStratify(design = pew_srs,
+#                          strata = formula_3_ps_pid,
+#                          population = targets_3_ps_pid,
+#                          partial = TRUE)
+
+#this gives 56 na's 
+#sum(is.na((weights(pew_ps_3_pid ))))
+
+
+
+#Erin's fix (edited)
+pew_ps_3_pid <- postStratify_edit(design = pew_srs,
+                                     strata = formula_3_ps_pid,
+                                     population = targets_3_ps_pid,
+                                     partial = TRUE)
+
+#yay this is zero
+sum(is.na((weights(pew_ps_3_pid))))
+
+
+save(cces_awt,pew_srs, pew_lwt_1_pid, pew_lwt_2_pid, pew_ps_3_pid, pew_lwt_4_pid,
+     file = "cleaned data/Other Methods/surveys_others_wPid.Rdata")
+
+
+
 ############################## KBAL METHODS ##########################
 
 
@@ -914,23 +1015,23 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 #     wt2 = weights(pew_lwt_2) / mean(weights(pew_lwt_2)),
 #     wt2_pid = weights(pew_lwt_2_pid ) / mean(weights(pew_lwt_2_pid )),
 #     wt3 = weights(pew_ps_3) / mean(weights(pew_ps_3)),
-#     #wt3_pid = weights(pew_ps_3_pid ) / mean(weights(pew_ps_3_pid )), #NAs cause issue
+#     wt3_pid = weights(pew_ps_3_pid ) / mean(weights(pew_ps_3_pid )), #NAs cause issue
 #     wt4 = weights(pew_lwt_4) / mean(weights(pew_lwt_4)),
 #     wt4_pid = weights(pew_lwt_4_pid ) / mean(weights(pew_lwt_4_pid )),
-#     
+# 
 #     wtkbal_b2x = weights(kbal_wt_b2x) / mean(weights(kbal_wt_b2x)),
 #     wtkbal_b1x = weights(kbal_wt_b1x) / mean(weights(kbal_wt_b1x)),
 #     wtkbal_b.5x = weights(kbal_wt_b.5x) / mean(weights(kbal_wt_b.5x)),
 #     wtkbal_b.25x = weights(kbal_wt_b.25x) / mean(weights(kbal_wt_b.25x)),
 #     wtkbal_b.125x = weights(kbal_wt_b.125x) / mean(weights(kbal_wt_b.125x)),
-#     
+# 
 #     wtkbal_mf_b2x = weights(kbal_mf_wt_b2x) / mean(weights(kbal_mf_wt_b2x)),
 #     wtkbal_mf_b1x = weights(kbal_mf_wt_b1x) / mean(weights(kbal_mf_wt_b1x)),
 #     wtkbal_mf_b.5x = weights(kbal_mf_wt_b.5x) / mean(weights(kbal_mf_wt_b.5x)),
 #     wtkbal_mf_b.25x = weights(kbal_mf_wt_b.25x) / mean(weights(kbal_mf_wt_b.25x)),
 #     wtkbal_mf_b.125x = weights(kbal_mf_wt_b.125x) / mean(weights(kbal_mf_wt_b.125x)))
 # 
-# save(wts_wPid, file = "weights_wPid_full.Rdata")
+# save(wts_wPid, file = "cleaned data/weights_wPid_full.Rdata")
 
 #misc  
 #wtkbal_frank_b.25x = weights(kbal_wt_frank) / mean(weights(kbal_wt_frank)),
@@ -943,10 +1044,10 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 #     wt2 = weights(pew_lwt_2) / mean(weights(pew_lwt_2)),
 #     wt2_pid = weights(pew_lwt_2_pid ) / mean(weights(pew_lwt_2_pid )),
 #     wt3 = weights(pew_ps_3) / mean(weights(pew_ps_3)),
-#     #wt3_pid = weights(pew_ps_3_pid ) / mean(weights(pew_ps_3_pid )), #NAs cause issue
+#     wt3_pid = weights(pew_ps_3_pid ) / mean(weights(pew_ps_3_pid )), #NAs cause issue
 #     wt4 = weights(pew_lwt_4) / mean(weights(pew_lwt_4)),
 #     wt4_pid = weights(pew_lwt_4_pid ) / mean(weights(pew_lwt_4_pid )),
-#     
+# 
 #     wtkbal_nopid_b2x = weights(kbal_wt_b2x_nopid) /
 #         mean(weights(kbal_wt_b2x_nopid)),
 #     wtkbal_nopid_b1x = weights(kbal_wt_b1x_nopid) /
@@ -957,7 +1058,7 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 #         mean(weights(kbal_wt_b.25x_nopid)),
 #     wtkbal_nopid_b.125x = weights(kbal_wt_b.125x_nopid)/
 #         mean(weights(kbal_wt_b.125x_nopid)),
-#     
+# 
 #     wtkbal_nopid_mf_b2x = weights(kbal_wt_mf_nopid_b2x) /
 #         mean(weights(kbal_wt_mf_nopid_b2x)),
 #     wtkbal_nopid_mf_b1x = weights(kbal_wt_mf_nopid_b1x)/
@@ -969,7 +1070,7 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 #     wtkbal_nopid_mf_b.125x = weights(kbal_wt_mf_nopid_b.125x) /
 #         mean(weights(kbal_wt_mf_nopid_b.125x)) )
 # 
-# save(wts_NoPid, file = "weights_NoPid_full.Rdata")
+# save(wts_NoPid, file = "cleaned data/weights_NoPid_full.Rdata")
 #sapply(wts, summary)
 #sapply(wts, sd)
 
@@ -1030,7 +1131,19 @@ natl_margin <- pres %>%
 
 ### Compare estimates
 #run this whole thing to build the dataframe from the survey designs saved in 
-#survey_xxxx files 
+# load("cleaned data/Full SVD/surveys_NoPid_full.Rdata")
+# load("cleaned data/Full SVD/surveys_wPid_full.Rdata")
+# load("cleaned data/Full SVD/numdims_NoPid_full.Rdata")
+# load("cleaned data/Full SVD/numdims_wPid_full.Rdata")
+
+#load("cleaned data/500 Max SVD/surveys_NoPid.Rdata")
+#load("cleaned data/500 Max SVD/surveys_wPid.Rdata")
+#load("cleaned data/500 Max SVD/numdims_NoPid_varyb.Rdata")
+#load("cleaned data/500 Max SVD/numdims_wPid_varyb.Rdata")
+
+#can also load the uther survets rather than running all the above 
+#load("cleaned data/Other Methods/surveys_others_NoPid.Rdata")
+#load("cleaned data/Other Methods/surveys_others_wPid.Rdata")
 #OR just load the comp_df dataframe from the full svd runs saved in 
 load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 
@@ -1049,11 +1162,13 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 #                         vote_contrast),
 #     Pew_3 = svycontrast(svymean(~recode_vote_2016, pew_ps_3, na.rm = TRUE),
 #                        vote_contrast),
+#     Pew_3_pid = svycontrast(svymean(~recode_vote_2016, pew_ps_3_pid, na.rm = TRUE),
+#                         vote_contrast),
 #     Pew_4 = svycontrast(svymean(~recode_vote_2016, pew_lwt_4, na.rm = TRUE),
 #                         vote_contrast),
 #     Pew_4_pid = svycontrast(svymean(~recode_vote_2016, pew_lwt_4_pid, na.rm = TRUE),
 #                         vote_contrast),
-#     
+# 
 #     #b = 2
 #     ## no meanfirst
 #     Pew_kbal_b2x_nopid = svycontrast(svymean(~recode_vote_2016,
@@ -1074,13 +1189,13 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 #                                      vote_contrast),
 #     Pew_kbal_b1x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b1x,
 #                                        na.rm = TRUE), vote_contrast),
-#     ## meanfirst 
+#     ## meanfirst
 #     Pew_kbal_mf_b1x_nopid = svycontrast(svymean(~recode_vote_2016,
 #                                                 kbal_wt_mf_nopid_b1x, na.rm = TRUE),
 #                                         vote_contrast),
 #     Pew_kbal_mf_b1x = svycontrast(svymean(~recode_vote_2016, kbal_mf_wt_b1x,
 #                                           na.rm = TRUE), vote_contrast),
-#     
+# 
 #     #b = 0.5
 #     ##no meanfirst
 #     Pew_kbal_b.5x_nopid = svycontrast(svymean(~recode_vote_2016,
@@ -1094,95 +1209,97 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 #                                         vote_contrast),
 #     Pew_kbal_mf_b.5x = svycontrast(svymean(~recode_vote_2016, kbal_mf_wt_b.5x,
 #                                           na.rm = TRUE), vote_contrast),
-#     
+# 
 #     #b = 0.25
 #     ## no meanfirst
 #     Pew_kbal_b.25x_nopid = svycontrast(svymean(~recode_vote_2016,
 #                                                kbal_wt_b.25x_nopid, na.rm = TRUE),
 #                                        vote_contrast),
-#     Pew_kbal_b.25x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.25x, 
+#     Pew_kbal_b.25x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.25x,
 #                                          na.rm = TRUE), vote_contrast),
-#     ## meanfirst 
+#     ## meanfirst
 #     Pew_kbal_mf_b.25x_nopid = svycontrast(svymean(~recode_vote_2016,
 #                                                 kbal_wt_mf_nopid_b.25x, na.rm = TRUE),
 #                                         vote_contrast),
 #     Pew_kbal_mf_b.25x = svycontrast(svymean(~recode_vote_2016, kbal_mf_wt_b.25x,
 #                                           na.rm = TRUE), vote_contrast),
-#     
+# 
 #     #b = 0.125
 #     ## nomeanfirst
 #     Pew_kbal_b.125x_nopid = svycontrast(svymean(~recode_vote_2016,
 #                                                 kbal_wt_b.125x_nopid, na.rm = TRUE),
 #                                         vote_contrast),
-#     Pew_kbal_b.125x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.125x, 
+#     Pew_kbal_b.125x = svycontrast(svymean(~recode_vote_2016, kbal_wt_b.125x,
 #                                           na.rm = TRUE), vote_contrast),
 #     ## meanfirst
 #     Pew_kbal_mf_b.125x_nopid = svycontrast(svymean(~recode_vote_2016,
 #                                                 kbal_wt_mf_nopid_b.125x, na.rm = TRUE),
 #                                         vote_contrast),
 #     Pew_kbal_mf_b.125x = svycontrast(svymean(~recode_vote_2016, kbal_mf_wt_b.125x,
-#                                           na.rm = TRUE), vote_contrast),
+#                                           na.rm = TRUE), vote_contrast) #,
 # 
 #     #b =0.0625 (only did for nopid + mf = F)
-#     Pew_kbal_b.0625x_nopid = svycontrast(svymean(~recode_vote_2016,
-#                                                 kbal_wt_b.0625x_nopid, na.rm = TRUE),
-#                                         vote_contrast)
-#    
+#     # Pew_kbal_b.0625x_nopid = svycontrast(svymean(~recode_vote_2016,
+#     #                                             kbal_wt_b.0625x_nopid, na.rm = TRUE),
+#     #                                     vote_contrast)
+# 
 # ) %>%
 #     pivot_longer(cols = everything(),
-#                  names_to = c("source", ".value"), 
+#                  names_to = c("source", ".value"),
 #                  names_pattern = "(.*)\\.(.*)") %>%
 #     rename(est = nlcon) %>%
-#     mutate(err = est - natl_margin, 
+#     mutate(err = est - natl_margin,
 #            source = str_replace(source, "_", " ")) %>%
 #     mutate(err_target = est - est[source == "CCES"]) %>%
-#     mutate(source = factor(source,  
-#                          levels = c("CCES", 
-#                                     "Pew 0", 
+#     mutate(source = factor(source,
+#                          levels = c("CCES",
+#                                     "Pew 0",
 #                                     "Pew 1",
 #                                     "Pew 1_pid",
 #                                     "Pew 2",
 #                                     "Pew 2_pid",
 #                                     "Pew 3",
+#                                     "Pew 3_pid",
 #                                     "Pew 4",
 #                                     "Pew 4_pid" ,
-#                                     
-#                                     "Pew kbal_b2x_nopid", 
+# 
+#                                     "Pew kbal_b2x_nopid",
 #                                     "Pew kbal_b2x",
-#                                     "Pew kbal_mf_b2x_nopid", 
+#                                     "Pew kbal_mf_b2x_nopid",
 #                                     "Pew kbal_mf_b2x",
-#                                     
-#                                     "Pew kbal_b1x_nopid", 
+# 
+#                                     "Pew kbal_b1x_nopid",
 #                                     "Pew kbal_b1x",
-#                                     "Pew kbal_mf_b1x_nopid", 
+#                                     "Pew kbal_mf_b1x_nopid",
 #                                     "Pew kbal_mf_b1x",
-#                                     
-#                                     "Pew kbal_b.5x_nopid", 
+# 
+#                                     "Pew kbal_b.5x_nopid",
 #                                     "Pew kbal_b.5x",
-#                                     "Pew kbal_mf_b.5x_nopid", 
+#                                     "Pew kbal_mf_b.5x_nopid",
 #                                     "Pew kbal_mf_b.5x",
-#                                     
-#                                     "Pew kbal_b.25x_nopid", 
+# 
+#                                     "Pew kbal_b.25x_nopid",
 #                                     "Pew kbal_b.25x",
-#                                     "Pew kbal_mf_b.25x_nopid", 
+#                                     "Pew kbal_mf_b.25x_nopid",
 #                                     "Pew kbal_mf_b.25x",
-#                                     
-#                                     "Pew kbal_b.125x_nopid", 
+# 
+#                                     "Pew kbal_b.125x_nopid",
 #                                     "Pew kbal_b.125x",
-#                                     "Pew kbal_mf_b.125x_nopid", 
-#                                     "Pew kbal_mf_b.125x",
-#                                     
-#                                     "Pew kbal_b.0625x_nopid"
+#                                     "Pew kbal_mf_b.125x_nopid",
+#                                     "Pew kbal_mf_b.125x" #,
+# 
+#                                     #"Pew kbal_b.0625x_nopid"
 #                          ),
-#                          labels = c("CCES\n(Target)", 
-#                                     "Pew\nUnweighted", 
-#                                     "Pew\nRaking (demographics)", 
-#                                     "Pew + PID \nRaking (demographics)", 
+#                          labels = c("CCES\n(Target)",
+#                                     "Pew\nUnweighted",
+#                                     "Pew\nRaking (demographics)",
+#                                     "Pew + PID \nRaking (demographics)",
 #                                     "Pew\nRaking (demographics +education)",
 #                                     "Pew + PID \nRaking (demographics +education)",
 #                                     "Pew\nPost-Stratification",
-#                                     "Pew\nRaking (Post-Hoc)", 
-#                                     "Pew + PID \nRaking (Post-Hoc)" , 
+#                                     "Pew + PID \nPost-Stratification",
+#                                     "Pew\nRaking (Post-Hoc)",
+#                                     "Pew + PID \nRaking (Post-Hoc)" ,
 #                                     #b=2
 #                                     paste0("Pew KPOP: b=2x
 #                                            (dimKu = ",
@@ -1287,13 +1404,14 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 #                                            numdims_wPid["b=.125x", "mfdims_mf_T_wPid"],
 #                                            ", dimKu = ",
 #                                            numdims_wPid["b=.125x", "numdims_mf_T_wPid"]
-#                                            ,")"),
+#                                            ,")") #,
 #                                     #b = 0.0625 for nopid mf=F only
-#                                     paste0("Pew KPOP: b=0.0625x
-#                                            (dimKu = ",
-#                                            numdims_NoPid["b=.0625","numdims_mf_F_NoPid"]
-#                                            ,")")
-#                                     )
+#                                     #only ran this for 500 max
+#                                     # paste0("Pew KPOP: b=0.0625x
+#                                     #        (dimKu = ",
+#                                     #        numdims_NoPid["b=.0625","numdims_mf_F_NoPid"]
+#                                     #        ,")")
+#                                  )
 #                          ))
 # comp_df$PID <- NA
 # comp_df$PID[grep("PID", levels(comp_df$source))] <- "PID"
@@ -1304,12 +1422,12 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 # comp_df$MF[grep("MF", levels(comp_df$source))] <- "MF"
 # comp_df$MF[-grep("MF", levels(comp_df$source)) ]<- "No MF"
 # comp_df$MF[1:9]<- "NA" #making CCES target different color
-
-
+# 
+# 
 # comp_df %>%  #filter(PID != "No PID") %>%
 #     ggplot() +
 #     aes(x = source, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE, color = as.factor(PID),shape=as.factor(MF)) +
-#     
+# 
 #     geom_hline(yintercept = c(0, natl_margin, comp_df$est[comp_df$source == "CCES\n(Target)"]),
 #                linetype = c("solid", "dashed", "longdash"),
 #                color = c("black", "gray", "black")) +
@@ -1319,15 +1437,16 @@ load("cleaned data/Full SVD/comp_df_table_full.Rdata")
 #                        labels = scales::percent_format()) +
 #     theme_bw() +
 #     theme(plot.title = element_text(hjust = 0.5)) +
-#     
+# 
 #     labs(x = NULL, y = "Estimated Margin (95% CI)") +
-#     ggtitle("Estimates of Clinton National Popular Vote Margin") +
+#     ggtitle("Estimates of Clinton National Popular Vote Margin (Full SVD)") +
 #     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-#     annotate(geom = "text", x = 31.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
-#     annotate(geom = "text", x = 31.35, y = comp_df$est[comp_df$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
+#     annotate(geom = "text", x = 33.25, y = natl_margin, label = "", hjust = -0.1, angle = -90, color = "gray") +
+#     annotate(geom = "text", x = 32.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
+#     annotate(geom = "text", x = 32.35, y = comp_df$est[comp_df$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
 #     theme(legend.title = element_blank())
-
-#ggsave("plots/fullSVD.pdf", width = 12, height = 6)
+# 
+# ggsave("plots/fullSVD.pdf", width = 12, height = 6)
 
 
 ######################## Cleaned Plots #######################
@@ -1358,18 +1477,21 @@ comp_df[grep("b", levels(comp_df$source)), "b"] <- c(rep(2,4),
 
 # a verrrrrrryyy stupid way to do this
 comp_clean <- comp_df %>% filter(PID != "No PID" & b %in% c(NA, 2,0.5)) %>% 
-    filter(!(source %in% c("Pew KPOP + PID: b=2x\n                                           (dimKu = 13)","Pew KPOP + MF + PID: b=0.5x\n                                           (dimXu = 18, dimKu = 17)"))) %>% 
+    filter(!(source %in% c("Pew KPOP + PID: b=2x\n                                           (dimKu = 13)","Pew KPOP + MF + PID: b=0.5x\n                                           (dimXu = 18, dimKu = 17)")))
+#just getting MF to be second
+comp_clean <- comp_clean[c(1:6,8,7),]
+
+comp_clean <- comp_clean %>% 
     mutate(source_clean = factor(source, 
-                                 levels = c(as.character(comp_clean$source)),
-                                 labels = c("CCES\n(Target)", 
-                            "Pew\nUnweighted", 
-                            "Pew Raking\n(demographics)",
-                            "Pew Raking\n(demographics + education)",
-                            "Pew Raking\n(Post-Hoc)", 
-                            "Pew KPOP + MF",
-                            "Pew KPOP\n")))
-
-
+                                 levels = c(as.character(source)),
+                                 labels = c("Target\n(CCES)", 
+                                            "Unweighted", 
+                                            "Raking\n(demographics)",
+                                            "Raking\n(demographics + education)",
+                                            "Raking\n(Post-Hoc)", 
+                                            "Post-Stratification",
+                                            "KPOP",
+                                            "KPOP + Mean First")))
 #### !!! issue bc still do not have working post-stratificaiton with pid
 
 comp_clean %>%
@@ -1378,20 +1500,23 @@ comp_clean %>%
 
     geom_hline(yintercept = c(0, natl_margin, comp_clean$est[comp_clean$source == "CCES\n(Target)"]),
                linetype = c("solid", "dashed", "longdash"),
-               color = c("black", "gray", "black")) +
+               color = c("black", "gray55", "black")) +
     geom_pointrange() +
     scale_y_continuous(breaks = c(natl_margin, seq(-.05, .1, .05)),
                        minor_breaks = NULL,
                        labels = scales::percent_format()) +
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5)) +
-
     labs(x = NULL, y = "Estimated Margin (95% CI)") +
     ggtitle("Estimates of Clinton National Popular Vote Margin") +
     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-    annotate(geom = "text", x = 8.25, y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray") +
-    annotate(geom = "text", x = 8.35, y = comp_clean$est[comp_clean$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
+    #adding this hack so the automatic x axis scale is large enough to show the 
+    #actual text labels which get cutoff otherwise
+    annotate(geom = "text", x = 9.5, y = comp_clean$est[comp_clean$source == "CCES\n(Target)"], label = "", hjust = -0.1, angle = 90) +
+    
+    annotate(geom = "text", x = 9., y = comp_clean$est[comp_clean$source == "CCES\n(Target)"], label = "CCES Estimated\n  Margin", hjust = -0.1, angle = 90) +
+    annotate(geom = "text", x = 9., y = natl_margin, label = "True\nNational\nMargin", hjust = -0.1, angle = -90, color = "gray55") +
     theme(legend.title = element_blank())
 
-ggsave("plots/cleaned_v1.pdf", width = 12, height = 6)
+ggsave("plots/cleaned_v2.pdf", width = 12, height = 6)
 

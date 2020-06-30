@@ -402,6 +402,21 @@
 \end{Highlighting}
 \end{Shaded}
 
+\begin{verbatim}
+## Warning: funs() is soft deprecated as of dplyr 0.8.0
+## Please use a list of either functions or lambdas: 
+## 
+##   # Simple named list: 
+##   list(mean = mean, median = median)
+## 
+##   # Auto named with `tibble::lst()`: 
+##   tibble::lst(mean, median)
+## 
+##   # Using lambdas
+##   list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+## This warning is displayed once per session.
+\end{verbatim}
+
 \begin{table}
 
 \caption{\label{tab:margins_table_educ}Marginal distribution of education level for white voters under different weighting models.}
@@ -418,6 +433,10 @@
 \hspace{1em}2-year & 7.8 & 8.3 & 7.0 & 7.3 & 6.1 & 7.8 & 7.7 & 7.2\\
 \hspace{1em}4-year & 14.8 & 23.0 & 20.7 & 15.2 & 17.1 & 14.8 & 16.3 & 14.8\\
 \hspace{1em}Post-grad & 8.3 & 18.0 & 18.5 & 8.8 & 8.2 & 8.3 & 9.1 & 8.4\\
+\addlinespace[0.5em]
+\multicolumn{9}{l}{\textbf{Error}}\\
+\hspace{1em}MAE (weighted) & 0.0 & 6.6 & 5.8 & 0.4 & 1.6 & 0.1 & 1.2 & 0.5\\
+\hspace{1em}MAE (unweighted) & 0.0 & 5.9 & 5.4 & 0.4 & 1.7 & 0.3 & 1.4 & 0.4\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -456,8 +475,8 @@
                                               \StringTok{"KPop"}\NormalTok{, }
                                               \StringTok{"KPop + Mean First"}\NormalTok{,}
                                               \StringTok{"Post-Stratification"}\NormalTok{, }
-                                              \StringTok{"Raking}\CharTok{\textbackslash{}n}\StringTok{Demographics (no Education)"}\NormalTok{, }
-                                              \StringTok{"Raking}\CharTok{\textbackslash{}n}\StringTok{Demographics w/ Education"}\NormalTok{, }
+                                              \StringTok{"Raking}\CharTok{\textbackslash{}n}\StringTok{Demographics}\CharTok{\textbackslash{}n}\StringTok{without Education)"}\NormalTok{, }
+                                              \StringTok{"Raking}\CharTok{\textbackslash{}n}\StringTok{Demographics}\CharTok{\textbackslash{}n}\StringTok{with Education"}\NormalTok{, }
                                               \StringTok{"Raking}\CharTok{\textbackslash{}n}\StringTok{Retrospective"}\NormalTok{, }
                                               \StringTok{"Pew}\CharTok{\textbackslash{}n}\StringTok{Unweighted"}\NormalTok{),}
                            \DataTypeTok{ordered =} \OtherTok{TRUE}\NormalTok{))}
@@ -468,16 +487,16 @@
 
 \begin{verbatim}
 ## # A tibble: 8 x 5
-##   source                est    SE err_target source_name                        
-##   <chr>               <dbl> <dbl>      <dbl> <ord>                              
-## 1 cces                 2.64 0.740      0     "Target (CCES)"                    
-## 2 unweighted           5.60 2.26       2.96  "Pew\nUnweighted"                  
-## 3 rake demos_noeduc    9.75 2.81       7.11  "Raking\nDemographics (no Educatio~
-## 4 rake demos_weduc     5.29 3.11       2.65  "Raking\nDemographics w/ Education"
-## 5 post stratification  5.03 3.04       2.39  "Post-Stratification"              
-## 6 rake retrospective   5.17 3.39       2.53  "Raking\nRetrospective"            
-## 7 kpop                 4.09 3.10       1.45  "KPop"                             
-## 8 kpop mf              2.47 3.41      -0.168 "KPop + Mean First"
+##   source              est    SE err_target source_name                          
+##   <chr>             <dbl> <dbl>      <dbl> <ord>                                
+## 1 cces               2.64 0.740      0     "Target (CCES)"                      
+## 2 unweighted         5.60 2.26       2.96  "Pew\nUnweighted"                    
+## 3 rake demos_noeduc  9.75 2.81       7.11  "Raking\nDemographics\nwithout Educa~
+## 4 rake demos_weduc   5.29 3.11       2.65  "Raking\nDemographics\nwith Educatio~
+## 5 post stratificat~  5.03 3.04       2.39  "Post-Stratification"                
+## 6 rake retrospecti~  5.17 3.39       2.53  "Raking\nRetrospective"              
+## 7 kpop               4.09 3.10       1.45  "KPop"                               
+## 8 kpop mf            2.47 3.41      -0.168 "KPop + Mean First"
 \end{verbatim}
 
 \begin{Shaded}
@@ -486,20 +505,20 @@
 \StringTok{    }\KeywordTok{ggplot}\NormalTok{() }\OperatorTok{+}
 \StringTok{    }\KeywordTok{aes}\NormalTok{(}\DataTypeTok{x =}\NormalTok{ source_name, }\DataTypeTok{y =}\NormalTok{ est, }\DataTypeTok{ymin =}\NormalTok{ est }\OperatorTok{-}\StringTok{ }\FloatTok{1.96}\OperatorTok{*}\NormalTok{SE, }\DataTypeTok{ymax =}\NormalTok{ est }\OperatorTok{+}\StringTok{ }\FloatTok{1.96}\OperatorTok{*}\NormalTok{SE) }\OperatorTok{+}
 
-\StringTok{    }\KeywordTok{geom_hline}\NormalTok{(}\DataTypeTok{yintercept =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, natl_margin, comp_df}\OperatorTok{$}\NormalTok{est[comp_df}\OperatorTok{$}\NormalTok{source }\OperatorTok{==}\StringTok{ "cces"}\NormalTok{]),}
+\StringTok{    }\KeywordTok{geom_hline}\NormalTok{(}\DataTypeTok{yintercept =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, natl_margin }\OperatorTok{*}\StringTok{ }\DecValTok{100}\NormalTok{, comp_df}\OperatorTok{$}\NormalTok{est[comp_df}\OperatorTok{$}\NormalTok{source }\OperatorTok{==}\StringTok{ "cces"}\NormalTok{]),}
                \DataTypeTok{linetype =} \KeywordTok{c}\NormalTok{(}\StringTok{"solid"}\NormalTok{, }\StringTok{"dashed"}\NormalTok{, }\StringTok{"longdash"}\NormalTok{),}
                \DataTypeTok{color =} \KeywordTok{c}\NormalTok{(}\StringTok{"black"}\NormalTok{, }\StringTok{"gray60"}\NormalTok{, }\StringTok{"black"}\NormalTok{)) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{geom_pointrange}\NormalTok{() }\OperatorTok{+}
-\StringTok{    }\KeywordTok{scale_y_continuous}\NormalTok{(}\DataTypeTok{breaks =} \KeywordTok{c}\NormalTok{(natl_margin, }\KeywordTok{seq}\NormalTok{(}\OperatorTok{-}\NormalTok{.}\DecValTok{05}\NormalTok{, }\FloatTok{.1}\NormalTok{, }\FloatTok{.05}\NormalTok{)),}
+\StringTok{    }\KeywordTok{scale_y_continuous}\NormalTok{(}\DataTypeTok{breaks =} \KeywordTok{round}\NormalTok{(}\KeywordTok{c}\NormalTok{(natl_margin }\OperatorTok{*}\StringTok{ }\DecValTok{100}\NormalTok{, }\KeywordTok{seq}\NormalTok{(}\OperatorTok{-}\DecValTok{5}\NormalTok{, }\DecValTok{10}\NormalTok{, }\DecValTok{5}\NormalTok{)), }\DecValTok{1}\NormalTok{),}
                        \DataTypeTok{minor_breaks =} \OtherTok{NULL}\NormalTok{,}
-                       \DataTypeTok{labels =}\NormalTok{ scales}\OperatorTok{::}\KeywordTok{percent_format}\NormalTok{()) }\OperatorTok{+}
+                       \DataTypeTok{labels =}\NormalTok{ scales}\OperatorTok{::}\KeywordTok{percent_format}\NormalTok{(}\DataTypeTok{scale =} \DecValTok{1}\NormalTok{, }\DataTypeTok{accuracy =} \FloatTok{0.1}\NormalTok{)) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{theme_bw}\NormalTok{() }\OperatorTok{+}
 \StringTok{    }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{plot.title =} \KeywordTok{element_text}\NormalTok{(}\DataTypeTok{hjust =} \FloatTok{0.5}\NormalTok{)) }\OperatorTok{+}
 
 \StringTok{    }\KeywordTok{labs}\NormalTok{(}\DataTypeTok{x =} \OtherTok{NULL}\NormalTok{, }\DataTypeTok{y =} \StringTok{"Estimated Margin (95% CI)"}\NormalTok{) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{ggtitle}\NormalTok{(}\StringTok{"Estimates of Clinton National Popular Vote Margin"}\NormalTok{) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{axis.text.x =} \KeywordTok{element_text}\NormalTok{(}\DataTypeTok{angle =} \DecValTok{55}\NormalTok{, }\DataTypeTok{hjust =} \DecValTok{1}\NormalTok{)) }\OperatorTok{+}
-\StringTok{    }\KeywordTok{annotate}\NormalTok{(}\DataTypeTok{geom =} \StringTok{"text"}\NormalTok{, }\DataTypeTok{x =} \FloatTok{8.65}\NormalTok{, }\DataTypeTok{y =}\NormalTok{ natl_margin, }\DataTypeTok{label =} \StringTok{" True}\CharTok{\textbackslash{}n}\StringTok{ National}\CharTok{\textbackslash{}n}\StringTok{ Margin"}\NormalTok{, }\DataTypeTok{hjust =} \DecValTok{0}\NormalTok{, }\DataTypeTok{angle =} \DecValTok{-90}\NormalTok{, }\DataTypeTok{color =} \StringTok{"gray60"}\NormalTok{, }\DataTypeTok{size =} \FloatTok{3.5}\NormalTok{) }\OperatorTok{+}
+\StringTok{    }\KeywordTok{annotate}\NormalTok{(}\DataTypeTok{geom =} \StringTok{"text"}\NormalTok{, }\DataTypeTok{x =} \FloatTok{8.65}\NormalTok{, }\DataTypeTok{y =}\NormalTok{ natl_margin }\OperatorTok{*}\StringTok{ }\DecValTok{100}\NormalTok{, }\DataTypeTok{label =} \StringTok{" True}\CharTok{\textbackslash{}n}\StringTok{ National}\CharTok{\textbackslash{}n}\StringTok{ Margin"}\NormalTok{, }\DataTypeTok{hjust =} \DecValTok{0}\NormalTok{, }\DataTypeTok{angle =} \DecValTok{-90}\NormalTok{, }\DataTypeTok{color =} \StringTok{"gray60"}\NormalTok{, }\DataTypeTok{size =} \FloatTok{3.5}\NormalTok{) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{annotate}\NormalTok{(}\DataTypeTok{geom =} \StringTok{"text"}\NormalTok{, }\DataTypeTok{x =} \FloatTok{8.55}\NormalTok{, }\DataTypeTok{y =}\NormalTok{ comp_df}\OperatorTok{$}\NormalTok{est[comp_df}\OperatorTok{$}\NormalTok{source }\OperatorTok{==}\StringTok{ "cces"}\NormalTok{], }\DataTypeTok{label =} \StringTok{" CCES Estimated}\CharTok{\textbackslash{}n}\StringTok{ Margin"}\NormalTok{, }\DataTypeTok{hjust =} \DecValTok{0}\NormalTok{, }\DataTypeTok{angle =} \DecValTok{90}\NormalTok{, }\DataTypeTok{size =} \FloatTok{3.5}\NormalTok{) }\OperatorTok{+}
 \StringTok{    }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{legend.title =} \KeywordTok{element_blank}\NormalTok{()) }\OperatorTok{+}
 \StringTok{  }\KeywordTok{scale_x_discrete}\NormalTok{(}\DataTypeTok{limits=}\NormalTok{comp_df}\OperatorTok{$}\NormalTok{source_name, }\DataTypeTok{expand =} \KeywordTok{expansion}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{1.2}\NormalTok{))}

@@ -240,10 +240,30 @@ margin_summary_educ <- round(cbind(cces = svymean(~recode_educ_white, cces_awt),
 ```
 
 ```{r margins_table_educ, echo = FALSE, results = 'asis'}
-margin_summary_educ %>%
+margin_summary_educ <- margin_summary_educ %>%
   mutate(level = str_replace(level, "graduate", "")) %>%
   filter(level != "No Split") %>%
-  kable(format = "latex", booktabs = T,
+  mutate(p_strata = cces / sum(cces))
+
+
+educ_mae_w <- margin_summary_educ %>% select(-level) %>%
+              summarize_all(funs(mae_w = sum(abs(. - cces)  * p_strata))) %>%
+  rename_all(funs(gsub("_mae_w", "", .))) %>%
+  mutate(level = "MAE (weighted)")
+
+
+educ_mae <- margin_summary_educ %>% select(-level) %>%
+              summarize_all(funs(mae = mean(abs(. - cces)))) %>%
+  rename_all(funs(gsub("_mae", "", .))) %>%
+  mutate(level = "MAE (unweighted)")
+
+margin_summary_educ <- bind_rows(margin_summary_educ,
+                                 educ_mae_w,
+                                 educ_mae) %>%
+  select(-p_strata)
+  
+margin_summary_educ %>%
+  kable(format = "latex", booktabs = T, digits = 1,
         col.names = linebreak(c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
                                 "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Unweighted Pew}}}}",
                                 "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics No Education }}}}",
@@ -256,7 +276,8 @@ margin_summary_educ %>%
   column_spec(2:ncol(margin_summary), width = "0.5in") %>%
   column_spec(1, width = "1.35in") %>%
   kable_styling() %>%
-  pack_rows("Education Level for White Voters", 1, 6, latex_gap_space = "0.5em")
+  pack_rows("Education Level for White Voters", 1, 6, latex_gap_space = "0.5em") %>%
+  pack_rows("Error", 7, 8, latex_gap_space = "0.5em")
 ```
 
 ```{r make_results}
@@ -310,9 +331,9 @@ comp_df %>%
                linetype = c("solid", "dashed", "longdash"),
                color = c("black", "gray60", "black")) +
     geom_pointrange() +
-    scale_y_continuous(breaks = c(natl_margin, seq(-.05, .1, .05)),
+    scale_y_continuous(breaks = round(c(natl_margin * 100, seq(-5, 10, 5)), 1),
                        minor_breaks = NULL,
-                       labels = scales::percent_format()) +
+                       labels = scales::percent_format(scale = 1, accuracy = 0.1)) +
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5)) +
 

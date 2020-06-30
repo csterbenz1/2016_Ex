@@ -1,6 +1,11 @@
 ---
 title: "Application to 2016 Election Data"
-output: pdf_document
+output: 
+  pdf_document:
+    keep_tex: true
+header-includes:
+  - \usepackage{stackengine}
+  - \usepackage{rotating}
 ---
 
 ```{r setup, include=FALSE}
@@ -11,6 +16,7 @@ rm(list = ls())
 library(tidyverse)
 library(survey)
 library(knitr)
+library(kableExtra)
 
 #devtools::install_github("chadhazlett/KBAL", ref = "master") 
 library(kbal)
@@ -159,20 +165,54 @@ rake_retrospective <- svydesign(~1, data = pew, weights = weights(rake_retrospec
 ##### PUT FINAL KPOP CODE HERE
 #############################################
 
-load("/Users/ekhartman/Documents/GitHub/2016_Ex/cleaned data/Full SVD/weights_wPid_full.Rdata")
+load("./cleaned data/Full SVD/weights_wPid_full.Rdata")
 
 kpop <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_b.5x"])
 kpop_mf <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_mf_b2x"])
 ```
 
 ```{r check_margins}
-round(cbind(cces = svymean(formula_rake_demos_weduc, cces_awt),
+margin_summary <- round(cbind(cces = svymean(formula_rake_demos_weduc, cces_awt),
             rake_demos_noeduc = svymean(formula_rake_demos_weduc, rake_demos_noeduc),
             rake_demos_weduc = svymean(formula_rake_demos_weduc, rake_demos_weduc),
             post_stratification = svymean(formula_rake_demos_weduc, post_stratification),
             rake_retrospective = svymean(formula_rake_demos_weduc, rake_retrospective),
             kpop = svymean(formula_rake_demos_weduc, kpop),
-            kpop_mf = svymean(formula_rake_demos_weduc, kpop_mf)) * 100, 2)
+            kpop_mf = svymean(formula_rake_demos_weduc, kpop_mf)) * 100, 1) %>%
+  data.frame() %>%
+  rownames_to_column() %>%
+  mutate(variable = case_when(str_detect(rowname, "age") ~ "4-way Age Bucket",
+                             str_detect(rowname, "female") ~ "Gender",
+                             str_detect(rowname, "race") ~ "Race/Ethnicity",
+                             str_detect(rowname, "region") ~ "Region",
+                             str_detect(rowname, "educ") ~ "Education Level",
+                             str_detect(rowname, "pid") ~ "Party Identification",
+                             TRUE ~ "Empty"),
+         level = gsub("recode_|age_bucket|female|race|region|educ|pid_3way", "", rowname)) %>%
+  select(level, everything(), -rowname, -variable)
+```
+
+```{r margins_table, echo = FALSE, results = 'asis'}
+margin_summary %>%
+  mutate(level = str_replace(level, "graduate", "")) %>%
+  kable(format = "latex", booktabs = T,
+        col.names = linebreak(c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics No Education }}}}",
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Kpop}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Kpop Mean First}}}}")), escape = FALSE,
+        caption = "Marginal distribution of important demographics under different weighting models.") %>%
+  column_spec(2:ncol(margin_summary), width = "0.5in") %>%
+  column_spec(1, width = "1.35in") %>%
+  kable_styling() %>%
+  pack_rows("4-way Age Bucket", 1, 4, latex_gap_space = "0.5em") %>%
+  pack_rows("Gender", 5, 6, latex_gap_space = "0.5em") %>%
+  pack_rows("Race/Ethnicity", 7, 10, latex_gap_space = "0.5em") %>%
+  pack_rows("Region", 11, 14, latex_gap_space = "0.5em") %>%
+  pack_rows("Education Level", 15, 20, latex_gap_space = "0.5em") %>%
+  pack_rows("Party Identification", 21, 23, latex_gap_space = "0.5em")
 ```
 
 ```{r make_results}
@@ -200,17 +240,20 @@ comp_df <- data.frame(
                  names_to = c("source", ".value"), 
                  names_pattern = "(.*)\\.(.*)") %>%
     rename(est = nlcon) %>%
-    mutate(err_target = est - target_margin,
+    mutate(est = est * 100,
+           SE = SE * 100,
+           err_target = est - target_margin * 100,
            source = str_replace(source, "_", " "),
            source_name = factor(source, labels = c("Target (CCES)", 
                                               "KPop", 
-                                              "Kpop + Mean First",
+                                              "KPop + Mean First",
                                               "Post-Stratification", 
                                               "Raking\nDemographics (no Education)", 
                                               "Raking\nDemographics w/ Education", 
                                               "Raking\nRetrospective", 
                                               "Pew\nUnweighted"),
                            ordered = TRUE))
+
 comp_df
 ```
 
@@ -221,7 +264,7 @@ comp_df %>%
 
     geom_hline(yintercept = c(0, natl_margin, comp_df$est[comp_df$source == "cces"]),
                linetype = c("solid", "dashed", "longdash"),
-               color = c("black", "gray", "black")) +
+               color = c("black", "gray60", "black")) +
     geom_pointrange() +
     scale_y_continuous(breaks = c(natl_margin, seq(-.05, .1, .05)),
                        minor_breaks = NULL,
@@ -232,12 +275,12 @@ comp_df %>%
     labs(x = NULL, y = "Estimated Margin (95% CI)") +
     ggtitle("Estimates of Clinton National Popular Vote Margin") +
     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-    annotate(geom = "text", x = 8.65, y = natl_margin, label = " True\n National\n Margin", hjust = 0, angle = -90, color = "gray") +
-    annotate(geom = "text", x = 8.55, y = comp_df$est[comp_df$source == "cces"], label = " CCES Estimated\n Margin", hjust = 0, angle = 90) +
+    annotate(geom = "text", x = 8.65, y = natl_margin, label = " True\n National\n Margin", hjust = 0, angle = -90, color = "gray60", size = 3.5) +
+    annotate(geom = "text", x = 8.55, y = comp_df$est[comp_df$source == "cces"], label = " CCES Estimated\n Margin", hjust = 0, angle = 90, size = 3.5) +
     theme(legend.title = element_blank()) +
-  scale_x_discrete(limits=comp_df$source_name, expand = expansion(0, 1.1))
+  scale_x_discrete(limits=comp_df$source_name, expand = expansion(0, 1.2))
 ```
 
 ```{r save_plot}
-ggsave("./plots/weighted_pew_results.pdf", width = 9, heigh = 4)
+ggsave("./plots/weighted_pew_results.pdf", width = 6, height = 4)
 ```

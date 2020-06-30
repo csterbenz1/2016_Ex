@@ -163,14 +163,14 @@
 \StringTok{    }\KeywordTok{filter}\NormalTok{((CC16_}\DecValTok{401} \OperatorTok{==}\StringTok{ "I definitely voted in the General Election."}\NormalTok{) }\OperatorTok{&}
 \StringTok{               }\OperatorTok{!}\KeywordTok{is.na}\NormalTok{(commonweight_vv_post))}
 
-\CommentTok{## make white_pid column}
+\CommentTok{## make recode_educ_white column}
 \NormalTok{cces <-}\StringTok{ }\NormalTok{cces }\OperatorTok{%>%}
-\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_white_pid =} \KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\NormalTok{recode_pid_3way,}
-                               \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{))}
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_educ_white =} \KeywordTok{factor}\NormalTok{(}\KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\KeywordTok{as.character}\NormalTok{(recode_educ),}
+                               \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{), }\DataTypeTok{levels =} \KeywordTok{c}\NormalTok{(}\KeywordTok{levels}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_educ), }\StringTok{"No Split"}\NormalTok{)))}
 
 \NormalTok{pew <-}\StringTok{ }\NormalTok{pew }\OperatorTok{%>%}
-\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_white_pid =} \KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\NormalTok{recode_pid_3way,}
-                               \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{))}
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_educ_white =} \KeywordTok{factor}\NormalTok{(}\KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\KeywordTok{as.character}\NormalTok{(recode_educ),}
+                               \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{), }\DataTypeTok{levels =} \KeywordTok{c}\NormalTok{(}\KeywordTok{levels}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_educ), }\StringTok{"No Split"}\NormalTok{)))}
 
 \CommentTok{### Actual results}
 \NormalTok{pres <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"election.rds"}\NormalTok{))}
@@ -310,6 +310,7 @@
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{margin_summary <-}\StringTok{ }\KeywordTok{round}\NormalTok{(}\KeywordTok{cbind}\NormalTok{(}\DataTypeTok{cces =} \KeywordTok{svymean}\NormalTok{(formula_rake_demos_weduc, cces_awt),}
+                              \DataTypeTok{unweighted =} \KeywordTok{svymean}\NormalTok{(formula_rake_demos_weduc, pew_srs),}
             \DataTypeTok{rake_demos_noeduc =} \KeywordTok{svymean}\NormalTok{(formula_rake_demos_weduc, rake_demos_noeduc),}
             \DataTypeTok{rake_demos_weduc =} \KeywordTok{svymean}\NormalTok{(formula_rake_demos_weduc, rake_demos_weduc),}
             \DataTypeTok{post_stratification =} \KeywordTok{svymean}\NormalTok{(formula_rake_demos_weduc, post_stratification),}
@@ -334,45 +335,89 @@
 
 \caption{\label{tab:margins_table}Marginal distribution of important demographics under different weighting models.}
 \centering
-\begin{tabular}[t]{>{\raggedright\arraybackslash}p{1.35in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}}
+\begin{tabular}[t]{>{\raggedright\arraybackslash}p{1.35in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}}
 \toprule
- & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics No Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop Mean First}}}}\\
+ & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics No Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop Mean First}}}}\\
 \midrule
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{4-way Age Bucket}}\\
-\hspace{1em}18 to 35 & 34.8 & 34.8 & 34.8 & 35.4 & 34.8 & 34.4 & 34.8\\
-\hspace{1em}36 to 50 & 22.6 & 22.6 & 22.6 & 26.7 & 22.6 & 23.6 & 22.6\\
-\hspace{1em}51 to 64 & 28.9 & 28.9 & 28.9 & 29.7 & 28.9 & 29.5 & 28.9\\
-\hspace{1em}65+ & 13.7 & 13.7 & 13.7 & 8.3 & 13.7 & 12.5 & 13.7\\
+\multicolumn{9}{l}{\textbf{4-way Age Bucket}}\\
+\hspace{1em}18 to 35 & 34.8 & 43.7 & 34.8 & 34.8 & 35.4 & 34.8 & 34.4 & 34.8\\
+\hspace{1em}36 to 50 & 22.6 & 32.6 & 22.6 & 22.6 & 26.7 & 22.6 & 23.6 & 22.6\\
+\hspace{1em}51 to 64 & 28.9 & 21.0 & 28.9 & 28.9 & 29.7 & 28.9 & 29.5 & 28.9\\
+\hspace{1em}65+ & 13.7 & 2.7 & 13.7 & 13.7 & 8.3 & 13.7 & 12.5 & 13.7\\
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{Gender}}\\
-\hspace{1em}Female & 50.8 & 50.8 & 50.8 & 50.8 & 50.8 & 50.8 & 50.8\\
-\hspace{1em}Male & 49.2 & 49.2 & 49.2 & 49.2 & 49.2 & 49.2 & 49.2\\
+\multicolumn{9}{l}{\textbf{Gender}}\\
+\hspace{1em}Female & 50.8 & 47.3 & 50.8 & 50.8 & 50.8 & 50.8 & 50.8 & 50.8\\
+\hspace{1em}Male & 49.2 & 52.7 & 49.2 & 49.2 & 49.2 & 49.2 & 49.2 & 49.2\\
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{Race/Ethnicity}}\\
-\hspace{1em}Black & 11.8 & 11.8 & 11.8 & 11.5 & 13.4 & 11.7 & 11.8\\
-\hspace{1em}Hispanic & 6.5 & 6.5 & 6.5 & 6.2 & 6.5 & 5.9 & 6.5\\
-\hspace{1em}Other & 6.8 & 6.8 & 6.8 & 6.5 & 6.8 & 6.2 & 6.8\\
-\hspace{1em}White & 74.9 & 74.9 & 74.9 & 75.8 & 73.2 & 76.3 & 74.9\\
+\multicolumn{9}{l}{\textbf{Race/Ethnicity}}\\
+\hspace{1em}Black & 11.8 & 8.9 & 11.8 & 11.8 & 11.5 & 13.4 & 11.7 & 11.8\\
+\hspace{1em}Hispanic & 6.5 & 7.6 & 6.5 & 6.5 & 6.2 & 6.5 & 5.9 & 6.5\\
+\hspace{1em}Other & 6.8 & 7.1 & 6.8 & 6.8 & 6.5 & 6.8 & 6.2 & 6.8\\
+\hspace{1em}White & 74.9 & 76.4 & 74.9 & 74.9 & 75.8 & 73.2 & 76.3 & 74.9\\
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{Region}}\\
-\hspace{1em}Midwest & 23.4 & 23.4 & 23.4 & 23.2 & 24.7 & 23.6 & 23.4\\
-\hspace{1em}Northeast & 19.7 & 19.7 & 19.7 & 19.3 & 19.7 & 19.5 & 19.7\\
-\hspace{1em}South & 35.5 & 35.5 & 35.5 & 36.9 & 34.8 & 36.0 & 35.5\\
-\hspace{1em}West & 21.4 & 21.4 & 21.4 & 20.6 & 20.8 & 20.8 & 21.4\\
+\multicolumn{9}{l}{\textbf{Region}}\\
+\hspace{1em}Midwest & 23.4 & 22.3 & 23.4 & 23.4 & 23.2 & 24.7 & 23.6 & 23.4\\
+\hspace{1em}Northeast & 19.7 & 18.2 & 19.7 & 19.7 & 19.3 & 19.7 & 19.5 & 19.7\\
+\hspace{1em}South & 35.5 & 37.9 & 35.5 & 35.5 & 36.9 & 34.8 & 36.0 & 35.5\\
+\hspace{1em}West & 21.4 & 21.6 & 21.4 & 21.4 & 20.6 & 20.8 & 20.8 & 21.4\\
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{Education Level}}\\
-\hspace{1em}No HS & 6.8 & 1.8 & 6.8 & 2.4 & 3.6 & 1.9 & 6.8\\
-\hspace{1em}High school & 30.6 & 21.5 & 30.6 & 28.8 & 29.4 & 31.2 & 30.6\\
-\hspace{1em}Some college & 23.0 & 17.7 & 23.0 & 24.5 & 23.0 & 24.4 & 23.0\\
-\hspace{1em}2-year & 10.6 & 10.6 & 10.6 & 9.5 & 11.7 & 10.9 & 10.6\\
-\hspace{1em}4-year & 18.7 & 26.2 & 18.7 & 22.2 & 20.2 & 20.3 & 18.7\\
-\hspace{1em}Post-grad & 10.4 & 22.3 & 10.4 & 12.6 & 12.2 & 11.3 & 10.4\\
+\multicolumn{9}{l}{\textbf{Education Level}}\\
+\hspace{1em}No HS & 6.8 & 1.8 & 1.8 & 6.8 & 2.4 & 3.6 & 1.9 & 6.8\\
+\hspace{1em}High school & 30.6 & 19.7 & 21.5 & 30.6 & 28.8 & 29.4 & 31.2 & 30.6\\
+\hspace{1em}Some college & 23.0 & 16.7 & 17.7 & 23.0 & 24.5 & 23.0 & 24.4 & 23.0\\
+\hspace{1em}2-year & 10.6 & 11.3 & 10.6 & 10.6 & 9.5 & 11.7 & 10.9 & 10.6\\
+\hspace{1em}4-year & 18.7 & 28.6 & 26.2 & 18.7 & 22.2 & 20.2 & 20.3 & 18.7\\
+\hspace{1em}Post-grad & 10.4 & 21.9 & 22.3 & 10.4 & 12.6 & 12.2 & 11.3 & 10.4\\
 \addlinespace[0.5em]
-\multicolumn{8}{l}{\textbf{Party Identification}}\\
-\hspace{1em}Dem & 38.1 & 38.1 & 38.1 & 38.5 & 38.1 & 37.6 & 38.1\\
-\hspace{1em}Ind & 32.5 & 32.5 & 32.5 & 32.5 & 32.5 & 32.8 & 32.5\\
-\hspace{1em}Rep & 29.5 & 29.5 & 29.5 & 29.0 & 29.5 & 29.5 & 29.5\\
+\multicolumn{9}{l}{\textbf{Party Identification}}\\
+\hspace{1em}Dem & 38.1 & 34.4 & 38.1 & 38.1 & 38.5 & 38.1 & 37.6 & 38.1\\
+\hspace{1em}Ind & 32.5 & 35.2 & 32.5 & 32.5 & 32.5 & 32.5 & 32.8 & 32.5\\
+\hspace{1em}Rep & 29.5 & 30.4 & 29.5 & 29.5 & 29.0 & 29.5 & 29.5 & 29.5\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{margin_summary_educ <-}\StringTok{ }\KeywordTok{round}\NormalTok{(}\KeywordTok{cbind}\NormalTok{(}\DataTypeTok{cces =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, cces_awt),}
+                              \DataTypeTok{unweighted =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, pew_srs),}
+            \DataTypeTok{rake_demos_noeduc =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, rake_demos_noeduc),}
+            \DataTypeTok{rake_demos_weduc =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, rake_demos_weduc),}
+            \DataTypeTok{post_stratification =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, post_stratification),}
+            \DataTypeTok{rake_retrospective =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, rake_retrospective),}
+            \DataTypeTok{kpop =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, kpop),}
+            \DataTypeTok{kpop_mf =} \KeywordTok{svymean}\NormalTok{(}\OperatorTok{~}\NormalTok{recode_educ_white, kpop_mf)) }\OperatorTok{*}\StringTok{ }\DecValTok{100}\NormalTok{, }\DecValTok{1}\NormalTok{) }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{data.frame}\NormalTok{() }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{rownames_to_column}\NormalTok{() }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{variable =} \KeywordTok{case_when}\NormalTok{(}\KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"age"}\NormalTok{) }\OperatorTok{~}\StringTok{ "4-way Age Bucket"}\NormalTok{,}
+                             \KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"female"}\NormalTok{) }\OperatorTok{~}\StringTok{ "Gender"}\NormalTok{,}
+                             \KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"race"}\NormalTok{) }\OperatorTok{~}\StringTok{ "Race/Ethnicity"}\NormalTok{,}
+                             \KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"region"}\NormalTok{) }\OperatorTok{~}\StringTok{ "Region"}\NormalTok{,}
+                             \KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"educ"}\NormalTok{) }\OperatorTok{~}\StringTok{ "Education Level"}\NormalTok{,}
+                             \KeywordTok{str_detect}\NormalTok{(rowname, }\StringTok{"pid"}\NormalTok{) }\OperatorTok{~}\StringTok{ "Party Identification"}\NormalTok{,}
+                             \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "Empty"}\NormalTok{),}
+         \DataTypeTok{level =} \KeywordTok{gsub}\NormalTok{(}\StringTok{"recode_|age_bucket|female|race|region|educ|pid_3way|educ_3way|_white"}\NormalTok{, }\StringTok{""}\NormalTok{, rowname)) }\OperatorTok{%>%}
+\StringTok{  }\KeywordTok{select}\NormalTok{(level, }\KeywordTok{everything}\NormalTok{(), }\OperatorTok{-}\NormalTok{rowname, }\OperatorTok{-}\NormalTok{variable)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}
+
+\caption{\label{tab:margins_table_educ}Marginal distribution of education level for white voters under different weighting models.}
+\centering
+\begin{tabular}[t]{>{\raggedright\arraybackslash}p{1.35in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}>{\raggedleft\arraybackslash}p{0.5in}}
+\toprule
+ & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics No Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Kpop Mean First}}}}\\
+\midrule
+\addlinespace[0.5em]
+\multicolumn{9}{l}{\textbf{Education Level for White Voters}}\\
+\hspace{1em}No HS & 4.6 & 1.1 & 1.1 & 4.5 & 1.8 & 3.0 & 1.2 & 4.8\\
+\hspace{1em}High school & 22.6 & 14.6 & 15.5 & 22.9 & 23.1 & 22.6 & 23.6 & 21.9\\
+\hspace{1em}Some college & 16.9 & 11.5 & 12.1 & 16.3 & 19.5 & 16.9 & 18.3 & 17.7\\
+\hspace{1em}2-year & 7.8 & 8.3 & 7.0 & 7.3 & 6.1 & 7.8 & 7.7 & 7.2\\
+\hspace{1em}4-year & 14.8 & 23.0 & 20.7 & 15.2 & 17.1 & 14.8 & 16.3 & 14.8\\
+\hspace{1em}Post-grad & 8.3 & 18.0 & 18.5 & 8.8 & 8.2 & 8.3 & 9.1 & 8.4\\
 \bottomrule
 \end{tabular}
 \end{table}

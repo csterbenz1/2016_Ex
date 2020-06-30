@@ -60,14 +60,14 @@ cces <- cces %>%
     filter((CC16_401 == "I definitely voted in the General Election.") &
                !is.na(commonweight_vv_post))
 
-## make white_pid column
+## make recode_educ_white column
 cces <- cces %>%
-  mutate(recode_white_pid = case_when(recode_race == "White" ~ recode_pid_3way,
-                               TRUE ~ "No Split"))
+  mutate(recode_educ_white = factor(case_when(recode_race == "White" ~ as.character(recode_educ),
+                               TRUE ~ "No Split"), levels = c(levels(cces$recode_educ), "No Split")))
 
 pew <- pew %>%
-  mutate(recode_white_pid = case_when(recode_race == "White" ~ recode_pid_3way,
-                               TRUE ~ "No Split"))
+  mutate(recode_educ_white = factor(case_when(recode_race == "White" ~ as.character(recode_educ),
+                               TRUE ~ "No Split"), levels = c(levels(pew$recode_educ), "No Split")))
 
 ### Actual results
 pres <- readRDS(paste0(path_data, "election.rds"))
@@ -173,6 +173,7 @@ kpop_mf <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_mf_b2x"])
 
 ```{r check_margins}
 margin_summary <- round(cbind(cces = svymean(formula_rake_demos_weduc, cces_awt),
+                              unweighted = svymean(formula_rake_demos_weduc, pew_srs),
             rake_demos_noeduc = svymean(formula_rake_demos_weduc, rake_demos_noeduc),
             rake_demos_weduc = svymean(formula_rake_demos_weduc, rake_demos_weduc),
             post_stratification = svymean(formula_rake_demos_weduc, post_stratification),
@@ -197,6 +198,7 @@ margin_summary %>%
   mutate(level = str_replace(level, "graduate", "")) %>%
   kable(format = "latex", booktabs = T,
         col.names = linebreak(c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Unweighted Pew}}}}",
                                 "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics No Education }}}}",
                                 "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
                                 "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
@@ -213,6 +215,48 @@ margin_summary %>%
   pack_rows("Region", 11, 14, latex_gap_space = "0.5em") %>%
   pack_rows("Education Level", 15, 20, latex_gap_space = "0.5em") %>%
   pack_rows("Party Identification", 21, 23, latex_gap_space = "0.5em")
+```
+
+```{r check_margins_white_educ}
+margin_summary_educ <- round(cbind(cces = svymean(~recode_educ_white, cces_awt),
+                              unweighted = svymean(~recode_educ_white, pew_srs),
+            rake_demos_noeduc = svymean(~recode_educ_white, rake_demos_noeduc),
+            rake_demos_weduc = svymean(~recode_educ_white, rake_demos_weduc),
+            post_stratification = svymean(~recode_educ_white, post_stratification),
+            rake_retrospective = svymean(~recode_educ_white, rake_retrospective),
+            kpop = svymean(~recode_educ_white, kpop),
+            kpop_mf = svymean(~recode_educ_white, kpop_mf)) * 100, 1) %>%
+  data.frame() %>%
+  rownames_to_column() %>%
+  mutate(variable = case_when(str_detect(rowname, "age") ~ "4-way Age Bucket",
+                             str_detect(rowname, "female") ~ "Gender",
+                             str_detect(rowname, "race") ~ "Race/Ethnicity",
+                             str_detect(rowname, "region") ~ "Region",
+                             str_detect(rowname, "educ") ~ "Education Level",
+                             str_detect(rowname, "pid") ~ "Party Identification",
+                             TRUE ~ "Empty"),
+         level = gsub("recode_|age_bucket|female|race|region|educ|pid_3way|educ_3way|_white", "", rowname)) %>%
+  select(level, everything(), -rowname, -variable)
+```
+
+```{r margins_table_educ, echo = FALSE, results = 'asis'}
+margin_summary_educ %>%
+  mutate(level = str_replace(level, "graduate", "")) %>%
+  filter(level != "No Split") %>%
+  kable(format = "latex", booktabs = T,
+        col.names = linebreak(c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Unweighted Pew}}}}",
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics No Education }}}}",
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Kpop}}}}", 
+                                "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Kpop Mean First}}}}")), escape = FALSE,
+        caption = "Marginal distribution of education level for white voters under different weighting models.") %>%
+  column_spec(2:ncol(margin_summary), width = "0.5in") %>%
+  column_spec(1, width = "1.35in") %>%
+  kable_styling() %>%
+  pack_rows("Education Level for White Voters", 1, 6, latex_gap_space = "0.5em")
 ```
 
 ```{r make_results}
@@ -248,8 +292,8 @@ comp_df <- data.frame(
                                               "KPop", 
                                               "KPop + Mean First",
                                               "Post-Stratification", 
-                                              "Raking\nDemographics (no Education)", 
-                                              "Raking\nDemographics w/ Education", 
+                                              "Raking\nDemographics\nwithout Education)", 
+                                              "Raking\nDemographics\nwith Education", 
                                               "Raking\nRetrospective", 
                                               "Pew\nUnweighted"),
                            ordered = TRUE))
@@ -262,7 +306,7 @@ comp_df %>%
     ggplot() +
     aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE) +
 
-    geom_hline(yintercept = c(0, natl_margin, comp_df$est[comp_df$source == "cces"]),
+    geom_hline(yintercept = c(0, natl_margin * 100, comp_df$est[comp_df$source == "cces"]),
                linetype = c("solid", "dashed", "longdash"),
                color = c("black", "gray60", "black")) +
     geom_pointrange() +
@@ -275,7 +319,7 @@ comp_df %>%
     labs(x = NULL, y = "Estimated Margin (95% CI)") +
     ggtitle("Estimates of Clinton National Popular Vote Margin") +
     theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
-    annotate(geom = "text", x = 8.65, y = natl_margin, label = " True\n National\n Margin", hjust = 0, angle = -90, color = "gray60", size = 3.5) +
+    annotate(geom = "text", x = 8.65, y = natl_margin * 100, label = " True\n National\n Margin", hjust = 0, angle = -90, color = "gray60", size = 3.5) +
     annotate(geom = "text", x = 8.55, y = comp_df$est[comp_df$source == "cces"], label = " CCES Estimated\n Margin", hjust = 0, angle = 90, size = 3.5) +
     theme(legend.title = element_blank()) +
   scale_x_discrete(limits=comp_df$source_name, expand = expansion(0, 1.2))

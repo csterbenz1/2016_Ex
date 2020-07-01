@@ -1,46 +1,33 @@
-% Options for packages loaded elsewhere
-\PassOptionsToPackage{unicode}{hyperref}
-\PassOptionsToPackage{hyphens}{url}
-%
-\documentclass[
-]{article}
+\documentclass[]{article}
 \usepackage{lmodern}
 \usepackage{amssymb,amsmath}
 \usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
 \ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
   \usepackage[T1]{fontenc}
   \usepackage[utf8]{inputenc}
-  \usepackage{textcomp} % provide euro and other symbols
-\else % if luatex or xetex
-  \usepackage{unicode-math}
-  \defaultfontfeatures{Scale=MatchLowercase}
-  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\else % if luatex or xelatex
+  \ifxetex
+    \usepackage{mathspec}
+  \else
+    \usepackage{fontspec}
+  \fi
+  \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
 \fi
-% Use upquote if available, for straight quotes in verbatim environments
+% use upquote if available, for straight quotes in verbatim environments
 \IfFileExists{upquote.sty}{\usepackage{upquote}}{}
-\IfFileExists{microtype.sty}{% use microtype if available
-  \usepackage[]{microtype}
-  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+% use microtype if available
+\IfFileExists{microtype.sty}{%
+\usepackage{microtype}
+\UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
 }{}
-\makeatletter
-\@ifundefined{KOMAClassName}{% if non-KOMA class
-  \IfFileExists{parskip.sty}{%
-    \usepackage{parskip}
-  }{% else
-    \setlength{\parindent}{0pt}
-    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
-}{% if KOMA class
-  \KOMAoptions{parskip=half}}
-\makeatother
-\usepackage{xcolor}
-\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
-\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
-\hypersetup{
-  pdftitle={Application to 2016 Election Data},
-  hidelinks,
-  pdfcreator={LaTeX via pandoc}}
-\urlstyle{same} % disable monospaced font for URLs
 \usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{unicode=true,
+            pdftitle={Application to 2016 Election Data},
+            pdfborder={0 0 0},
+            breaklinks=true}
+\urlstyle{same}  % don't use monospace font for urls
 \usepackage{color}
 \usepackage{fancyvrb}
 \newcommand{\VerbBar}{|}
@@ -90,16 +77,50 @@
 % margins by default, and it is still possible to overwrite the defaults
 % using explicit options in \includegraphics[width, height, ...]{}
 \setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
-% Set default figure placement to htbp
-\makeatletter
-\def\fps@figure{htbp}
-\makeatother
-\setlength{\emergencystretch}{3em} % prevent overfull lines
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{% else
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+}
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
-\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
-\usepackage{stackengine}
-\usepackage{rotating}
+\setcounter{secnumdepth}{0}
+% Redefines (sub)paragraphs to behave more like sections
+\ifx\paragraph\undefined\else
+\let\oldparagraph\paragraph
+\renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+\let\oldsubparagraph\subparagraph
+\renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+
+%%% Use protect on footnotes to avoid problems with footnotes in titles
+\let\rmarkdownfootnote\footnote%
+\def\footnote{\protect\rmarkdownfootnote}
+
+%%% Change title format to be more compact
+\usepackage{titling}
+
+% Create subtitle command for use in maketitle
+\providecommand{\subtitle}[1]{
+  \posttitle{
+    \begin{center}\large#1\end{center}
+    }
+}
+
+\setlength{\droptitle}{-2em}
+
+  \title{Application to 2016 Election Data}
+    \pretitle{\vspace{\droptitle}\centering\huge}
+  \posttitle{\par}
+    \author{}
+    \preauthor{}\postauthor{}
+    \date{}
+    \predate{}\postdate{}
+  
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
@@ -115,17 +136,17 @@
 \usepackage{makecell}
 \usepackage{xcolor}
 
-\title{Application to 2016 Election Data}
-\author{}
-\date{\vspace{-2.5em}}
+\usepackage{stackengine}
+\usepackage{rotating}
 
 \begin{document}
 \maketitle
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{## Erin's path}
+\NormalTok{## Erin's path}
 \NormalTok{path_data =}\StringTok{ "~/Dropbox/Documents/2019__2020/work/kpop/2016_reweighting_example/data/"}
+\NormalTok{path_data =}\StringTok{ "../data/"}
 \end{Highlighting}
 \end{Shaded}
 
@@ -134,7 +155,7 @@
 \NormalTok{vote_contrast <-}\StringTok{ }\KeywordTok{quote}\NormalTok{((recode_vote_2016Democrat }\OperatorTok{-}\StringTok{ }\NormalTok{recode_vote_2016Republican) }\OperatorTok{/}
 \StringTok{                           }\NormalTok{(recode_vote_2016Democrat }\OperatorTok{+}\StringTok{ }\NormalTok{recode_vote_2016Republican))}
 
-\CommentTok{### Function for creating targets from auxiliary information and formula}
+\NormalTok{### Function for creating targets from auxiliary information and formula}
 \NormalTok{create_targets <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{ (target_design, target_formula) \{}
 \NormalTok{    target_mf <-}\StringTok{ }\KeywordTok{model.frame}\NormalTok{(target_formula, }\KeywordTok{model.frame}\NormalTok{(target_design))}
 \NormalTok{    target_mm <-}\StringTok{ }\KeywordTok{model.matrix}\NormalTok{(target_formula, target_mf)}
@@ -149,21 +170,21 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{## SURVEY DATA (PEW)}
-\CommentTok{### Load}
-\CommentTok{###This needs to be loaded from dropbox/local not github bc it's too big}
+\NormalTok{## SURVEY DATA (PEW)}
+\NormalTok{### Load}
+\NormalTok{###This needs to be loaded from dropbox/local not github bc it's too big}
 \NormalTok{pew <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"pew.rds"}\NormalTok{))}
 
-\CommentTok{## AUXILIARY INFORMATION (CCES)}
-\CommentTok{### Load}
+\NormalTok{## AUXILIARY INFORMATION (CCES)}
+\NormalTok{### Load}
 \CommentTok{#This needs to be loaded from dropbox/local not github bc it's too big}
 \NormalTok{cces <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"cces.rds"}\NormalTok{))}
-\CommentTok{### Drop invalid cases}
+\NormalTok{### Drop invalid cases}
 \NormalTok{cces <-}\StringTok{ }\NormalTok{cces }\OperatorTok{%>%}
 \StringTok{    }\KeywordTok{filter}\NormalTok{((CC16_}\DecValTok{401} \OperatorTok{==}\StringTok{ "I definitely voted in the General Election."}\NormalTok{) }\OperatorTok{&}
 \StringTok{               }\OperatorTok{!}\KeywordTok{is.na}\NormalTok{(commonweight_vv_post))}
 
-\CommentTok{## make recode_educ_white column}
+\NormalTok{## make recode_educ_white column}
 \NormalTok{cces <-}\StringTok{ }\NormalTok{cces }\OperatorTok{%>%}
 \StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_educ_white =} 
            \KeywordTok{factor}\NormalTok{(}\KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\KeywordTok{as.character}\NormalTok{(recode_educ),}
@@ -176,7 +197,7 @@
                             \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{), }
                   \DataTypeTok{levels =} \KeywordTok{c}\NormalTok{(}\KeywordTok{levels}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_educ), }\StringTok{"No Split"}\NormalTok{)))}
 
-\CommentTok{### Actual results}
+\NormalTok{### Actual results}
 \NormalTok{pres <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"election.rds"}\NormalTok{))}
 
 \NormalTok{natl_margin <-}\StringTok{ }\NormalTok{pres }\OperatorTok{%>%}
@@ -194,7 +215,7 @@
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{formula_rake_demos_noeduc <-}\StringTok{ }\ErrorTok{~}\NormalTok{recode_age_bucket }\OperatorTok{+}\StringTok{ }\NormalTok{recode_female }\OperatorTok{+}\StringTok{ }
-\StringTok{  }\NormalTok{recode_race }\OperatorTok{+}\StringTok{ }\NormalTok{recode_region }\OperatorTok{+}\StringTok{ }\NormalTok{recode_pid_3way}
+\StringTok{    }\NormalTok{recode_race }\OperatorTok{+}\StringTok{ }\NormalTok{recode_region }\OperatorTok{+}\StringTok{ }\NormalTok{recode_pid_3way}
 \NormalTok{formula_rake_demos_weduc <-}\StringTok{ }\ErrorTok{~}\NormalTok{recode_age_bucket }\OperatorTok{+}\StringTok{ }\NormalTok{recode_female }\OperatorTok{+}\StringTok{ }
 \StringTok{  }\NormalTok{recode_race }\OperatorTok{+}\StringTok{ }\NormalTok{recode_region }\OperatorTok{+}\StringTok{ }\NormalTok{recode_educ }\OperatorTok{+}\StringTok{ }\NormalTok{recode_pid_3way}
 \NormalTok{formula_ps <-}\StringTok{ }\ErrorTok{~}\NormalTok{recode_age_3way }\OperatorTok{+}\StringTok{ }\NormalTok{recode_female }\OperatorTok{+}\StringTok{ }\NormalTok{recode_race }\OperatorTok{+}
@@ -207,8 +228,8 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{## Find Missing Strata}
-\CommentTok{## Make "strata" variable in CCES and Pew}
+\NormalTok{## Find Missing Strata}
+\NormalTok{## Make "strata" variable in CCES and Pew}
 \NormalTok{cces <-}\StringTok{ }\KeywordTok{bind_cols}\NormalTok{(cces, cces }\OperatorTok{%>%}\StringTok{ }
 \StringTok{                    }\KeywordTok{unite}\NormalTok{(}\StringTok{"strata"}\NormalTok{, }\KeywordTok{all.vars}\NormalTok{(formula_ps), }\DataTypeTok{remove =} \OtherTok{FALSE}\NormalTok{) }\OperatorTok{%>%}
 \StringTok{                    }\KeywordTok{unite}\NormalTok{(}\StringTok{"strata_wage"}\NormalTok{, }\KeywordTok{c}\NormalTok{(}\KeywordTok{all.vars}\NormalTok{(formula_ps), }\StringTok{"recode_age"}\NormalTok{), }
@@ -224,13 +245,13 @@
 
 \NormalTok{missing_strata <-}\StringTok{ }\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata)[}\OperatorTok{!}\NormalTok{(}\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata) }\OperatorTok{%in%}\StringTok{ }\KeywordTok{unique}\NormalTok{(pew}\OperatorTok{$}\NormalTok{strata))]}
 
-\CommentTok{## recode missing age}
+\NormalTok{## recode missing age}
 \NormalTok{pew}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
 \NormalTok{cces}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
 
-\CommentTok{### Make survey designs}
+\NormalTok{### Make survey designs}
 
-\CommentTok{## For Pew, since there are no design weights, assume SRS}
+\NormalTok{## For Pew, since there are no design weights, assume SRS}
 \NormalTok{pew_srs <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\DataTypeTok{ids =} \OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew)}
 \NormalTok{cces_awt <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\DataTypeTok{ids =} \OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{weights =} \OperatorTok{~}\NormalTok{commonweight_vv_post, }\DataTypeTok{data =}\NormalTok{ cces)}
 \end{Highlighting}
@@ -238,7 +259,7 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{### Population targets}
+\NormalTok{### Population targets}
 \NormalTok{targets_rake_demos_noeduc <-}\StringTok{ }\KeywordTok{create_targets}\NormalTok{(cces_awt, formula_rake_demos_noeduc)}
 \NormalTok{targets_rake_demos_weduc <-}\StringTok{ }\KeywordTok{create_targets}\NormalTok{(cces_awt, formula_rake_demos_weduc)}
 \NormalTok{targets_retrospective <-}\StringTok{ }\KeywordTok{create_targets}\NormalTok{(cces_awt, formula_retrospective)}
@@ -247,7 +268,7 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{## Raking on demographics, excluding education}
+\NormalTok{## Raking on demographics, excluding education}
 \NormalTok{rake_demos_noeduc <-}\StringTok{ }\KeywordTok{calibrate}\NormalTok{(}\DataTypeTok{design =}\NormalTok{ pew_srs,}
                        \DataTypeTok{formula =}\NormalTok{ formula_rake_demos_noeduc,}
                        \DataTypeTok{population =}\NormalTok{ targets_rake_demos_noeduc,}
@@ -255,7 +276,7 @@
 
 \NormalTok{rake_demos_noeduc <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =} \KeywordTok{weights}\NormalTok{(rake_demos_noeduc))}
 
-\CommentTok{## Raking on demographics, including education}
+\NormalTok{## Raking on demographics, including education}
 \NormalTok{rake_demos_weduc <-}\StringTok{ }\KeywordTok{calibrate}\NormalTok{(}\DataTypeTok{design =}\NormalTok{ pew_srs,}
                               \DataTypeTok{formula =}\NormalTok{ formula_rake_demos_weduc,}
                               \DataTypeTok{population =}\NormalTok{ targets_rake_demos_weduc,}
@@ -263,7 +284,7 @@
 
 \NormalTok{rake_demos_weduc <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =} \KeywordTok{weights}\NormalTok{(rake_demos_weduc))}
 
-\CommentTok{## Post-stratification}
+\NormalTok{## Post-stratification}
 \NormalTok{targets_ps <-}\StringTok{ }\KeywordTok{svytable}\NormalTok{(}\DataTypeTok{formula =} \OperatorTok{~}\NormalTok{strata, }
                        \DataTypeTok{design =} \KeywordTok{subset}\NormalTok{(cces_awt, }\OperatorTok{!}\NormalTok{(strata }\OperatorTok{%in%}\StringTok{ }\NormalTok{missing_strata)))}
 
@@ -274,7 +295,7 @@
 \NormalTok{post_stratification <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }
                                  \DataTypeTok{weights =} \KeywordTok{weights}\NormalTok{(post_stratification))}
 
-\CommentTok{## Retrospective weighting scheme}
+\NormalTok{## Retrospective weighting scheme}
 \NormalTok{rake_retrospective <-}\StringTok{ }\KeywordTok{calibrate}\NormalTok{(}\DataTypeTok{design =}\NormalTok{ pew_srs,}
                               \DataTypeTok{formula =}\NormalTok{ formula_retrospective,}
                               \DataTypeTok{population =}\NormalTok{ targets_retrospective,}
@@ -284,8 +305,8 @@
 \end{Shaded}
 
 \begin{verbatim}
-## Warning in grake(mm, ww, calfun, bounds = bounds, population = population, :
-## Failed to converge: eps=0.00688873036014645 in 51 iterations
+## Warning in grake(mm, ww, calfun, bounds = bounds, population =
+## population, : Failed to converge: eps=0.00688873036014645 in 51 iterations
 \end{verbatim}
 
 \begin{Shaded}
@@ -296,9 +317,9 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{#############################################}
-\CommentTok{##### PUT FINAL KPOP CODE HERE}
-\CommentTok{#############################################}
+\NormalTok{#############################################}
+\NormalTok{##### PUT FINAL KPOP CODE HERE}
+\NormalTok{#############################################}
 
 \KeywordTok{load}\NormalTok{(}\StringTok{"./cleaned data/Full SVD/weights_wPid_full.Rdata"}\NormalTok{)}
 
@@ -332,12 +353,12 @@
 \end{Highlighting}
 \end{Shaded}
 
-\begin{table}
+\begin{table}[t]
 
-\caption{\label{tab:margins_table}Marginal distribution, in precentage poitns, of important demographics under different weighting models.}
+\caption{\label{tab:margins_table}Marginal distribution, in precentage points, of important demographics under different weighting models.}
 \centering
 \begin{threeparttable}
-\begin{tabular}[t]{>{\raggedright\arraybackslash}p{1.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{1.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
 \toprule
  & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics without Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
 \midrule
@@ -387,7 +408,7 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{## Total missing strata}
+\NormalTok{## Total missing strata}
 \KeywordTok{sum}\NormalTok{(cces}\OperatorTok{$}\NormalTok{commonweight_vv_post[cces}\OperatorTok{$}\NormalTok{strata }\OperatorTok{%in%}\StringTok{ }\NormalTok{missing_strata])}\OperatorTok{/}\KeywordTok{sum}\NormalTok{(cces}\OperatorTok{$}\NormalTok{commonweight_vv_post)}
 \end{Highlighting}
 \end{Shaded}
@@ -486,12 +507,12 @@
 ## This warning is displayed once per session.
 \end{verbatim}
 
-\begin{table}
+\begin{table}[t]
 
 \caption{\label{tab:margins_table_educ}Marginal distribution of education level for white voters under different weighting models.}
 \centering
 \begin{threeparttable}
-\begin{tabular}[t]{>{\raggedright\arraybackslash}p{1.68in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{1.68in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
 \toprule
  & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics without Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
 \midrule
@@ -525,8 +546,8 @@
 \end{Shaded}
 
 \begin{verbatim}
-## Warning in svymean.survey.design2(~recode_vote_2016, rake_demos_noeduc, : Sample
-## size greater than population size: are weights correctly scaled?
+## Warning in svymean.survey.design2(~recode_vote_2016, rake_demos_noeduc, :
+## Sample size greater than population size: are weights correctly scaled?
 \end{verbatim}
 
 \begin{verbatim}
@@ -587,16 +608,16 @@
 
 \begin{verbatim}
 ## # A tibble: 8 x 5
-##   source               est    SE err_target source_name                         
-##   <chr>              <dbl> <dbl>      <dbl> <ord>                               
-## 1 cces                2.64 0.740      0     "Target (CCES)"                     
-## 2 unweighted          5.60 2.26       2.96  "Pew\nUnweighted"                   
-## 3 rake demos_noeduc   9.75 2.81       7.11  "Raking\nDemographics\nwithout Educ~
-## 4 rake demos_weduc    5.29 3.11       2.65  "Raking\nDemographics\nwith Educati~
-## 5 post stratificati~  5.03 3.04       2.39  "Post-Stratification"               
-## 6 rake retrospective  5.17 3.39       2.53  "Raking\nRetrospective"             
-## 7 kpop                4.09 3.10       1.45  "KPop"                              
-## 8 kpop mf             2.47 3.41      -0.168 "KPop + Mean First"
+##   source             est    SE err_target source_name                      
+##   <chr>            <dbl> <dbl>      <dbl> <ord>                            
+## 1 cces              2.64 0.740      0     Target (CCES)                    
+## 2 unweighted        5.60 2.26       2.96  "Pew\nUnweighted"                
+## 3 rake demos_noed~  9.75 2.81       7.11  "Raking\nDemographics\nwithout E~
+## 4 rake demos_weduc  5.29 3.11       2.65  "Raking\nDemographics\nwith Educ~
+## 5 post stratifica~  5.03 3.04       2.39  Post-Stratification              
+## 6 rake retrospect~  5.17 3.39       2.53  "Raking\nRetrospective"          
+## 7 kpop              4.09 3.10       1.45  KPop                             
+## 8 kpop mf           2.47 3.41      -0.168 KPop + Mean First
 \end{verbatim}
 
 \includegraphics{application_clean_files/figure-latex/plot_results-1.pdf}
@@ -664,5 +685,157 @@ with-replacement design effect is the square of Kish's ``deft''.
 ## recode_vote_2016Other      0.058803 0.010303 3.9758
 ## recode_vote_2016Republican 0.458969 0.016838 2.3668
 \end{verbatim}
+
+\hypertarget{weights}{%
+\subsection{Weights}\label{weights}}
+
+Looking at the average weight in margins.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{load}\NormalTok{(}\StringTok{"cleaned data/Full SVD/weights_wPid_full.Rdata"}\NormalTok{)}
+\CommentTok{#optimal choice w pid: no mf = 0.5, mf = 2}
+\NormalTok{weights <-}\StringTok{ }\NormalTok{pew }\OperatorTok{%>%}\StringTok{ }\KeywordTok{select}\NormalTok{(recode_age_bucket,}
+\NormalTok{                          recode_age_3way,}
+\NormalTok{                          recode_female,}
+\NormalTok{                          recode_race,}
+\NormalTok{                          recode_region,}
+\NormalTok{                          recode_educ,}
+\NormalTok{                          recode_educ_3way,}
+\NormalTok{                          recode_pid_3way,}
+\NormalTok{                          recode_race_educ_reg)  }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{rake_demos_noeduc_wt =} \KeywordTok{weights}\NormalTok{(rake_demos_noeduc)}\OperatorTok{/}
+\StringTok{                                 }\KeywordTok{mean}\NormalTok{(}\KeywordTok{weights}\NormalTok{(rake_demos_noeduc)),}
+           \DataTypeTok{rake_demos_weduc_wt =} \KeywordTok{weights}\NormalTok{(rake_demos_weduc)}\OperatorTok{/}
+\StringTok{                                 }\KeywordTok{mean}\NormalTok{(}\KeywordTok{weights}\NormalTok{(rake_demos_weduc)),}
+           \DataTypeTok{post_stratification_wt =} \KeywordTok{weights}\NormalTok{(post_stratification)}\OperatorTok{/}
+\StringTok{                                 }\KeywordTok{mean}\NormalTok{(}\KeywordTok{weights}\NormalTok{(post_stratification)),}
+           \DataTypeTok{rake_retrospective_wt =} \KeywordTok{weights}\NormalTok{(rake_retrospective)}\OperatorTok{/}
+\StringTok{                                 }\KeywordTok{mean}\NormalTok{(}\KeywordTok{weights}\NormalTok{(rake_retrospective)),}
+           \DataTypeTok{k_wt =}\NormalTok{ wts_wPid}\OperatorTok{$}\NormalTok{wtkbal_b}\FloatTok{.5}\NormalTok{x,}
+           \DataTypeTok{k_mf_wt =}\NormalTok{ wts_wPid}\OperatorTok{$}\NormalTok{wtkbal_mf_b2x)}
+
+\CommentTok{#just checking everything is internally consistent}
+\CommentTok{#sum(weights$rake_demos_noeduc_wt != wts_wPid$wt1_pid)}
+
+\NormalTok{age <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_age_bucket) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+\NormalTok{female <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_female) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+\NormalTok{race <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_race) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+\NormalTok{region <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_region) }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+\NormalTok{education <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_educ) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+\NormalTok{pid <-}\StringTok{ }\NormalTok{weights }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{group_by}\NormalTok{(recode_pid_3way) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{summarise}\NormalTok{(}\DataTypeTok{mu_1 =} \KeywordTok{mean}\NormalTok{(rake_demos_noeduc_wt),}
+              \DataTypeTok{mu_2 =} \KeywordTok{mean}\NormalTok{(rake_demos_weduc_wt),}
+              \DataTypeTok{mu_3 =} \KeywordTok{mean}\NormalTok{(post_stratification_wt),}
+              \DataTypeTok{mu_4 =} \KeywordTok{mean}\NormalTok{(rake_retrospective_wt),}
+              \DataTypeTok{mu_kpop =} \KeywordTok{mean}\NormalTok{(k_wt),}
+              \DataTypeTok{mu_kpop_mf =} \KeywordTok{mean}\NormalTok{(k_mf_wt)) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{ungroup}\NormalTok{()}
+
+
+\KeywordTok{colnames}\NormalTok{(age) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(age)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{colnames}\NormalTok{(female)<-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(female)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{colnames}\NormalTok{(race)<-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(race)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{colnames}\NormalTok{(region) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(region)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{colnames}\NormalTok{(education) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(education)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{colnames}\NormalTok{(pid) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\KeywordTok{colnames}\NormalTok{(pid)[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
+
+\NormalTok{weights_summary <-}\StringTok{ }\KeywordTok{rbind}\NormalTok{(age, female, race, region, education, pid) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{table}[t]
+
+\caption{\label{tab:weights_print}Mean weights of important demographics under different weighting models .}
+\centering
+\begin{threeparttable}
+\begin{tabular}{>{\raggedright\arraybackslash}p{1.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
+\toprule
+ & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics without Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
+\midrule
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{4-way Age Bucket}}\\
+\hspace{1em}18 to 35 & 0.795 & 0.795 & 0.809 & 0.795 & 0.787 & 0.795\\
+\hspace{1em}36 to 50 & 0.692 & 0.692 & 0.818 & 0.692 & 0.722 & 0.692\\
+\hspace{1em}51 to 64 & 1.378 & 1.378 & 1.415 & 1.378 & 1.406 & 1.378\\
+\hspace{1em}65+ & 5.183 & 5.183 & 3.117 & 5.183 & 4.732 & 5.183\\
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{Gender}}\\
+\hspace{1em}Female & 1.076 & 1.076 & 1.075 & 1.076 & 1.075 & 1.076\\
+\hspace{1em}Male & 0.932 & 0.932 & 0.933 & 0.932 & 0.933 & 0.932\\
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{Race/Ethnicity}}\\
+\hspace{1em}Black & 1.326 & 1.326 & 1.293 & 1.515 & 1.318 & 1.326\\
+\hspace{1em}Hispanic & 0.857 & 0.857 & 0.815 & 0.857 & 0.770 & 0.857\\
+\hspace{1em}Other & 0.955 & 0.955 & 0.911 & 0.955 & 0.865 & 0.955\\
+\hspace{1em}White & 0.981 & 0.981 & 0.993 & 0.959 & 0.999 & 0.981\\
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{Region}}\\
+\hspace{1em}Midwest & 1.052 & 1.052 & 1.043 & 1.110 & 1.061 & 1.052\\
+\hspace{1em}Northeast & 1.081 & 1.081 & 1.057 & 1.081 & 1.071 & 1.081\\
+\hspace{1em}South & 0.935 & 0.935 & 0.972 & 0.916 & 0.949 & 0.935\\
+\hspace{1em}West & 0.994 & 0.994 & 0.956 & 0.965 & 0.966 & 0.994\\
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{Education Level}}\\
+\hspace{1em}No HS & 1.000 & 3.823 & 1.320 & 2.030 & 1.062 & 3.823\\
+\hspace{1em}High school & 1.091 & 1.553 & 1.463 & 1.492 & 1.586 & 1.553\\
+\hspace{1em}Some college & 1.059 & 1.374 & 1.467 & 1.374 & 1.457 & 1.374\\
+\hspace{1em}2-year & 0.937 & 0.936 & 0.840 & 1.029 & 0.963 & 0.936\\
+\hspace{1em}4-year & 0.915 & 0.653 & 0.777 & 0.707 & 0.711 & 0.653\\
+\hspace{1em}Post-grad & 1.017 & 0.474 & 0.575 & 0.556 & 0.516 & 0.474\\
+\addlinespace[0.5em]
+\multicolumn{7}{l}{\textbf{Party Identification}}\\
+\hspace{1em}Dem & 1.105 & 1.105 & 1.119 & 1.105 & 1.093 & 1.105\\
+\hspace{1em}Ind & 0.922 & 0.922 & 0.924 & 0.922 & 0.933 & 0.922\\
+\hspace{1em}Rep & 0.971 & 0.971 & 0.954 & 0.971 & 0.973 & 0.971\\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\item \textit{Note: } 
+\item Cells present the average weight used to reweight the Pew sample to the CCES target population in each variable level.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
 
 \end{document}

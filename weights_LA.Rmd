@@ -20,7 +20,7 @@ pew <- readRDS("../data/pew.rds")
 #what weights to look at:
 #full SVD weights are:
 #w pid and selecting optimal b's
-load("cleaned data/Full SVD/weights_wPid_full.Rdata")
+load("./cleaned data/Full SVD/weights_wPid_full.Rdata")
 #put weights in this object so rest of code uses it
 #optimal choice w pid: no mf = 0.5, mf = 2
 weights_LA <- pew %>% mutate(pew4_wt = wts_wPid$wt4,
@@ -29,8 +29,8 @@ weights_LA <- pew %>% mutate(pew4_wt = wts_wPid$wt4,
 
 
 #need to load the corresponding survey desigsn as well
-load("cleaned data/Full SVD/surveys_wPID_full.Rdata")
-load("surveys_others_wPid.Rdata")
+load("./cleaned data/Full SVD/surveys_wPID_full.Rdata")
+load("./cleaned data/Other Methods/surveys_others_wPid.Rdata")
 
 
 #can look at without pid using this, changing names in weights_LA etc where needed (should only be in the call of the check_bal function)

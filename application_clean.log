@@ -1,9 +1,9 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017) (preloaded format=pdflatex 2017.5.23)  30 JUN 2020 19:21
+This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017) (preloaded format=pdflatex 2017.5.23)  30 JUN 2020 19:24
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**weights_LA.tex
-(./weights_LA.tex
+**application_clean.tex
+(./application_clean.tex
 LaTeX2e <2017-04-15>
 Babel <3.10> and hyphenation patterns for 84 language(s) loaded.
 (/usr/local/texlive/2017/texmf-dist/tex/latex/base/article.cls
@@ -961,44 +961,82 @@ Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1368.
 Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1369.
 Package xcolor Info: Model `Gray' substituted by `gray' on input line 1370.
 Package xcolor Info: Model `wave' substituted by `hsb' on input line 1371.
-) (./weights_LA.aux
-
-LaTeX Warning: Label `tab:unnamed-chunk-2' multiply defined.
-
-
-LaTeX Warning: Label `tab:unnamed-chunk-2' multiply defined.
-
+) (/usr/local/texlive/2017/texmf-dist/tex/latex/stackengine/stackengine.sty
+Package: stackengine 2017/02/13 v4.01\ Stacking text and objects in convenient 
+ways
+(/usr/local/texlive/2017/texmf-dist/tex/latex/etoolbox/etoolbox.sty
+Package: etoolbox 2017/01/02 v2.4 e-TeX tools for LaTeX (JAW)
+\etb@tempcnta=\count139
+) (/usr/local/texlive/2017/texmf-dist/tex/generic/listofitems/listofitems.sty (
+/usr/local/texlive/2017/texmf-dist/tex/generic/listofitems/listofitems.tex
+\loi_nestcnt=\count140
 )
-\openout1 = `weights_LA.aux'.
+Package: listofitems 2016/11/18 v1.3 Grab items in lists using user-specified s
+ep char
+) (/usr/local/texlive/2017/texmf-dist/tex/latex/tools/calc.sty
+Package: calc 2014/10/28 v4.3 Infix arithmetic (KKT,FJ)
+\calc@Acount=\count141
+\calc@Bcount=\count142
+\calc@Adimen=\dimen165
+\calc@Bdimen=\dimen166
+\calc@Askip=\skip64
+\calc@Bskip=\skip65
+LaTeX Info: Redefining \setlength on input line 80.
+LaTeX Info: Redefining \addtolength on input line 81.
+\calc@Ccount=\count143
+\calc@Cskip=\skip66
+)
+\c@@stackindex=\count144
+\@boxshift=\skip67
+\stack@tmplength=\skip68
+\temp@stkl=\skip69
+\@stackedboxwidth=\skip70
+\@addedbox=\box45
+\@anchorbox=\box46
+\stackedbox=\box47
+\@centerbox=\box48
+\c@ROWcellindex@=\count145
+) (/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/rotating.sty
+Package: rotating 2016/08/11 v2.16d rotated objects in LaTeX
+(/usr/local/texlive/2017/texmf-dist/tex/latex/base/ifthen.sty
+Package: ifthen 2014/09/29 v1.1c Standard LaTeX ifthen package (DPC)
+)
+\c@r@tfl@t=\count146
+\rotFPtop=\skip71
+\rotFPbot=\skip72
+\rot@float@box=\box49
+\rot@mess@toks=\toks35
+) (./application_clean.aux)
+\openout1 = `application_clean.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 139.
-LaTeX Font Info:    Try loading font information for TS1+cmr on input line 139.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 142.
+LaTeX Font Info:    Try loading font information for TS1+cmr on input line 142.
 
 (/usr/local/texlive/2017/texmf-dist/tex/latex/base/ts1cmr.fd
 File: ts1cmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
 )
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 139.
-LaTeX Font Info:    ... okay on input line 139.
-LaTeX Font Info:    Try loading font information for T1+lmr on input line 139.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 142.
+LaTeX Font Info:    ... okay on input line 142.
+LaTeX Font Info:    Try loading font information for T1+lmr on input line 142.
 (/usr/local/texlive/2017/texmf-dist/tex/latex/lm/t1lmr.fd
 File: t1lmr.fd 2009/10/30 v1.6 Font defs for Latin Modern
 )
-LaTeX Info: Redefining \microtypecontext on input line 139.
+LaTeX Info: Redefining \microtypecontext on input line 142.
 Package microtype Info: Generating PDF output.
 Package microtype Info: Character protrusion enabled (level 2).
 Package microtype Info: Using protrusion set `basicmath'.
@@ -1046,35 +1084,35 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-\AtBeginShipoutBox=\box45
-Package hyperref Info: Link coloring OFF on input line 139.
+\AtBeginShipoutBox=\box50
+Package hyperref Info: Link coloring OFF on input line 142.
 (/usr/local/texlive/2017/texmf-dist/tex/latex/hyperref/nameref.sty
 Package: nameref 2016/05/21 v2.44 Cross-referencing by name of section
 (/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/gettitlestring.sty
 Package: gettitlestring 2016/05/16 v1.5 Cleanup title references (HO)
 )
-\c@section@level=\count139
+\c@section@level=\count147
 )
-LaTeX Info: Redefining \ref on input line 139.
-LaTeX Info: Redefining \pageref on input line 139.
-LaTeX Info: Redefining \nameref on input line 139.
-(./weights_LA.out) (./weights_LA.out)
+LaTeX Info: Redefining \ref on input line 142.
+LaTeX Info: Redefining \pageref on input line 142.
+LaTeX Info: Redefining \nameref on input line 142.
+(./application_clean.out) (./application_clean.out)
 \@outlinefile=\write4
-\openout4 = `weights_LA.out'.
+\openout4 = `application_clean.out'.
 
 (/usr/local/texlive/2017/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count140
-\scratchdimen=\dimen165
-\scratchbox=\box46
-\nofMPsegments=\count141
-\nofMParguments=\count142
-\everyMPshowfont=\toks35
-\MPscratchCnt=\count143
-\MPscratchDim=\dimen166
-\MPnumerator=\count144
-\makeMPintoPDFobject=\count145
-\everyMPtoPDFconversion=\toks36
+\scratchcounter=\count148
+\scratchdimen=\dimen167
+\scratchbox=\box51
+\nofMPsegments=\count149
+\nofMParguments=\count150
+\everyMPshowfont=\toks36
+\MPscratchCnt=\count151
+\MPscratchDim=\dimen168
+\MPnumerator=\count152
+\makeMPintoPDFobject=\count153
+\everyMPtoPDFconversion=\toks37
 ) (/usr/local/texlive/2017/texmf-dist/tex/latex/oberdiek/epstopdf-base.sty
 Package: epstopdf-base 2016/05/15 v2.6 Base part for package epstopdf
 (/usr/local/texlive/2017/texmf-dist/tex/latex/oberdiek/grfext.sty
@@ -1090,328 +1128,366 @@ G,.JBIG2,.JB2,.eps]
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
-LaTeX Font Info:    Try loading font information for TS1+lmr on input line 155.
 
-(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/ts1lmr.fd
-File: ts1lmr.fd 2009/10/30 v1.6 Font defs for Latin Modern
-)
-LaTeX Font Info:    Try loading font information for OT1+lmr on input line 167.
+Package xcolor Warning: Incompatible color definition on input line 145.
 
-(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/ot1lmr.fd
-File: ot1lmr.fd 2009/10/30 v1.6 Font defs for Latin Modern
-)
-LaTeX Font Info:    Try loading font information for OML+lmm on input line 167.
-
-(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omllmm.fd
-File: omllmm.fd 2009/10/30 v1.6 Font defs for Latin Modern
-)
-LaTeX Font Info:    Try loading font information for OMS+lmsy on input line 167
-.
-(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omslmsy.fd
-File: omslmsy.fd 2009/10/30 v1.6 Font defs for Latin Modern
-)
-LaTeX Font Info:    Try loading font information for OMX+lmex on input line 167
-.
-(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omxlmex.fd
-File: omxlmex.fd 2009/10/30 v1.6 Font defs for Latin Modern
-)
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <10> on input line 167.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <7> on input line 167.
-LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <5> on input line 167.
-LaTeX Font Info:    Try loading font information for U+msa on input line 167.
-(/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsa.fd
-File: umsa.fd 2013/01/14 v3.01 AMS symbols A
-) (/usr/local/texlive/2017/texmf-dist/tex/latex/microtype/mt-msa.cfg
-File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
-)
-LaTeX Font Info:    Try loading font information for U+msb on input line 167.
-(/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsb.fd
-File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-) (/usr/local/texlive/2017/texmf-dist/tex/latex/microtype/mt-msb.cfg
-File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
-)
-Overfull \hbox (48.52512pt too wide) in paragraph at lines 197--246
- [][] 
- []
-
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
-
-Package xcolor Warning: Incompatible color definition on input line 258.
-
-LaTeX Font Info:    Try loading font information for T1+lmtt on input line 259.
+LaTeX Font Info:    Try loading font information for T1+lmtt on input line 146.
 
 (/usr/local/texlive/2017/texmf-dist/tex/latex/lm/t1lmtt.fd
 File: t1lmtt.fd 2009/10/30 v1.6 Font defs for Latin Modern
 )
-LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <10> not available
-(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 260.
-
-Package xcolor Warning: Incompatible color definition on input line 262.
-
-
-Package xcolor Warning: Incompatible color definition on input line 262.
-
-
-Package xcolor Warning: Incompatible color definition on input line 269.
-
-
-Package xcolor Warning: Incompatible color definition on input line 273.
-
-
-Package xcolor Warning: Incompatible color definition on input line 273.
-
-
-Package xcolor Warning: Incompatible color definition on input line 280.
-
-
-Package xcolor Warning: Incompatible color definition on input line 284.
-
-
-Package xcolor Warning: Incompatible color definition on input line 284.
-
-
-Package xcolor Warning: Incompatible color definition on input line 297.
-
-[1
-
-{/usr/local/texlive/2017/texmf-var/fonts/map/pdftex/updmap/pdftex.map}pdfTeX wa
-rning (ext4): destination with the same identifier (name{table.1}) has been alr
-eady used, duplicate ignored
-
-\AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
-                                                  \fi \fi 
-l.297 \begin{Shaded}
-                    pdfTeX warning (ext4): destination with the same identifier
- (name{table.2}) has been already used, duplicate ignored
-
-\AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
-                                                  \fi \fi 
-l.297 \begin{Shaded}
-                    ]
-
-Package xcolor Warning: Incompatible color definition on input line 301.
-
-
-Package xcolor Warning: Incompatible color definition on input line 301.
-
-
-Package xcolor Warning: Incompatible color definition on input line 308.
-
-
-Package xcolor Warning: Incompatible color definition on input line 312.
-
-
-Package xcolor Warning: Incompatible color definition on input line 312.
-
-
-Package xcolor Warning: Incompatible color definition on input line 319.
-
-[2pdfTeX warning (ext4): destination with the same identifier (name{table.3}) h
-as been already used, duplicate ignored
-
-\AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
-                                                  \fi \fi 
-l.319 \begin{Shaded}
-                    ]
-
-Package xcolor Warning: Incompatible color definition on input line 323.
-
-
-Package xcolor Warning: Incompatible color definition on input line 323.
-
-
-Package xcolor Warning: Incompatible color definition on input line 333.
-
-
-Package xcolor Warning: Incompatible color definition on input line 338.
-
-
-Package xcolor Warning: Incompatible color definition on input line 338.
-
-
-Package xcolor Warning: Incompatible color definition on input line 344.
-
-
-Package xcolor Warning: Incompatible color definition on input line 348.
-
-
-Package xcolor Warning: Incompatible color definition on input line 348.
-
-
-Package xcolor Warning: Incompatible color definition on input line 368.
-
-LaTeX Font Info:    Try loading font information for TS1+lmtt on input line 380
+LaTeX Font Info:    Try loading font information for TS1+lmtt on input line 147
 .
 (/usr/local/texlive/2017/texmf-dist/tex/latex/lm/ts1lmtt.fd
 File: ts1lmtt.fd 2009/10/30 v1.6 Font defs for Latin Modern
 )
 
-Package xcolor Warning: Incompatible color definition on input line 405.
+Package xcolor Warning: Incompatible color definition on input line 151.
 
 
-Package xcolor Warning: Incompatible color definition on input line 405.
+Package xcolor Warning: Incompatible color definition on input line 151.
 
 
-Overfull \vbox (0.89493pt too high) detected at line 405
+Package xcolor Warning: Incompatible color definition on input line 153.
+
+LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <10> not available
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 155.
+
+Package xcolor Warning: Incompatible color definition on input line 166.
+
+
+Package xcolor Warning: Incompatible color definition on input line 166.
+
+
+Package xcolor Warning: Incompatible color definition on input line 171.
+
+
+Package xcolor Warning: Incompatible color definition on input line 209.
+
+
+Package xcolor Warning: Incompatible color definition on input line 209.
+
+
+Package xcolor Warning: Incompatible color definition on input line 209.
+
+[1
+
+{/usr/local/texlive/2017/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
+
+Package xcolor Warning: Incompatible color definition on input line 209.
+
+
+Package xcolor Warning: Incompatible color definition on input line 209.
+
+
+Package xcolor Warning: Incompatible color definition on input line 215.
+
+
+Package xcolor Warning: Incompatible color definition on input line 227.
+
+
+Package xcolor Warning: Incompatible color definition on input line 227.
+
+
+Package xcolor Warning: Incompatible color definition on input line 229.
+
+
+Package xcolor Warning: Incompatible color definition on input line 258.
+
+
+Package xcolor Warning: Incompatible color definition on input line 258.
+
+
+Package xcolor Warning: Incompatible color definition on input line 260.
+
+
+Package xcolor Warning: Incompatible color definition on input line 267.
+
+
+Package xcolor Warning: Incompatible color definition on input line 267.
+
+
+Package xcolor Warning: Incompatible color definition on input line 269.
+
+
+Package xcolor Warning: Incompatible color definition on input line 305.
+
+
+Package xcolor Warning: Incompatible color definition on input line 305.
+
+
+Underfull \vbox (badness 3646) detected at line 305
  []
 
 
-Package xcolor Warning: Incompatible color definition on input line 405.
+Package xcolor Warning: Incompatible color definition on input line 305.
+
+[2]
+
+Package xcolor Warning: Incompatible color definition on input line 305.
+
+
+Package xcolor Warning: Incompatible color definition on input line 305.
+
+
+Package xcolor Warning: Incompatible color definition on input line 312.
+
+
+Package xcolor Warning: Incompatible color definition on input line 316.
+
+
+Package xcolor Warning: Incompatible color definition on input line 316.
+
+
+Package xcolor Warning: Incompatible color definition on input line 318.
+
+
+Package xcolor Warning: Incompatible color definition on input line 329.
+
+
+Package xcolor Warning: Incompatible color definition on input line 329.
+
+
+Package xcolor Warning: Incompatible color definition on input line 331.
+
+
+Package xcolor Warning: Incompatible color definition on input line 354.
+
+
+Package xcolor Warning: Incompatible color definition on input line 354.
+
+
+Underfull \vbox (badness 10000) detected at line 354
+ []
+
+
+Package xcolor Warning: Incompatible color definition on input line 354.
 
 [3]
 
-Package xcolor Warning: Incompatible color definition on input line 405.
+Package xcolor Warning: Incompatible color definition on input line 354.
 
 
-Package xcolor Warning: Incompatible color definition on input line 405.
+Package xcolor Warning: Incompatible color definition on input line 354.
+
+LaTeX Font Info:    Try loading font information for OT1+lmr on input line 361.
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/ot1lmr.fd
+File: ot1lmr.fd 2009/10/30 v1.6 Font defs for Latin Modern
+)
+LaTeX Font Info:    Try loading font information for OML+lmm on input line 361.
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omllmm.fd
+File: omllmm.fd 2009/10/30 v1.6 Font defs for Latin Modern
+)
+LaTeX Font Info:    Try loading font information for OMS+lmsy on input line 361
+.
+(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omslmsy.fd
+File: omslmsy.fd 2009/10/30 v1.6 Font defs for Latin Modern
+)
+LaTeX Font Info:    Try loading font information for OMX+lmex on input line 361
+.
+(/usr/local/texlive/2017/texmf-dist/tex/latex/lm/omxlmex.fd
+File: omxlmex.fd 2009/10/30 v1.6 Font defs for Latin Modern
+)
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <10> on input line 361.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <7> on input line 361.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <5> on input line 361.
+LaTeX Font Info:    Try loading font information for U+msa on input line 361.
+(/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsa.fd
+File: umsa.fd 2013/01/14 v3.01 AMS symbols A
+) (/usr/local/texlive/2017/texmf-dist/tex/latex/microtype/mt-msa.cfg
+File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
+)
+LaTeX Font Info:    Try loading font information for U+msb on input line 361.
+(/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsb.fd
+File: umsb.fd 2013/01/14 v3.01 AMS symbols B
+) (/usr/local/texlive/2017/texmf-dist/tex/latex/microtype/mt-msb.cfg
+File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
+)
+Overfull \hbox (3.20642pt too wide) in paragraph at lines 361--407
+ [] 
+ []
+
+
+Package xcolor Warning: Incompatible color definition on input line 409.
 
 
 Package xcolor Warning: Incompatible color definition on input line 414.
 
 
-Package xcolor Warning: Incompatible color definition on input line 421.
+Package xcolor Warning: Incompatible color definition on input line 414.
 
 
-Package xcolor Warning: Incompatible color definition on input line 421.
+Package xcolor Warning: Incompatible color definition on input line 420.
 
 
-Package xcolor Warning: Incompatible color definition on input line 428.
+Package xcolor Warning: Incompatible color definition on input line 440.
 
 
-Package xcolor Warning: Incompatible color definition on input line 432.
+Package xcolor Warning: Incompatible color definition on input line 440.
 
 
-Package xcolor Warning: Incompatible color definition on input line 432.
-
-
-Package xcolor Warning: Incompatible color definition on input line 439.
-
-
-Package xcolor Warning: Incompatible color definition on input line 443.
-
-
-Package xcolor Warning: Incompatible color definition on input line 443.
+Package xcolor Warning: Incompatible color definition on input line 469.
 
 [4]
 
-Package xcolor Warning: Incompatible color definition on input line 528.
+Package xcolor Warning: Incompatible color definition on input line 493.
 
 
-Package xcolor Warning: Incompatible color definition on input line 535.
+Package xcolor Warning: Incompatible color definition on input line 493.
 
 
-Package xcolor Warning: Incompatible color definition on input line 535.
+Overfull \hbox (19.82822pt too wide) in paragraph at lines 515--537
+ [] 
+ []
 
 
-Package xcolor Warning: Incompatible color definition on input line 535.
+Package xcolor Warning: Incompatible color definition on input line 539.
+
+
+Package xcolor Warning: Incompatible color definition on input line 546.
+
+
+Package xcolor Warning: Incompatible color definition on input line 546.
+
+
+Package xcolor Warning: Incompatible color definition on input line 560.
+
+
+Package xcolor Warning: Incompatible color definition on input line 607.
+
+
+Package xcolor Warning: Incompatible color definition on input line 607.
+
+
+Package xcolor Warning: Incompatible color definition on input line 607.
 
 [5]
 
-Package xcolor Warning: Incompatible color definition on input line 535.
+Package xcolor Warning: Incompatible color definition on input line 607.
 
 
-Package xcolor Warning: Incompatible color definition on input line 535.
+Package xcolor Warning: Incompatible color definition on input line 607.
 
 
-Package xcolor Warning: Incompatible color definition on input line 542.
+<application_clean_files/figure-latex/plot_results-1.pdf, id=42, 463.7325pt x 3
+13.17pt>
+File: application_clean_files/figure-latex/plot_results-1.pdf Graphic file (typ
+e pdf)
+<use application_clean_files/figure-latex/plot_results-1.pdf>
+Package pdftex.def Info: application_clean_files/figure-latex/plot_results-1.pd
+f used on input line 623.
+(pdftex.def)             Requested size: 463.73842pt x 313.174pt.
 
-
-Package xcolor Warning: Incompatible color definition on input line 546.
-
-
-Package xcolor Warning: Incompatible color definition on input line 546.
-
-
-Package xcolor Warning: Incompatible color definition on input line 553.
-
-
-Package xcolor Warning: Incompatible color definition on input line 557.
-
-
-Package xcolor Warning: Incompatible color definition on input line 557.
+Package xcolor Warning: Incompatible color definition on input line 625.
 
 [6]
 
-Package xcolor Warning: Incompatible color definition on input line 646.
+Package xcolor Warning: Incompatible color definition on input line 629.
 
 
-Package xcolor Warning: Incompatible color definition on input line 652.
+Package xcolor Warning: Incompatible color definition on input line 629.
 
 
-Package xcolor Warning: Incompatible color definition on input line 652.
+Package xcolor Warning: Incompatible color definition on input line 642.
 
 
-Package xcolor Warning: Incompatible color definition on input line 658.
+Package xcolor Warning: Incompatible color definition on input line 649.
 
 
-Package xcolor Warning: Incompatible color definition on input line 664.
+Package xcolor Warning: Incompatible color definition on input line 649.
+
+[7 <./application_clean_files/figure-latex/plot_results-1.pdf>]
+
+Package xcolor Warning: Incompatible color definition on input line 694.
 
 
-Package xcolor Warning: Incompatible color definition on input line 664.
+Package xcolor Warning: Incompatible color definition on input line 785.
 
 
-Package xcolor Warning: Incompatible color definition on input line 670.
+Package xcolor Warning: Incompatible color definition on input line 785.
 
 
-Package xcolor Warning: Incompatible color definition on input line 675.
+Package xcolor Warning: Incompatible color definition on input line 785.
+
+[8]
+
+Package xcolor Warning: Incompatible color definition on input line 785.
 
 
-Package xcolor Warning: Incompatible color definition on input line 675.
+Package xcolor Warning: Incompatible color definition on input line 785.
 
 
-Package xcolor Warning: Incompatible color definition on input line 685.
-
-[7]
-
-Package xcolor Warning: Incompatible color definition on input line 689.
+Underfull \vbox (badness 10000) detected at line 785
+ []
 
 
-Package xcolor Warning: Incompatible color definition on input line 689.
+Underfull \vbox (badness 10000) detected at line 785
+ []
 
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 716.
-[8pdfTeX warning (ext4): destination with the same identifier (name{table.4}) h
-as been already used, duplicate ignored
+
+Package xcolor Warning: Incompatible color definition on input line 785.
+
+[9]
+
+Package xcolor Warning: Incompatible color definition on input line 785.
+
+
+Package xcolor Warning: Incompatible color definition on input line 785.
+
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 841.
+[10] [11pdfTeX warning (ext4): destination with the same identifier (name{table
+.1}) has been already used, duplicate ignored
 
 \AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
                                                   \fi \fi 
-l.716 \end{document}
+l.841 \end{document}
+                    ] [12pdfTeX warning (ext4): destination with the same ident
+ifier (name{table.2}) has been already used, duplicate ignored
+
+\AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
+                                                  \fi \fi 
+l.841 \end{document}
+                    ] [13pdfTeX warning (ext4): destination with the same ident
+ifier (name{table.3}) has been already used, duplicate ignored
+
+\AtBegShi@Output ...ipout \box \AtBeginShipoutBox 
+                                                  \fi \fi 
+l.841 \end{document}
                     ]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 716.
-(./weights_LA.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 716.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 716.
-Package rerunfilecheck Info: File `weights_LA.out' has not changed.
-(rerunfilecheck)             Checksum: 25485AE800C7027C58A319BA9E016DF3;3436.
-
-LaTeX Warning: There were multiply-defined labels.
-
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 716.
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 841.
+(./application_clean.aux)
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 841.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 841.
+Package rerunfilecheck Info: File `application_clean.out' has not changed.
+(rerunfilecheck)             Checksum: 5A4C37102176E9D9F7198EB058D50856;171.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 841.
  ) 
 Here is how much of TeX's memory you used:
- 14773 strings out of 492995
- 213635 string characters out of 6132704
- 345459 words of memory out of 5000000
- 18013 multiletter control sequences out of 15000+600000
- 40479 words of font info for 57 fonts, out of 8000000 for 9000
+ 15444 strings out of 492995
+ 221616 string characters out of 6132704
+ 403506 words of memory out of 5000000
+ 18680 multiletter control sequences out of 15000+600000
+ 41607 words of font info for 55 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 34i,9n,38p,946b,455s stack positions out of 5000i,500n,10000p,200000b,80000s
-{/usr/local/texlive/2017/texmf-dist/fonts/enc/dvips/lm/lm-ts1.enc}{/usr/local
-/texlive/2017/texmf-dist/fonts/enc/dvips/lm/lm-ec.enc}</usr/local/texlive/2017/
+ 34i,17n,38p,994b,455s stack positions out of 5000i,500n,10000p,200000b,80000s
+{/usr/local/texlive/2017/texmf-dist/fonts/enc/dvips/lm/lm-ec.enc}{/usr/local/
+texlive/2017/texmf-dist/fonts/enc/dvips/lm/lm-ts1.enc}</usr/local/texlive/2017/
 texmf-dist/fonts/type1/public/lm/lmbx10.pfb></usr/local/texlive/2017/texmf-dist
 /fonts/type1/public/lm/lmbx12.pfb></usr/local/texlive/2017/texmf-dist/fonts/typ
 e1/public/lm/lmr10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/l
-m/lmr17.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/lm/lmtk10.pf
-b></usr/local/texlive/2017/texmf-dist/fonts/type1/public/lm/lmtt10.pfb></usr/lo
-cal/texlive/2017/texmf-dist/fonts/type1/public/lm/lmtti10.pfb>
-Output written on weights_LA.pdf (8 pages, 199620 bytes).
+m/lmr17.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/lm/lmri10.pf
+b></usr/local/texlive/2017/texmf-dist/fonts/type1/public/lm/lmtk10.pfb></usr/lo
+cal/texlive/2017/texmf-dist/fonts/type1/public/lm/lmtt10.pfb></usr/local/texliv
+e/2017/texmf-dist/fonts/type1/public/lm/lmtti10.pfb>
+Output written on application_clean.pdf (13 pages, 225110 bytes).
 PDF statistics:
- 144 PDF objects out of 1000 (max. 8388607)
- 125 compressed objects within 2 object streams
- 35 named destinations out of 1000 (max. 500000)
- 6233 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 129 PDF objects out of 1000 (max. 8388607)
+ 101 compressed objects within 2 object streams
+ 21 named destinations out of 1000 (max. 500000)
+ 8214 words of extra memory for PDF output out of 10000 (max. 10000000)
 

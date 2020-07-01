@@ -26,6 +26,7 @@ library(kbal)
 ```{r setup_params}
 ## Erin's path
 path_data = "~/Dropbox/Documents/2019__2020/work/kpop/2016_reweighting_example/data/"
+path_data = "../data/"
 ```
 
 ```{r useful_functions}
@@ -84,7 +85,7 @@ natl_margin
 
 ```{r define_models}
 formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + 
-  recode_race + recode_region + recode_pid_3way
+    recode_race + recode_region + recode_pid_3way
 formula_rake_demos_weduc <- ~recode_age_bucket + recode_female + 
   recode_race + recode_region + recode_educ + recode_pid_3way
 formula_ps <- ~recode_age_3way + recode_female + recode_race +
@@ -217,7 +218,7 @@ margin_summary %>%
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop Mean First}}}}")), 
         escape = FALSE,
-        caption = "Marginal distribution, in precentage poitns, of important demographics under different weighting models.") %>%
+        caption = "Marginal distribution, in precentage points, of important demographics under different weighting models.") %>%
   column_spec(2:ncol(margin_summary), width = "0.45in") %>%
   column_spec(1, width = "1.45in") %>%
   kable_styling() %>%
@@ -409,3 +410,139 @@ lapply(list(rake_demos_noeduc, rake_demos_weduc, post_stratification, rake_retro
          svymean(~recode_vote_2016, x, deff = "replace")
        })
 ```
+
+
+
+
+## Weights
+
+Looking at the average weight in margins.
+
+
+```{r check_weights}
+
+load("cleaned data/Full SVD/weights_wPid_full.Rdata")
+#optimal choice w pid: no mf = 0.5, mf = 2
+weights <- pew %>% select(recode_age_bucket,
+                          recode_age_3way,
+                          recode_female,
+                          recode_race,
+                          recode_region,
+                          recode_educ,
+                          recode_educ_3way,
+                          recode_pid_3way,
+                          recode_race_educ_reg)  %>%
+    mutate(rake_demos_noeduc_wt = weights(rake_demos_noeduc)/
+                                 mean(weights(rake_demos_noeduc)),
+           rake_demos_weduc_wt = weights(rake_demos_weduc)/
+                                 mean(weights(rake_demos_weduc)),
+           post_stratification_wt = weights(post_stratification)/
+                                 mean(weights(post_stratification)),
+           rake_retrospective_wt = weights(rake_retrospective)/
+                                 mean(weights(rake_retrospective)),
+           k_wt = wts_wPid$wtkbal_b.5x,
+           k_mf_wt = wts_wPid$wtkbal_mf_b2x)
+
+#just checking everything is internally consistent
+#sum(weights$rake_demos_noeduc_wt != wts_wPid$wt1_pid)
+
+age <- weights %>% 
+    group_by(recode_age_bucket) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+female <- weights %>% 
+    group_by(recode_female) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+race <- weights %>% 
+    group_by(recode_race) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+region <- weights %>% 
+    group_by(recode_region) %>%
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+education <- weights %>% 
+    group_by(recode_educ) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+pid <- weights %>% 
+    group_by(recode_pid_3way) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+
+colnames(age) <- c("Variable", colnames(age)[-1])
+colnames(female)<- c("Variable", colnames(female)[-1])
+colnames(race)<- c("Variable", colnames(race)[-1])
+colnames(region) <- c("Variable", colnames(region)[-1])
+colnames(education) <- c("Variable", colnames(education)[-1])
+colnames(pid) <- c("Variable", colnames(pid)[-1])
+
+weights_summary <- rbind(age, female, race, region, education, pid) 
+
+```
+
+
+
+```{r weights_print, echo = F, results = "asis"}
+
+weights_summary %>% 
+  mutate(Variable = str_replace(Variable, "graduate", "")) %>%
+  kable(format = "latex", booktabs = T,
+        col.names = linebreak(
+          c("", 
+            "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics without Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop Mean First}}}}")), 
+        escape = FALSE,  digits= 3,
+        caption = "Mean weights of important demographics under different weighting models .") %>%
+  column_spec(2:ncol(weights_summary), width = "0.45in") %>%
+  column_spec(1, width = "1.45in") %>%
+  kable_styling() %>%
+  pack_rows("4-way Age Bucket", 1, 4, latex_gap_space = "0.5em") %>%
+  pack_rows("Gender", 5, 6, latex_gap_space = "0.5em") %>%
+  pack_rows("Race/Ethnicity", 7, 10, latex_gap_space = "0.5em") %>%
+  pack_rows("Region", 11, 14, latex_gap_space = "0.5em") %>%
+  pack_rows("Education Level", 15, 20, latex_gap_space = "0.5em") %>%
+  pack_rows("Party Identification", 21, 23, latex_gap_space = "0.5em")%>%
+  footnote(general = "Cells present the average weight used to reweight the Pew sample to the CCES target population in each variable level.",
+           threeparttable = T)
+
+
+```
+
+
+

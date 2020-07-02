@@ -65,7 +65,10 @@ cces <- cces %>%
   mutate(recode_educ_white = 
            factor(case_when(recode_race == "White" ~ as.character(recode_educ),
                             TRUE ~ "No Split"), 
-                  levels = c(levels(cces$recode_educ), "No Split")))
+                  levels = c(levels(cces$recode_educ), "No Split")),
+         commonweight_vv_post = commonweight_vv_post / mean(commonweight_vv_post))
+
+
 
 pew <- pew %>%
   mutate(recode_educ_white = 
@@ -114,7 +117,7 @@ pew <- bind_cols(pew, pew %>%
 missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in% unique(pew$strata))]
 
 ## recode missing age
-pew$recode_age[is.na(pew$recode_age)] <- mean(pew$recode_age, na.rm = TRUE)
+pew$recode_age[is.na(pew$recode_age)] <- mean(cces$recode_age, na.rm = TRUE)
 cces$recode_age[is.na(cces$recode_age)] <- mean(cces$recode_age, na.rm = TRUE)
 
 ### Make survey designs
@@ -211,14 +214,18 @@ margin_summary %>%
         col.names = linebreak(
           c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Unweighted Pew}}}}",
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics without Education }}}}",
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Demographics}}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Demographics + Education}}}}",
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Retrospective}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop Mean First}}}}")), 
         escape = FALSE,
+<<<<<<< HEAD
+        caption = "Marginal distribution of important demographics under different weighting models.") %>%
+=======
         caption = "Marginal distribution, in precentage points, of important demographics under different weighting models.") %>%
+>>>>>>> d3d385ec5ff13d4996e94ae3eeeec6e9e736dd90
   column_spec(2:ncol(margin_summary), width = "0.45in") %>%
   column_spec(1, width = "1.45in") %>%
   kable_styling() %>%
@@ -228,7 +235,7 @@ margin_summary %>%
   pack_rows("Region", 11, 14, latex_gap_space = "0.5em") %>%
   pack_rows("Education Level", 15, 20, latex_gap_space = "0.5em") %>%
   pack_rows("Party Identification", 21, 23, latex_gap_space = "0.5em")%>%
-  footnote(general = "Cells present the precentage of the population represented by each variable level.",
+  footnote(general = "Cells present the percentage of the population represented by each variable level.",
            threeparttable = T)
 ```
 
@@ -303,10 +310,10 @@ margin_summary_educ %>%
         col.names = linebreak(
           c("", "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Target (CCES)}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Unweighted Pew}}}}",
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics without Education }}}}",
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Demographics}}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Demographics + Education}}}}",
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
-          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking:\\\\Retrospective}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop}}}}", 
           "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop Mean First}}}}")), 
         escape = FALSE,
@@ -316,7 +323,7 @@ margin_summary_educ %>%
   kable_styling() %>%
   pack_rows("Education Level for White Voters", 1, 6, latex_gap_space = "0.5em") %>%
   pack_rows("Error", 7, 7, latex_gap_space = "0.5em") %>%
-  footnote(general = "Cells present the precentage of the population represented by each variable level.  Mean absolute error is the absoluate error in each cell, relative to the target (CCES), weighted by the edcuation level's proportion among white voters in the target population.",
+  footnote(general = "Cells present the percentage of the population represented by each variable level.  Mean absolute error is the absoluate error in each cell, relative to the target (CCES), weighted by the edcuation level's proportion among white voters in the target population.",
            threeparttable = T)
 ```
 

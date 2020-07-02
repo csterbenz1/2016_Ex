@@ -3,3 +3,9 @@
 .RData
 .Ruserdata
 plots/.DS_Store
+.DS_Store
+*.history
+*.aux
+*.log
+*.pdf
+cleaned data/.DS_Store

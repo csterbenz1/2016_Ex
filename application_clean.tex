@@ -189,7 +189,10 @@
 \StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_educ_white =} 
            \KeywordTok{factor}\NormalTok{(}\KeywordTok{case_when}\NormalTok{(recode_race }\OperatorTok{==}\StringTok{ "White"} \OperatorTok{~}\StringTok{ }\KeywordTok{as.character}\NormalTok{(recode_educ),}
                             \OtherTok{TRUE} \OperatorTok{~}\StringTok{ "No Split"}\NormalTok{), }
-                  \DataTypeTok{levels =} \KeywordTok{c}\NormalTok{(}\KeywordTok{levels}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_educ), }\StringTok{"No Split"}\NormalTok{)))}
+                  \DataTypeTok{levels =} \KeywordTok{c}\NormalTok{(}\KeywordTok{levels}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_educ), }\StringTok{"No Split"}\NormalTok{)),}
+         \DataTypeTok{commonweight_vv_post =}\NormalTok{ commonweight_vv_post }\OperatorTok{/}\StringTok{ }\KeywordTok{mean}\NormalTok{(commonweight_vv_post))}
+
+
 
 \NormalTok{pew <-}\StringTok{ }\NormalTok{pew }\OperatorTok{%>%}
 \StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{recode_educ_white =} 
@@ -246,8 +249,10 @@
 \NormalTok{missing_strata <-}\StringTok{ }\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata)[}\OperatorTok{!}\NormalTok{(}\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata) }\OperatorTok{%in%}\StringTok{ }\KeywordTok{unique}\NormalTok{(pew}\OperatorTok{$}\NormalTok{strata))]}
 
 \NormalTok{## recode missing age}
+
 \NormalTok{#####XXXXXX issue here: how to recode age and whether to recode age buckets}
-\NormalTok{pew}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\CommentTok{#pew$recode_age[is.na(pew$recode_age)] <- mean(pew$recode_age, na.rm = TRUE)}
+\NormalTok{pew}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
 \NormalTok{cces}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
 
 \NormalTok{## For Pew, since there are no design weights, assume SRS}
@@ -394,7 +399,7 @@
 \begin{threeparttable}
 \begin{tabular}{>{\raggedright\arraybackslash}p{1.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
 \toprule
- & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics without Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
+ & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Demographics}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Demographics + Education}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
 \midrule
 \addlinespace[0.5em]
 \multicolumn{9}{l}{\textbf{4-way Age Bucket}}\\
@@ -435,7 +440,7 @@
 \end{tabular}
 \begin{tablenotes}
 \item \textit{Note: } 
-\item Cells present the precentage of the population represented by each variable level.
+\item Cells present the percentage of the population represented by each variable level.
 \end{tablenotes}
 \end{threeparttable}
 \end{table}
@@ -548,7 +553,7 @@
 \begin{threeparttable}
 \begin{tabular}{>{\raggedright\arraybackslash}p{1.68in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}>{\raggedleft\arraybackslash}p{0.45in}}
 \toprule
- & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics without Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking \\Demographics with Education }}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
+ & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Target (CCES)}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Unweighted Pew}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Demographics}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Demographics + Education}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Post-Stratification}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{Raking:\\Retrospective}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop}}}} & \belowbaseline[0ex]{\rotatebox{90}{\parbox{1.1in}{\raggedright{KPop Mean First}}}}\\
 \midrule
 \addlinespace[0.5em]
 \multicolumn{9}{l}{\textbf{Education Level for White Voters}}\\
@@ -565,7 +570,7 @@
 \end{tabular}
 \begin{tablenotes}
 \item \textit{Note: } 
-\item Cells present the precentage of the population represented by each variable level.  Mean absolute error is the absoluate error in each cell, relative to the target (CCES), weighted by the edcuation level's proportion among white voters in the target population.
+\item Cells present the percentage of the population represented by each variable level.  Mean absolute error is the absoluate error in each cell, relative to the target (CCES), weighted by the edcuation level's proportion among white voters in the target population.
 \end{tablenotes}
 \end{threeparttable}
 \end{table}

@@ -26,7 +26,9 @@ library(kbal)
 ```{r setup_params}
 ## Erin's path
 path_data = "~/Dropbox/Documents/2019__2020/work/kpop/2016_reweighting_example/data/"
-path_data = "../data/"
+#Ciara's 
+#path_data = "../data/"
+path_data = "/Users/Ciara/Dropbox/kpop/2016_reweighting_example/data/"
 ```
 
 ```{r useful_functions}
@@ -48,12 +50,10 @@ create_targets <- function (target_design, target_formula) {
 ```{r}
 ## SURVEY DATA (PEW)
 ### Load
-###This needs to be loaded from dropbox/local not github bc it's too big
 pew <- readRDS(paste0(path_data, "pew.rds"))
 
 ## AUXILIARY INFORMATION (CCES)
 ### Load
-#This needs to be loaded from dropbox/local not github bc it's too big
 cces <- readRDS(paste0(path_data, "cces.rds"))
 ### Drop invalid cases
 cces <- cces %>%
@@ -114,10 +114,9 @@ pew <- bind_cols(pew, pew %>%
 missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in% unique(pew$strata))]
 
 ## recode missing age
+#####XXXXXX issue here: how to recode age and whether to recode age buckets
 pew$recode_age[is.na(pew$recode_age)] <- mean(pew$recode_age, na.rm = TRUE)
 cces$recode_age[is.na(cces$recode_age)] <- mean(cces$recode_age, na.rm = TRUE)
-
-### Make survey designs
 
 ## For Pew, since there are no design weights, assume SRS
 pew_srs <- svydesign(ids = ~1, data = pew)
@@ -161,6 +160,7 @@ post_stratification <- svydesign(~1, data = pew,
                                  weights = weights(post_stratification))
 
 ## Retrospective weighting scheme
+#failed to converge? XX
 rake_retrospective <- calibrate(design = pew_srs,
                               formula = formula_retrospective,
                               population = targets_retrospective,
@@ -170,15 +170,58 @@ rake_retrospective <- calibrate(design = pew_srs,
 rake_retrospective <- svydesign(~1, data = pew, weights = weights(rake_retrospective))
 ```
 
-```{r kpop}
-#############################################
-##### PUT FINAL KPOP CODE HERE
-#############################################
+```{r kpop, eval = F, warning= F }
 
+kpop_data <- rbind(pew %>% select(recode_age,
+                                  recode_female,
+                                  recode_race, 
+                                  recode_region, 
+                                  recode_pid_3way,
+                                  recode_educ, 
+                                  recode_age_bucket),
+                   cces %>% select(recode_age, 
+                                   recode_female, 
+                                   recode_race, 
+                                   recode_region,
+                                   recode_pid_3way, 
+                                   recode_educ,
+                                   recode_age_bucket)) %>%
+   model.matrix(as.formula("~. - 1"), .)
+
+
+kpop_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
+
+kpop_b.5x <- kbal(allx=kpop_data,
+                    sampled = kpop_sampled,
+                    b = 0.5 * ncol(kpop_data),
+                    fullSVD = TRUE,
+                    meanfirst = FALSE,
+                    incrementby = 1,
+    population.w = cces$commonweight_vv_post /mean(cces$commonweight_vv_post),
+                    sampledinpop = FALSE,
+                    printprogress = FALSE)
+
+kpop_mf_b2x <- kbal(allx=kpop_data,
+                      sampled = kpop_sampled,
+                      b = 2 * ncol(kpop_data),
+                      incrementby = 1,
+                      fullSVD = TRUE,
+                      meanfirst = TRUE,
+                      ebal.convergence = TRUE, 
+        population.w = cces$commonweight_vv_post/mean(cces$commonweight_vv_post),
+                      sampledinpop = FALSE,
+                      printprogress = FALSE)
+
+kpop <- svydesign(~1, data = pew, weights = kpop_b.5x$w[kpop_sampled] )
+kpop_mf <- svydesign(~1, data = pew, weights = kpop_mf_b2x$w[kpop_sampled])
+
+```
+ 
+```{r kpop_load, echo = F}
 load("./cleaned data/Full SVD/weights_wPid_full.Rdata")
-
 kpop <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_b.5x"])
 kpop_mf <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_mf_b2x"])
+#load("./cleaned data/Full SVD/fullruns_noKsvd.Rdata")
 ```
 
 ```{r check_margins}

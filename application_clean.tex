@@ -146,7 +146,9 @@
 \begin{Highlighting}[]
 \NormalTok{## Erin's path}
 \NormalTok{path_data =}\StringTok{ "~/Dropbox/Documents/2019__2020/work/kpop/2016_reweighting_example/data/"}
-\NormalTok{path_data =}\StringTok{ "../data/"}
+\CommentTok{#Ciara's }
+\CommentTok{#path_data = "../data/"}
+\NormalTok{path_data =}\StringTok{ "/Users/Ciara/Dropbox/kpop/2016_reweighting_example/data/"}
 \end{Highlighting}
 \end{Shaded}
 
@@ -172,12 +174,10 @@
 \begin{Highlighting}[]
 \NormalTok{## SURVEY DATA (PEW)}
 \NormalTok{### Load}
-\NormalTok{###This needs to be loaded from dropbox/local not github bc it's too big}
 \NormalTok{pew <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"pew.rds"}\NormalTok{))}
 
 \NormalTok{## AUXILIARY INFORMATION (CCES)}
 \NormalTok{### Load}
-\CommentTok{#This needs to be loaded from dropbox/local not github bc it's too big}
 \NormalTok{cces <-}\StringTok{ }\KeywordTok{readRDS}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(path_data, }\StringTok{"cces.rds"}\NormalTok{))}
 \NormalTok{### Drop invalid cases}
 \NormalTok{cces <-}\StringTok{ }\NormalTok{cces }\OperatorTok{%>%}
@@ -246,10 +246,9 @@
 \NormalTok{missing_strata <-}\StringTok{ }\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata)[}\OperatorTok{!}\NormalTok{(}\KeywordTok{unique}\NormalTok{(cces}\OperatorTok{$}\NormalTok{strata) }\OperatorTok{%in%}\StringTok{ }\KeywordTok{unique}\NormalTok{(pew}\OperatorTok{$}\NormalTok{strata))]}
 
 \NormalTok{## recode missing age}
+\NormalTok{#####XXXXXX issue here: how to recode age and whether to recode age buckets}
 \NormalTok{pew}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(pew}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
 \NormalTok{cces}\OperatorTok{$}\NormalTok{recode_age[}\KeywordTok{is.na}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age)] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{recode_age, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
-
-\NormalTok{### Make survey designs}
 
 \NormalTok{## For Pew, since there are no design weights, assume SRS}
 \NormalTok{pew_srs <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\DataTypeTok{ids =} \OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew)}
@@ -296,6 +295,7 @@
                                  \DataTypeTok{weights =} \KeywordTok{weights}\NormalTok{(post_stratification))}
 
 \NormalTok{## Retrospective weighting scheme}
+\CommentTok{#failed to converge? XX}
 \NormalTok{rake_retrospective <-}\StringTok{ }\KeywordTok{calibrate}\NormalTok{(}\DataTypeTok{design =}\NormalTok{ pew_srs,}
                               \DataTypeTok{formula =}\NormalTok{ formula_retrospective,}
                               \DataTypeTok{population =}\NormalTok{ targets_retrospective,}
@@ -317,14 +317,48 @@
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{#############################################}
-\NormalTok{##### PUT FINAL KPOP CODE HERE}
-\NormalTok{#############################################}
+\NormalTok{kpop_data <-}\StringTok{ }\KeywordTok{rbind}\NormalTok{(pew }\OperatorTok{%>%}\StringTok{ }\KeywordTok{select}\NormalTok{(recode_age,}
+\NormalTok{                                  recode_female,}
+\NormalTok{                                  recode_race, }
+\NormalTok{                                  recode_region, }
+\NormalTok{                                  recode_pid_3way,}
+\NormalTok{                                  recode_educ, }
+\NormalTok{                                  recode_age_bucket),}
+\NormalTok{                   cces }\OperatorTok{%>%}\StringTok{ }\KeywordTok{select}\NormalTok{(recode_age, }
+\NormalTok{                                   recode_female, }
+\NormalTok{                                   recode_race, }
+\NormalTok{                                   recode_region,}
+\NormalTok{                                   recode_pid_3way, }
+\NormalTok{                                   recode_educ,}
+\NormalTok{                                   recode_age_bucket)) }\OperatorTok{%>%}
+\StringTok{   }\KeywordTok{model.matrix}\NormalTok{(}\KeywordTok{as.formula}\NormalTok{(}\StringTok{"~. - 1"}\NormalTok{), .)}
 
-\KeywordTok{load}\NormalTok{(}\StringTok{"./cleaned data/Full SVD/weights_wPid_full.Rdata"}\NormalTok{)}
 
-\NormalTok{kpop <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =}\NormalTok{ wts_wPid[, }\StringTok{"wtkbal_b.5x"}\NormalTok{])}
-\NormalTok{kpop_mf <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =}\NormalTok{ wts_wPid[, }\StringTok{"wtkbal_mf_b2x"}\NormalTok{])}
+\NormalTok{kpop_sampled <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\KeywordTok{rep}\NormalTok{(}\DecValTok{1}\NormalTok{, }\KeywordTok{nrow}\NormalTok{(pew)), }\KeywordTok{rep}\NormalTok{(}\DecValTok{0}\NormalTok{, }\KeywordTok{nrow}\NormalTok{(cces)))}
+
+\NormalTok{kpop_b}\FloatTok{.5}\NormalTok{x <-}\StringTok{ }\KeywordTok{kbal}\NormalTok{(}\DataTypeTok{allx=}\NormalTok{kpop_data,}
+                    \DataTypeTok{sampled =}\NormalTok{ kpop_sampled,}
+                    \DataTypeTok{b =} \FloatTok{0.5} \OperatorTok{*}\StringTok{ }\KeywordTok{ncol}\NormalTok{(kpop_data),}
+                    \DataTypeTok{fullSVD =} \OtherTok{TRUE}\NormalTok{,}
+                    \DataTypeTok{meanfirst =} \OtherTok{FALSE}\NormalTok{,}
+                    \DataTypeTok{incrementby =} \DecValTok{1}\NormalTok{,}
+    \DataTypeTok{population.w =}\NormalTok{ cces}\OperatorTok{$}\NormalTok{commonweight_vv_post }\OperatorTok{/}\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{commonweight_vv_post),}
+                    \DataTypeTok{sampledinpop =} \OtherTok{FALSE}\NormalTok{,}
+                    \DataTypeTok{printprogress =} \OtherTok{FALSE}\NormalTok{)}
+
+\NormalTok{kpop_mf_b2x <-}\StringTok{ }\KeywordTok{kbal}\NormalTok{(}\DataTypeTok{allx=}\NormalTok{kpop_data,}
+                      \DataTypeTok{sampled =}\NormalTok{ kpop_sampled,}
+                      \DataTypeTok{b =} \DecValTok{2} \OperatorTok{*}\StringTok{ }\KeywordTok{ncol}\NormalTok{(kpop_data),}
+                      \DataTypeTok{incrementby =} \DecValTok{1}\NormalTok{,}
+                      \DataTypeTok{fullSVD =} \OtherTok{TRUE}\NormalTok{,}
+                      \DataTypeTok{meanfirst =} \OtherTok{TRUE}\NormalTok{,}
+                      \DataTypeTok{ebal.convergence =} \OtherTok{TRUE}\NormalTok{, }
+        \DataTypeTok{population.w =}\NormalTok{ cces}\OperatorTok{$}\NormalTok{commonweight_vv_post}\OperatorTok{/}\KeywordTok{mean}\NormalTok{(cces}\OperatorTok{$}\NormalTok{commonweight_vv_post),}
+                      \DataTypeTok{sampledinpop =} \OtherTok{FALSE}\NormalTok{,}
+                      \DataTypeTok{printprogress =} \OtherTok{FALSE}\NormalTok{)}
+
+\NormalTok{kpop <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =}\NormalTok{ kpop_b}\FloatTok{.5}\NormalTok{x}\OperatorTok{$}\NormalTok{w[kpop_sampled] )}
+\NormalTok{kpop_mf <-}\StringTok{ }\KeywordTok{svydesign}\NormalTok{(}\OperatorTok{~}\DecValTok{1}\NormalTok{, }\DataTypeTok{data =}\NormalTok{ pew, }\DataTypeTok{weights =}\NormalTok{ kpop_mf_b2x}\OperatorTok{$}\NormalTok{w[kpop_sampled])}
 \end{Highlighting}
 \end{Shaded}
 

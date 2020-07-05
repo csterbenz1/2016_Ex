@@ -13,7 +13,7 @@ path_data= "./"
 ############################## Load Data ##########################
 ## SURVEY DATA (PEW)
 ### Load
-pew <- paste0(path_data, "pew.rds")
+pew <- readRDS(paste0(path_data, "pew.rds"))
 ### Make survey design 
 pew_srs <- svydesign(ids = ~1, data = pew)
 
@@ -133,7 +133,7 @@ kbal_b.125x_f <- kbal(allx=kbal_data,
                       sampledinpop = FALSE)
 
 save(kbal_b.125x_f,kbal_b.25x_f,kbal_b.5x_f,kbal_b1x_f,kbal_b2x_f,
-     file = paste0(path_save,"mf_F_wPid.Rdata")
+     file = paste0(path_save,"mf_F_wPid.Rdata"))
 
 ######################## (1.2) KPOP + MF = T + W PID 
 
@@ -246,7 +246,7 @@ kbal_nopid_b.125x_f <- kbal(allx=kbal_data_nopid,
 
 save( kbal_nopid_b.125x_f,kbal_nopid_b.25x_f,
       kbal_nopid_b.5x_f, kbal_nopid_b1x_f, kbal_nopid_b2x_f,
-      file = paste0(path_save, "mf_F_NoPid.Rdata")
+      file = paste0(path_save, "mf_F_NoPid.Rdata"))
 
 ########################## (2.2) KPOP + MF=TRUE + NO PID 
 
@@ -543,7 +543,7 @@ kbal_wt_mf_nopid_b.125x <- svydesign(~1, data = pew,
 ################################ Summarize Results ##########################
 ## Presidential vote estimates
 ### Actual results
-pres <- readRDS(paste0(path_data,"election.rds")
+pres <- readRDS(paste0(path_data,"election.rds"))
 natl_margin <- pres %>%
     summarise(margin = (sum(demtotal) - sum(reptotal)) /
                   (sum(demtotal) + sum(reptotal))) %>%

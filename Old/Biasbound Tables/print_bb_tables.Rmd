@@ -22,7 +22,8 @@ suppressMessages(library(survey))
 #THIS was used to build tables and then the file saved below to load quickly to print tables.
 
 #this loads all old tables, here just using it to get bb_comp_mf,the meanfirst kpop table which was run correctly and does not need updating
-load("../cleaned data/Full SVD/bb_dat_full.Rdata")
+#load("../cleaned data/Full SVD/bb_dat_full.Rdata")
+
 #with convergence fixed: this loads only bb comp for default kpop fixed with convergence
 load("./fixed_conv.Rdata")
 
@@ -101,7 +102,7 @@ load("bb_dat_wEst_fixed_wPid.Rdata")
 
 #OLD with ebal convv required for default kpop
 #for full SVD
-#load("bb_dat_wEst_full.Rdata")
+load("bb_dat_wEst_full.Rdata")
 #for 500 max
 #load("bb_dat_wEst.Rdata")
 

@@ -1,4 +1,4 @@
-#### Pew Pre-Wave Recoding (Cleaned March 2021)
+#### Pew POST-Wave Recoding (Cleaned March 2021)
 rm(list = ls())
 
 library(MASS)
@@ -30,24 +30,25 @@ west_states = c("California", "Oregon", "Washington", "Hawaii", "New Mexico",
 #late october pew
 path_dat = "/Users/Ciara/Dropbox/kpop/application/data/"
 
-pew <- read.spss(paste0(path_dat, "/Pew/Oct16 public.sav"), to.data.frame=TRUE)
+#post election pew
+pew <- read.spss(paste0(path_dat, "Pew/Nov16-Post-Election-public/Nov16 Post-Election public.sav"), to.data.frame=TRUE)
 
+#FOR POST: to use the same cleaning code, we need to drop orig from the front of the var names
+cleannames <- colnames(pew)
+colnames(pew)[-22] <- gsub( "orig","", cleannames)[-22]
+
+#q4 is reported vote choice
 pew <- pew %>%
-    mutate(recode_vote_2016 =
-               case_when(str_detect(Q11HORSE2, "Trump") ~ "Republican",
-                         str_detect(Q11HORSE2, "Clinton") ~ "Democrat",
-                         is.na(Q11HORSE2) ~ NA_character_,
-                         TRUE ~ "Other"
+    mutate(recode_vote_2016 = 
+               case_when(str_detect(q4, "Trump") ~ "Republican",
+                         str_detect(q4, "Clinton") ~ "Democrat",
+                         is.na(q4) ~ NA_character_,
+                         TRUE ~ "Other" 
                ))
-
-
 
 ## Start by looking at missingness (fraction):
 lapply(pew[, c("age", "sex", "racethn", "state", "party", "educ2")], 
        function(x) (sum(is.na(x)) + sum(grepl("Don't know/Refused", x))) / length(x))
-
-#age and party and educ2 have no NAs, only don't know/refused
-#racethn does have NAs and no don't know/refused
 
 ## First recodes
 pew <- pew %>% mutate(
@@ -94,19 +95,15 @@ pew <- pew %>% mutate(
         levels = c("No HS", "High school graduate", "Some college", "2-year", "4-year", "Post-grad"))
 )
 
-
-#### adding indicator for any missingness on age and education before we model them
-# list wise deletion would lead to: 45 observations dropped= 41 missingon age + 4 missing on educ
 pew <- pew %>% 
     mutate(missing = ifelse(is.na(recode_age) | is.na(recode_educ), 1, 0))
 
-## modeling age: 
+## modeling age to fill in missing
 age_model <- glm(recode_age ~ recode_female + recode_race + recode_region + 
                      recode_pid_3way + recode_educ + child,
                  family = Gamma(),
                  data = pew)
 
-#reports 41 observations dropped = those missing on age
 age_model_no_educ <- glm(recode_age ~ recode_female + recode_race + 
                              recode_region + recode_pid_3way + child,
                          family = Gamma(),
@@ -137,7 +134,6 @@ pew <- pew %>%
     )
 
 ## education model (ordered logit)
-#drops 14 missing on educ
 educ_model <- polr(recode_educ ~ recode_female + recode_race + recode_region + 
                        recode_pid_3way + recode_age + child,
                    data = pew)
@@ -148,7 +144,8 @@ pew <- pew %>%
         ## if not missing, use current education
         !is.na(recode_educ) ~ recode_educ,
         ## if missing, use educ_model prediction
-        is.na(recode_educ) ~ predict(educ_model, newdata =., type = "class")),
+        is.na(recode_educ) ~ predict(educ_model, newdata =., type = "class")
+    ),
     
     ## education 3 way bucket among white voters, no split among non-white
     recode_educ_wh_3way = factor(case_when(
@@ -164,7 +161,6 @@ pew <- pew %>%
         levels = c("No College", "College", "Post-grad"))
     )  
 
-####### Additional Variables: income, bornagain, church attendance,
 #March 2021: updated names of income_Xway to count pref not to say in X, relig name to be 5 way (counted wrong before and had 6)
 pew <- pew %>% mutate(
     recode_relig = factor(case_when(
@@ -346,16 +342,10 @@ pew <- pew %>%
 
 
 
-## Remove those who say they definitely will not vote 
-#463 NAs (all also have NA vote choice) and 46 don't plan to vote (some have vote pref but if they refuse then fine to drop)
-#(5 of those that are NA here are missing also on age/educ so we get from 45 missing to 40 missing total)
-nrow(pew)
-#we drop 2583 - 2074, 509 (463_46) respondents doing this
-pew <- pew%>%
-    filter(plan1 %in% c("Plan to vote", "Already voted", "Don't know/Refused (VOL.)"))
 
+
+#post-poll q1 is did you vote and if thy didnt they end the interview so we already subsetted to actual voters and now do not need to filter for did you vote or anythign 
 nrow(pew)
-nrow(pew %>% filter(plan1 != "Don't know/Refused (VOL.)"))
-#updated August 2020 for pre-pew to pew_new
-#updated March 2021 to pew_clean 
-saveRDS(pew, paste0(path_dat, "./pew_clean.rds"))
+#pew_post_CS_q4 done oct 2020
+#pew_post_clean dont march 2021 (just added interactiosn and fixed Xway names)
+saveRDS(pew, paste0(path_dat, "pew_post_clean.rds"))

@@ -10,6 +10,7 @@ library(kbal)
 
 path_save = "./Updated/"
 path_data= "./Data/"
+path_data = "/Users/Ciara/Dropbox/kpop/application/data/"
 ############################## Load Data ##########################
 ## SURVEY DATA (PEW)
 ### Load
@@ -86,6 +87,15 @@ kbal_b4x_f <- kbal(allx=kbal_data,
                    incrementby = 1,
                    fullSVD = TRUE,
                    meanfirst = FALSE,
+                   population.w = cces$commonweight_vv_post / mean(cces$commonweight_vv_post),
+                   sampledinpop = FALSE)
+
+kbal_b.5x_f <- kbal(allx=kbal_data,
+                   sampled = kbal_data_sampled,
+                   b = 0.5 * ncol(kbal_data),
+                   fullSVD = TRUE,
+                   meanfirst = FALSE,
+                   incrementby = 1,
                    population.w = cces$commonweight_vv_post / mean(cces$commonweight_vv_post),
                    sampledinpop = FALSE)
 
@@ -215,6 +225,37 @@ save(kbal_mf_b.125x_f,kbal_mf_b.25x_f,kbal_mf_b.5x_f,kbal_mf_b1x_f,kbal_mf_b2x_f
      file = paste0(path_save, "./mf_T_wPid_", 
                    str_sub(gsub("[[:space:]|[:punct:]]", "_", gsub("[:alpha:]", "", Sys.time())), 
                            start = 1, end = -3), ".RData"))
+
+
+#### chekcing iwth educ_3way interaction explicitly like the sims
+
+kbal_data_sims <- bind_rows(pew %>% select(recode_age,
+                                             recode_female,
+                                             recode_race,
+                                             recode_region,
+                                             recode_pid_3way,
+                                             recode_educ_3way),
+                       cces %>% select(recode_age,
+                                       recode_female,
+                                       recode_race,
+                                       recode_region,
+                                       recode_pid_3way,
+                                       recode_educ_3way)) %>%
+    model.matrix(as.formula("~."), .)
+
+#remove intercept this way
+kbal_data_sims <- kbal_data_sims[,-1]
+
+#warning of colinear columns here wtf??? -> need to check if this is also true in the sims?
+kbal_mf_b.5x_sims <- kbal(allx=kbal_data_sims,
+                      sampled = kbal_data_sampled,
+                      b = 0.5 * ncol(kbal_data_sims),
+                      incrementby = 1,
+                      fullSVD = TRUE,
+                      meanfirst = TRUE,
+                      ebal.convergence = TRUE,
+    population.w = cces$commonweight_vv_post / mean(cces$commonweight_vv_post),
+                      sampledinpop = FALSE)
 
 ############################## (2) KPOP + NO PID ##################################
 
@@ -529,7 +570,8 @@ save( kbal_b4x_s,kbal_b2x_s,kbal_b1x_s,kbal_b.5x_s,kbal_b.25x_s,kbal_b.125x_s,
 
 
 ############################# Survey Designs #######################
-
+kbal_wt_b.5x_sims <- svydesign(~1, data = pew,
+                         weights = kbal_mf_b.5x_sims$w[kbal_data_sampled ==1])
 ###############  (1) KPOP + PID ##############
 ## (1.1) KPOP + MF =FALSE + W PID
 kbal_wt_b4x <- svydesign(~1, data = pew,

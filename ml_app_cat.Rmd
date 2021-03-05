@@ -3386,6 +3386,7 @@ cat_margins_best <- allmargins(pop_weights = FALSE,
                               cat_kernel = TRUE)
 
 cat_margins_best$kable_err
+cat_margins_best$kable_outmom
 
 
 # 
@@ -3455,7 +3456,7 @@ cat_margins_best$kable_err
 #tolerance 1e-6 and increase maxit to 500, maxnumdims 500
 load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
 
-biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, numdims, numdims_conv, numdims_mf, mf_append_dims)) %>% arrange(b)
+biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, bbr_constr, numdims, numdims_conv, numdims_mf, numdims_constr, mf_append_dims)) %>% arrange(b)
 
 
 # #add variance of K
@@ -3468,12 +3469,13 @@ biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, numdims, 
 biasbound %>% filter(max(bbr) == bbr) %>% dplyr::select(b)
 biasbound %>% filter(max(bbr_conv) == bbr_conv) %>% dplyr::select(b)
 biasbound %>% filter(max(bbr_mf) == bbr_mf) %>% dplyr::select(b)
+biasbound %>% filter(max(bbr_constr) == bbr_constr) %>% dplyr::select(b)
 kable(biasbound,
        format = "latex",
        caption = "Unscaled Kernel: Bias Bound (Orig:Optimal) and Dims Selected", 
        booktabs = T,
        digits = 3)
-    ```
+```
 
 
 

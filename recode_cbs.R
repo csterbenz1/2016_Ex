@@ -102,7 +102,7 @@ pew_srs <- svydesign(ids = ~1, data = pew)
 #it's really not bad at least compared to pew
 cbs_srs <- svydesign(ids = ~1, data = cbs_nytimes)
 svycontrast(svymean(~recode_vote_2016, 
-                    abc_srs, na.rm = TRUE),
+                    cbs_srs, na.rm = TRUE),
             vote_contrast)*100
 svycontrast(svymean(~recode_vote_2016, 
                     pew_srs, na.rm = TRUE),

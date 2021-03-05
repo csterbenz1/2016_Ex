@@ -675,8 +675,10 @@ pew_out <- function(PRE = TRUE,
                 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat.Rdata")
                 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/altB_cat.Rdata")
                 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_2021-02-25.Rdata")
-                #increased tolerance
-                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
+                #increased tolerance (issue w maxit)
+                # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
+                #tolerance 1e-6, maxit 500, maxnumdims 500
+                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
                #weights_cat <- weights_cat
                 weights <- weights_cat[2:13]
                 weights_alt <- weights_cat[1:2]
@@ -2597,7 +2599,7 @@ cat_kernel_out <- pew_out(PRE = TRUE,
 cat_kernel_out$plot_real_diff
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vdiff_allb.pdf", width = 14, height = 8)
 cat_kernel_out$plot_diff
-#ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_vdiff_allb.pdf", width = 14, height = 8)
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
 cat_kernel_out$plot_real_margin
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vmargin_allb.pdf", width = 14, height = 8)
 cat_kernel_out$plot_margin
@@ -2775,15 +2777,20 @@ allmargins <- function(pop_weights = FALSE,
         #     weights_cat <- weights_cat_alt
         # }
         # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_2021-02-25.Rdata")
-        load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
+        # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
+        
+        #tolerance 1e-6 and increase maxit to 500, maxnumdims 500
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+        
         kpop_w <- weights_cat[[index]]$kpop_w
         kpop_conv_w <- weights_cat[[index]]$kpop_w_conv
         kpop_mf_w <- weights_cat[[index]]$kpop_mf_w
         kpop_constr_w <- weights_cat[[index]]$kpop_contraint
+        kpop_full_constr_w <- weights_cat[[index]]$kpop_full_constraintt
         cces_svy <- cces_nowt
         #colnames_bottom = c("No Wts", "No Wts", "(cat)", "(cat)", "(cat)","all", 
              #                       "reduc", "all", "retro")
-        b_lab = paste0("b", b, "x")
+        b_lab = paste0("b=", b)
         colnames_bottom =  c("", "No Wts", b_lab, b_lab, b_lab, b_lab,
                              "all", "reduc",
                              "all", "retro")
@@ -2832,7 +2839,7 @@ allmargins <- function(pop_weights = FALSE,
         } else { #NO POP WEGIHTS
             cces_svy <- cces_nowt
             b_lab = paste0("b", b, "x")
-             colnames_bottom = c("No Wts", "No Wts", b_lab, b_lab, b_lab,"all", 
+             colnames_bottom = c("No Wts", "No Wts", b_lab, b_lab, b_lab, b_lab,"all", 
                                     "reduc", "all", "retro")
             # colnames_bottom =  c("No Wts", "No Wts", b_lab, b_lab, b_lab,
             #                         "noeduc", "weduc", "all", "", "reduc", "all", "retro")
@@ -2940,9 +2947,17 @@ allmargins <- function(pop_weights = FALSE,
     
     kpop_mf <-  svydesign(~1, data = pew_xgb_dat,
                               weights = kpop_mf_w[kbal_data_sampled ==1])
+    
+    
+    
+    
     if(cat_kernel) {
          kpop_constr <-  svydesign(~1, data = pew_xgb_dat,
                               weights = kpop_constr_w[kbal_data_sampled ==1])
+         
+         kpop_full_constr <-  svydesign(~1, data = pew_xgb_dat,
+                              weights = kpop_full_constr_w[kbal_data_sampled ==1])
+         
     }
     
     if(is.null(margins_formula)) {
@@ -3016,6 +3031,9 @@ allmargins <- function(pop_weights = FALSE,
         kpop_constr = if(cat_kernel) {
             svymean(margins_formula, kpop_constr)
             }else {NA},
+        kpop_full_constr = if(cat_kernel) {
+            svymean(margins_formula, kpop_full_constr)
+            }else {NA},
         #rake_demos_noeduc = svymean(margins_formula, rake_demos_noeduc),
         #rake_demos_weduc = svymean(margins_formula, rake_demos_weduc),
         rake_all_vars = svymean(margins_formula, rake_all_vars),
@@ -3045,6 +3063,8 @@ allmargins <- function(pop_weights = FALSE,
                kpop_mf = cces_margins - kpop_mf,
                kpop_conv = cces_margins - kpop_conv,
                kpop_constr = if(cat_kernel) {cces_margins - kpop_constr }
+               else {NA},
+               kpop_full_constr = if(cat_kernel) {cces_margins - kpop_full_constr }
                else {NA},
                #rake_demos_noeduc = cces_margins- rake_demos_noeduc,
                #rake_demos_weduc = cces_margins- rake_demos_weduc,
@@ -3098,6 +3118,7 @@ allmargins <- function(pop_weights = FALSE,
                                 kpop_conv = mean(abs(kpop_conv)), 
                                 kpop_mf = mean(abs(kpop_mf)),
                                 kpop_constr = mean(abs(kpop_constr)),
+                                kpop_full_constr = mean(abs(kpop_full_constr)),
                                 #rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
                                 #rake_demos_weduc = mean(abs(rake_demos_weduc)), 
                                 rake_all_vars = mean(abs(rake_all_vars)), 
@@ -3113,6 +3134,10 @@ allmargins <- function(pop_weights = FALSE,
         margins <- margins[,-which(colnames(margins) == "kpop_constr")]
         margins_diff <- margins_diff[,-which(colnames(margins_diff) == "kpop_constr")]
         wmabserr <- wmabserr[,-which(colnames(wmabserr) == "kpop_constr")]
+        
+        margins <- margins[,-which(colnames(margins) == "kpop_full_constr")]
+        margins_diff <- margins_diff[,-which(colnames(margins_diff) == "kpop_full_constr")]
+        wmabserr <- wmabserr[,-which(colnames(wmabserr) == "kpop_full_constr")]
     }
     
     #labels
@@ -3212,7 +3237,30 @@ allmargins <- function(pop_weights = FALSE,
     
     if(cat_kernel) { 
         kpop_constr_aes <- noedu_aes
-         kable_err <- kable(wmabserr_nooutcomes,
+        kpop_full_constr_aes <- all_aes
+        # #wmabserr_nooutcomes[, -which(colnames(wmabserr_nooutcomes) == "kpop_full_constr")]
+        #  kable_err <- kable(wmabserr_nooutcomes,
+        #                format = "latex",
+        #                caption = caption_err,
+        #               col.names = c("Variable", colnames_bottom[-2]),
+        #                booktabs = T,
+        #                digits = 3) %>% kable_styling() %>%
+        #         column_spec(5,
+        #                 color =kpop_aes) %>%
+        #         column_spec(6,
+        #                 color =kpop_constr_aes) %>%
+        #      column_spec(7,
+        #                 color =kpop_full_constr_aes) %>%
+        #         column_spec(8,
+        #                 color = all_aes) %>%
+        #         column_spec(9,
+        #                 color =ps_reduc_aes) %>%
+        #         column_spec(10,
+        #                 color =ps_all_aes) %>%
+        #         column_spec(11,
+        #                 color =retro_aes)
+        
+         kable_err <- kable(wmabserr_nooutcomes[, -which(colnames(wmabserr_nooutcomes) == "kpop_full_constr")],
                        format = "latex",
                        caption = caption_err,
                       col.names = c("Variable", colnames_bottom[-2]),
@@ -3230,6 +3278,8 @@ allmargins <- function(pop_weights = FALSE,
                         color =ps_all_aes) %>%
                 column_spec(10,
                         color =retro_aes)
+        
+        
         
     } else {
         kable_err <- kable(wmabserr_nooutcomes,
@@ -3275,7 +3325,8 @@ allmargins <- function(pop_weights = FALSE,
     #     column_spec(12, 
     #             color =retro_aes)
     
-    kable_om <- kable(wmabserr %>% 
+    #wmabserr[, -which(colnames(wmabserr) == "kpop_full_constr")]
+    kable_om <- kable(wmabserr[, -which(colnames(wmabserr) == "kpop_full_constr")] %>% 
                           filter((var %in% c("age", "agesq", "agecubed") |
                                       grepl("xgb", var) |
                                       grepl("vote", var))) %>% arrange(nchar(var)),
@@ -3289,7 +3340,8 @@ allmargins <- function(pop_weights = FALSE,
     # margins_out <- margins_out %>% rbind(colMeans(margins_out))
     # rownames(margins_out)[nrow(margins_out)] <- "Column Average"
     
-    kable_margins <- kable(margins_out,
+    #margins_out[, -which(colnames(margins_out) == "kpop_full_constr")]
+    kable_margins <- kable(margins_out[, -which(colnames(margins_out) == "kpop_full_constr")],
           format = "latex",
           caption = caption_m,
           col.names = colnames_bottom,
@@ -3308,7 +3360,7 @@ allmargins <- function(pop_weights = FALSE,
 ```
 
 ```{r run_specific}
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel2021-02-26.Rdata")
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
 b_run <- out_cat$b
 
 cat_margins <- allmargins(pop_weights = FALSE, 
@@ -3324,16 +3376,16 @@ cat_margins$kable_err
 cat_margins$kable_outmom
 cat_margins$kable_margins
 
-cat_margins <- allmargins(pop_weights = FALSE, 
+cat_margins_best <- allmargins(pop_weights = FALSE, 
                              age_buckets = FALSE, 
                              three_way = TRUE, 
-                             b = b_run[2],
+                             b = b_run[13],
                              pew_xgb_dat = cat_kernel_out$pew_dat,
                              cces_xgb_dat = cat_kernel_out$cces_dat, 
                              drop_ccesNAs = TRUE, 
                               cat_kernel = TRUE)
 
-
+cat_margins_best$kable_err
 
 
 # 
@@ -3395,21 +3447,23 @@ cat_margins <- allmargins(pop_weights = FALSE,
 # 
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/altB_cat.Rdata")
 
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_2021-02-25.Rdata")
+# load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_2021-02-25.Rdata")
 
-#bigger tolerance: NO DIFFERENCE....
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
+#bigger tolerance: NO DIFFERENCE.... this is bc max iter was too small
+# load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
 
-biasbound_old <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, numdims, numdims_conv, numdims_mf, mf_append_dims)) %>% arrange(b)
+#tolerance 1e-6 and increase maxit to 500, maxnumdims 500
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+
+biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, numdims, numdims_conv, numdims_mf, mf_append_dims)) %>% arrange(b)
+
 
 # #add variance of K
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/varK_cat.Rdata")
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kernels_cat.Rdata") 
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kernels_cat_altB.Rdata") 
-
-
-biasbound <- merge(biasbound, varK_bind, by = "b")
-biasbound <- biasbound %>% mutate(varKx100 = 100*var_K) %>% dplyr::select(-var_K)
+# biasbound <- merge(biasbound, varK_bind, by = "b")
+# biasbound <- biasbound %>% mutate(varKx100 = 100*var_K) %>% dplyr::select(-var_K)
 
 biasbound %>% filter(max(bbr) == bbr) %>% dplyr::select(b)
 biasbound %>% filter(max(bbr_conv) == bbr_conv) %>% dplyr::select(b)

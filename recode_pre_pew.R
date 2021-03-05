@@ -32,6 +32,14 @@ path_dat = "/Users/Ciara/Dropbox/kpop/application/data/"
 
 pew <- read.spss(paste0(path_dat, "/Pew/Oct16 public.sav"), to.data.frame=TRUE)
 
+
+# Q11HORSE2 = q11 + q10 + q10a where:
+# q10: if the election were today what candidate would you choose among: trump, clinton, stein, johnson, other, don't know, refused
+# q10a: Asked ONLY IF responded other or don't know on q10 - if the election were held today which candidate do you lean toward among the same options as above
+# q11: Asked ONLY IF respondents answered stein, johnson, other, don't know in q10/q10a: suppose there were only two major candidates for president trump and hilary, who would you choose? however still allows responses: clinton, trump, other, don't know
+# (There's also a q11a which follows up to those who answer other or don't know in q11 to lean, but this is not included in Q11HORSE2)
+
+#note that after we filter for those that don't plan to vote in plan1 (at bottom), we loose the NAs and end up grouping DNK-refused to lean +other in other
 pew <- pew %>%
     mutate(recode_vote_2016 =
                case_when(str_detect(Q11HORSE2, "Trump") ~ "Republican",
@@ -40,7 +48,7 @@ pew <- pew %>%
                          TRUE ~ "Other"
                ))
 
-
+nrow(pew)
 
 ## Start by looking at missingness (fraction):
 lapply(pew[, c("age", "sex", "racethn", "state", "party", "educ2")], 

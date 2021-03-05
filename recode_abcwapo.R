@@ -128,12 +128,3 @@ natl_diff
 abc_wapo %>% filter(q2 == "(VOL) Don't think will vote") %>% group_by(recode_vote_2016) %>% summarise(n())
 
 abc_wapo <- abc_wapo %>% filter(q2 != "(VOL) Don't think will vote")
-
-
-
-
-path_data= ""
-
-
-natl_diff
-natl_margin

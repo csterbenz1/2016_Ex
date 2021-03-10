@@ -1949,8 +1949,6 @@ pew_out <- function(PRE = TRUE,
     } else {
         NAs_lab = " No CCES NAs"
     }
-    tol_label = paste0(" tol=",as.character(tolerance))
-    maxit_label = paste0( "maxit=", as.character(maxit))
     
     pres <- readRDS(paste0(path_data, "election.rds"))
     
@@ -2753,7 +2751,8 @@ View(compare_weighting)
 ```{r margins}
 ########## Margins Function #############
 
-allmargins <- function(pop_weights = FALSE, 
+allmargins <- function(pop_weights = FALSE,
+                        NEWpopw = FALSE,
                        age_buckets = FALSE,
                        b = 32,
                        three_way,
@@ -2762,6 +2761,8 @@ allmargins <- function(pop_weights = FALSE,
                        drop_ccesNAs, 
                        margins_formula = NULL, 
                        order = NULL,
+                       tolerance = 1e-06,
+                       maxit = 500,
                        cat_kernel) {
     
     if(drop_ccesNAs &!cat_kernel) {
@@ -2865,9 +2866,7 @@ allmargins <- function(pop_weights = FALSE,
         recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
                                              TRUE ~ "92+")) )
     
-    cces_nowt <- suppressWarnings(svydesign(ids = ~1, data = cces_xgb_dat))
-    cces_awt <- svydesign(ids = ~1, weights = ~commonweight_vv_post,
-                          data = cces_xgb_dat)
+    
     pew_nowt <- suppressWarnings(svydesign(ids = ~1, data = pew_xgb_dat))
     
     missing_strata <- unique(cces_xgb_dat$strata)[!(unique(cces_xgb_dat$strata) %in%
@@ -2904,14 +2903,22 @@ allmargins <- function(pop_weights = FALSE,
         # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
         
         #tolerance 1e-6 and increase maxit to 500, maxnumdims 500
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+        if(pop_weights & !NEWpopw) {
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
+        } else if(pop_weights) {
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata") 
+        } else if(!pop_weights & tolerance == 1e-06) {
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+        } else if(!pop_weights & tolerance == 1e-04) {
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-04_2021-03-05.Rdata")
+        }
+
         
         kpop_w <- weights_cat[[index]]$kpop_w
         kpop_conv_w <- weights_cat[[index]]$kpop_w_conv
         kpop_mf_w <- weights_cat[[index]]$kpop_mf_w
         kpop_constr_w <- weights_cat[[index]]$kpop_contraint
         kpop_full_constr_w <- weights_cat[[index]]$kpop_full_constraintt
-        cces_svy <- cces_nowt
         #colnames_bottom = c("No Wts", "No Wts", "(cat)", "(cat)", "(cat)","all", 
              #                       "reduc", "all", "retro")
         b_lab = paste0("b=", b)
@@ -2926,7 +2933,6 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
         kpop_mf_w <- weights_nodnk_noNAs_nopopw[[index]]$kpop_mf_w
         
     } else if(pop_weights) {
-            cces_svy <- cces_awt
             
             if(age_buckets) {
                 #note this is identitcal to the rerun for 32 check here:
@@ -2961,7 +2967,7 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
                 kpop_mf_w <- weights_nodnk[[index]]$kpop_mf_w
             }
         } else { #NO POP WEGIHTS
-            cces_svy <- cces_nowt
+           
             b_lab = paste0("b", b, "x")
              colnames_bottom = c("No Wts", "No Wts", b_lab, b_lab, b_lab, b_lab,"all", 
                                     "reduc", "all", "retro")
@@ -2986,6 +2992,13 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
                 
                 }
            
+        }
+    if(pop_weights) {
+        cces_svy <- svydesign(ids = ~1, weights = ~commonweight_vv_post,
+                          data = cces_xgb_dat)
+    } else {
+        cces_svy <- svydesign(ids = ~1,
+                          data = cces_xgb_dat)
     }
     
      targets_rake_demos_noeduc <- create_targets(cces_svy,
@@ -3285,6 +3298,10 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
     } else {
         NAs_lab = "No CCES NAs "
     }
+    tol_label = paste0(" tol=",as.character(tolerance))
+    maxit_label = paste0( "maxit=", as.character(maxit))
+    
+    
     if(!cat_kernel) {
         caption_m = paste0("Margins (Difference): ",NAs_lab, popw_lab, ageb, " (no dnk) ",
                        "b=", b, xgb_lab)
@@ -3296,13 +3313,13 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
                        "b=", b, xgb_lab)
     } else {
         caption_m = paste0("Margins (Difference): Unscaled K ", "b=", b,NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
-                       xgb_lab)
+                       xgb_lab, tol_label, maxit_label)
         caption_o = paste0("Absolute Error on Margins of Outcomes and First Moments: Unscaled K ","b=", b,
                        NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
-                        xgb_lab)
+                        xgb_lab, tol_label, maxit_label)
     
         caption_err = paste0("Weighted Mean Abs Error: Unscaled K ","b=", b, NAs_lab, popw_lab,
-                              " Age Buckets Only (no dnk) ",xgb_lab)
+                              " Age Buckets Only (no dnk) ",xgb_lab, tol_label, maxit_label)
     }
     
     #rearrange: c() #(var %in% c("age", "agesq", "agecubed") |
@@ -3485,32 +3502,34 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
 
 ```{r run_specific}
 load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+
 b_run <- out_cat$b
 
-cat_margins <- allmargins(pop_weights = FALSE, 
+cat_margins_popw <- allmargins(pop_weights = TRUE, 
+                               NEWpopw = FALSE,
                              age_buckets = FALSE, 
                              three_way = TRUE, 
                              b = b_run[2],
-                             pew_xgb_dat = cat_kernel_out$pew_dat,
-                             cces_xgb_dat = cat_kernel_out$cces_dat, 
+                             pew_xgb_dat = cat_kernel_popw$pew_dat,
+                             cces_xgb_dat = cat_kernel_popw$cces_dat, 
                              drop_ccesNAs = TRUE, 
                               cat_kernel = TRUE)
-View(cat_margins$wmabserr)
-cat_margins$kable_err
-cat_margins$kable_outmom
-cat_margins$kable_margins
+View(cat_margins_popw$wmabserr)
+cat_margins_popw$kable_err
+cat_margins_popw$kable_outmom
+cat_margins_popw$kable_margins
 
-cat_margins_best <- allmargins(pop_weights = FALSE, 
+cat_margins_NEWpopw <- allmargins(pop_weights = TRUE, 
+                                  NEWpopw = TRUE,
                              age_buckets = FALSE, 
-                             three_way = TRUE, 
-                             b = b_run[13],
-                             pew_xgb_dat = cat_kernel_out$pew_dat,
-                             cces_xgb_dat = cat_kernel_out$cces_dat, 
+                             b = b_run[2],
+                             pew_xgb_dat = cat_kernel_popw$pew_dat,
+                             cces_xgb_dat = cat_kernel_popw$cces_dat, 
                              drop_ccesNAs = TRUE, 
                               cat_kernel = TRUE)
-
-cat_margins_best$kable_err
-cat_margins_best$kable_outmom
+View(cat_margins_NEWpopw$wmabserr)
+cat_margins_NEWpopw$kable_err
+cat_margins_NEWpopw$kable_outmom
 
 
 # 
@@ -3578,7 +3597,9 @@ cat_margins_best$kable_outmom
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
 
 #tolerance 1e-6 and increase maxit to 500, maxnumdims 500
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+# load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata")
 
 biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, bbr_constr, numdims, numdims_conv, numdims_mf, numdims_constr, mf_append_dims)) %>% arrange(b)
 
@@ -3596,7 +3617,7 @@ biasbound %>% filter(max(bbr_mf) == bbr_mf) %>% dplyr::select(b)
 biasbound %>% filter(max(bbr_constr) == bbr_constr) %>% dplyr::select(b)
 kable(biasbound,
        format = "latex",
-       caption = "Unscaled Kernel: Bias Bound (Orig:Optimal) and Dims Selected", 
+       caption = "Unscaled Kernel + New POPW (Weighted K): Bias Bound (Orig:Optimal) and Dims Selected", 
        booktabs = T,
        digits = 3)
 ```

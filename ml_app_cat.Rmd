@@ -134,7 +134,10 @@ pew_out <- function(PRE = TRUE,
                     bigB, 
                     smallB,
                     cat_kernel, 
-                    display_pew_mod) {
+                    display_pew_mod, 
+                    NEWpopw = FALSE, 
+                    tolerance = 1e-06, 
+                    maxit = 500) {
     
     if(!noDNK_weights) {warning("weights with DNK voters not supported well atm",
                                 immediate. = T)}
@@ -168,26 +171,29 @@ pew_out <- function(PRE = TRUE,
                                      immediate. = T)}
         if(age_buckets) { warning("age_buckets must be true with no cces NAs",
                                      immediate. = T)}
-        if(popw) { warning("POPW must be false with no cces NAs",
-                                     immediate. = T)}
+        # if(popw) { warning("POPW must be false with no cces NAs",
+        #                              immediate. = T)}
         noDNK_weights = TRUE
         age_buckets = FALSE
-        popw = FALSE
+        #popw = FALSE
     }
     
     
     ##### RUN XGB on PEW ##################
     
     #this subsets cces strata to only those in pew
+   
     missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in%
                                                 unique(pew$strata))]
-    length(missing_strata)/ length(unique(cces$strata))
+    cat("% cces original strata missing from pew, ",
+         length(missing_strata)/ length(unique(cces$strata)))
     missing_strata_reduc <- unique(cces$strata_reduc)[!(unique(cces$strata_reduc) %in%
                                                 unique(pew$strata_reduc))]
-    length(missing_strata_reduc)/ length( unique(cces$strata_reduc))
+    
+     cat("% cces reduc strata missing from pew, ",length(missing_strata_reduc)/ length( unique(cces$strata_reduc)))
     missing_strata_all <- unique(cces$strata_all)[!(unique(cces$strata_all) %in%
                                                 unique(pew$strata_all))]
-    length(missing_strata_all)/ length( unique(cces$strata_all))
+     cat("% cces all strata missing from pew, ",length(missing_strata_all)/ length( unique(cces$strata_all)))
     
     #we also have the reverse where pew may have strata we don't have in cces
     #this arises if we eliminate NAs in recode_vote for cces
@@ -637,20 +643,29 @@ pew_out <- function(PRE = TRUE,
             targets_ps_all <- svytable(formula = ~strata_all,
                                design = subset(cces_awt_xgb, !(strata_all %in%
                                                                 missing_strata_all)))
-            
-            if(age_buckets) {
-                
-                #this was run WITH CCES  voteNAs because its 47344
-                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_nodnk_agebuck_wpopw.Rdata")
-                weights <- weights_nodnk_agebuckets_wpopw
-                clean <- output
-                
-            } else { # no age buckets + pop weights
-                #this was run WITH CCES NAs because its 47344
-                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_nodnk_fixed.Rdata")
-                weights <- weights_nodnk
-                clean <- output
-            } 
+            if(cat_kernel & NEWpopw) {
+                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata")
+                clean <- out_cat
+                weights <- weights_cat[3:13]
+                weights_alt <- weights_cat[1:2]
+            } else if(cat_kernel) {
+                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
+                clean <- out_cat
+                weights <- weights_cat[3:13]
+                weights_alt <- weights_cat[1:2]
+            }
+            # if(age_buckets) {
+            #     #this was run WITH CCES  voteNAs because its 47344
+            #     load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_nodnk_agebuck_wpopw.Rdata")
+            #     weights <- weights_nodnk_agebuckets_wpopw
+            #     clean <- output
+            #     
+            # } else { # no age buckets + pop weights
+            #     #this was run WITH CCES NAs because its 47344
+            #     load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_nodnk_fixed.Rdata")
+            #     weights <- weights_nodnk
+            #     clean <- output
+            # } 
             
         } else { #no pop weights
             targets_rake_demos_noeduc <- create_targets(cces_nowt_xgb, 
@@ -678,9 +693,14 @@ pew_out <- function(PRE = TRUE,
                 #increased tolerance (issue w maxit)
                 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
                 #tolerance 1e-6, maxit 500, maxnumdims 500
-                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+                if(tolerance == 1e-06) {
+                    load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+                } else if(tolerance == 1e-04) {
+                    load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-04_2021-03-05.Rdata")
+                }
+                
                #weights_cat <- weights_cat
-                weights <- weights_cat[2:13]
+                weights <- weights_cat[3:13]
                 weights_alt <- weights_cat[1:2]
                 #weights_alt <- weights_cat[12:13]
                 clean <- out_cat
@@ -714,45 +734,8 @@ pew_out <- function(PRE = TRUE,
             }
             
         } # end of no pop w
-    } else { #WITH DNK VOTERS: THIS IS PROBABLY ALL MESSED UP NOW SO LET'S Never USE THIS
-        ## XXXXX HAS NOT BEEN FIXED/UPDATED
-        #if want weights with dnk voters then we do not have no age bucket option
-        #we also don't have no popw option
-        if(PRE) {
-            age_buckets = FALSE
-            popw = FALSE
-            warning("with postwave,
-                    kpop weights are currently only without age buckets and with popw",
-                    immediate. = TRUE)
-            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_pre_nodnk_app.Rdata")
-            out <- kpop_pre_nodnk
-            
-        } else {
-            age_buckets = FALSE
-            popw = FALSE
-            warning("with postwave,
-                    kpop weights are currently only without age buckets and with popw",
-                    immediate. = TRUE)
-            #NOTE THIS DN HAVE AGE BUCKETS
-            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/kpop_post_q4_app.Rdata")
-            out <- kpop_post_q4
-        }
-        estimates <- lapply(out, `[[`,1) %>% bind_rows()
-        estimates[, 2] <- 100*estimates[,2] 
-        estimates[, 3] <- 100*estimates[,3] 
-        estimates[,6] <- 100*estimates[,6]
-        estimates[, 7] <- 100*estimates[,7] 
-        estimates[,10] <- 100*estimates[,10]
-        estimates[, 11] <- 100*estimates[,11] 
-        #sub <- estimates[, c(1,2,4,5,7)]
-        colnames(estimates) <- c("b", "kpop_est", "kpop_se",
-                                 "bb", "bb ratio", "kpop_conv_est", "kpop_conv_se", 
-                                 "bb_conv", "bb ratio_conv",
-                                 "kpop_mf_est","kpop_mf_se", "mf_bb","mf_bb_ratio",
-                                 "numdims", "numdims_conv", "numdims_mf")
-        rownames(estimates) <- c(32,16,8,4,2,1)
-        clean <- round(estimates[,c(1,2,5,6,9,10,13,14,15,16)], 3)
-        weights <- lapply(out,`[[`,2)
+    } else {
+        stop("w DNK voters has not been rerun with updates")
     }
     
     
@@ -786,7 +769,6 @@ pew_out <- function(PRE = TRUE,
          kpop_mf_bmaxvar <- svydesign(~1, data = pew_xgb, 
                                  weights =
                                      weights_alt[[2]]$kpop_mf_w[kbal_data_sampled==1])
-        
          
         
         if(bigB) {
@@ -836,19 +818,8 @@ pew_out <- function(PRE = TRUE,
                                      weights[[11]]$kpop_mf_w[kbal_data_sampled==1])
             
                     
-            kpop_b32 <- svydesign(~1, data = pew_xgb, 
-                                  weights = weights[[5]]$kpop_w[kbal_data_sampled==1])
-            kpop_b16 <- svydesign(~1, data = pew_xgb, 
-                                  weights = weights[[4]]$kpop_w[kbal_data_sampled==1])
-            kpop_b8 <- svydesign(~1, data = pew_xgb, 
-                                 weights = weights[[3]]$kpop_w[kbal_data_sampled==1])
-            kpop_b4 <- svydesign(~1, data = pew_xgb, 
-                                 weights = weights[[2]]$kpop_w[kbal_data_sampled==1])
-            kpop_b2 <- svydesign(~1, data = pew_xgb, 
-                                 weights = weights[[1]]$kpop_w[kbal_data_sampled==1])
+          
         }
-       
-        
         if(smallB) {
              kpop_b64 <- svydesign(~1, data = pew_xgb, 
                               weights = weights[[6]]$kpop_w[kbal_data_sampled==1])
@@ -858,6 +829,17 @@ pew_out <- function(PRE = TRUE,
             kpop_mf_b64 <- svydesign(~1, data = pew_xgb, 
                                  weights =
                                      weights[[6]]$kpop_mf_w[kbal_data_sampled==1])
+            
+              kpop_b32 <- svydesign(~1, data = pew_xgb, 
+                                  weights = weights[[5]]$kpop_w[kbal_data_sampled==1])
+            kpop_b16 <- svydesign(~1, data = pew_xgb, 
+                                  weights = weights[[4]]$kpop_w[kbal_data_sampled==1])
+            kpop_b8 <- svydesign(~1, data = pew_xgb, 
+                                 weights = weights[[3]]$kpop_w[kbal_data_sampled==1])
+            kpop_b4 <- svydesign(~1, data = pew_xgb, 
+                                 weights = weights[[2]]$kpop_w[kbal_data_sampled==1])
+            kpop_b2 <- svydesign(~1, data = pew_xgb, 
+                                 weights = weights[[1]]$kpop_w[kbal_data_sampled==1])
             
             kpop_b32_conv <- svydesign(~1, data = pew_xgb, 
                                        weights = 
@@ -901,7 +883,7 @@ pew_out <- function(PRE = TRUE,
         #                              weights =
         #                                  weights_cat[[1]]$kpop_mf_w[kbal_data_sampled==1])
         
-        
+        #not cat kernel
     } else if(drop_ccesNAs) {
             i = 2
             kpop_b64 <- svydesign(~1, data = pew_xgb, 
@@ -1884,7 +1866,9 @@ pew_out <- function(PRE = TRUE,
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB,
                             smallB = smallB,
-                           cat_kernel = cat_kernel)
+                           cat_kernel = cat_kernel, 
+                            vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 )
+)
     
     comp_df_pR_pewoutcome <- df_build("recode_vote_2016", 
                            "xgb_pew_on_cces_pR",
@@ -1892,14 +1876,16 @@ pew_out <- function(PRE = TRUE,
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB,
                             smallB = smallB,
-                           cat_kernel = cat_kernel)
+                           cat_kernel = cat_kernel, 
+                           vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 ))
     
     comp_df_pD <- df_build("recode_vote_2016", 
                            "xgb_cces_on_cces_pD",
                            "xgb_cces_on_pew_pD",
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB, smallB = smallB,
-                           cat_kernel = cat_kernel)
+                           cat_kernel = cat_kernel, 
+                           vote_form = quote((recode_vote_2016Democrat +recode_vote_2016Democrat)/2 ))
         
     comp_df_pD_pewoutcome <- df_build("recode_vote_2016", 
                            "xgb_pew_on_cces_pD",
@@ -1963,6 +1949,8 @@ pew_out <- function(PRE = TRUE,
     } else {
         NAs_lab = " No CCES NAs"
     }
+    tol_label = paste0(" tol=",as.character(tolerance))
+    maxit_label = paste0( "maxit=", as.character(maxit))
     
     pres <- readRDS(paste0(path_data, "election.rds"))
     
@@ -1975,7 +1963,7 @@ pew_out <- function(PRE = TRUE,
     natl_diff <- pres %>%
         summarise(margin = (sum(demtotal) - sum(reptotal)) /
                       (sum(totalvotes))) %>%
-        as.numeric()*100
+        as.numeric()
     
     #XXXX IS THIS RIGHT?
     natl_Rep <- pres %>%
@@ -2044,10 +2032,10 @@ pew_out <- function(PRE = TRUE,
         aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
             color = as.factor(Conv), shape=as.factor(MF)) +
         
-        geom_hline(yintercept = c(0, natl_margin*100,
+        geom_hline(yintercept = c(0, if(popw) {natl_margin*100},
                                   comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]),
-                   linetype = c("solid", "dashed", "longdash"),
-                   color = c("black", "gray60", "black")) +
+                   linetype = c("solid", if(popw) {"dashed"}, "longdash"),
+                   color = c("black", if(popw){"gray60"}, "black")) +
         geom_pointrange(data = comp_df_real) +
         scale_y_continuous(breaks = c(natl_margin, seq(-5, 10, 5)),
                            minor_breaks = NULL,
@@ -2056,7 +2044,7 @@ pew_out <- function(PRE = TRUE,
         theme(plot.title = element_text(hjust = 0.5)) +
         
         labs(x = NULL, y = "Estimated Vote Margin (95% CI)") +
-        ggtitle(paste(pew_ver, " Pew on TRUE CCES Vote Margin\n",NAs_lab, popw_lab, ageb, dnk)) +
+        ggtitle(paste(pew_ver, " Pew on TRUE CCES Vote Margin\n",NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE) {
                                              ifelse(comp_df_real$source_name %in% 
@@ -2067,16 +2055,17 @@ pew_out <- function(PRE = TRUE,
                                                         best_b,
                                                     "bold","plain")
                                          })) +
-        annotate(geom = "text", x = nrow(comp_df_real)+1.55, y = natl_margin * 100,
-                 label = " True\n National\n Margin",
+        annotate(geom = "text", x = nrow(comp_df_real)+1.35,
+                 y = if(popw){natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"] },
+                 label = if(popw) {" True\n National\n Margin"} else {""},
                  hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
-        annotate(geom = "text", x = nrow(comp_df_real)+1.35,
+        annotate(geom = "text", x = nrow(comp_df_real)+1,
                  y = comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"],
-                 label = " CCES\n Target",
+                 label = if(popw)" Weighted\n CCES\n Target" else {" Unweighted\n CCES\n Target"},
                  hjust = 0, angle = 90, size = 3) +
         #for spacing
-         annotate(geom = "text", x = nrow(comp_df_real)+2.75,
+         annotate(geom = "text", x = nrow(comp_df_real)+2.65,
                  y = comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"],
                  label = " ",
                  hjust = 0, angle = 90, size = 3) +
@@ -2088,13 +2077,13 @@ pew_out <- function(PRE = TRUE,
         aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
             color = as.factor(Conv), shape=as.factor(MF))  + 
         
-        geom_hline(yintercept = c(0, natl_diff,
+        geom_hline(yintercept = c(0, if(popw){natl_diff*100},
                                   comp_df_real_diff$est[comp_df_real_diff$source_name
                                                         =="CCES Orig"]),
-                   linetype = c("solid", "dashed", "longdash"),
-                   color = c("black", "gray60", "black")) +
+                   linetype = c("solid", if(popw){"dashed"}, "longdash"),
+                   color = c("black", if(popw) {"gray60"}, "black")) +
         geom_pointrange(data = comp_df_real_diff) +
-        scale_y_continuous(breaks = c(natl_diff, seq(-5, 10, 5)),
+        scale_y_continuous(breaks = c(natl_diff*100, seq(-5, 10, 5)),
                            minor_breaks = NULL,
                            labels = scales::percent_format(scale=1, accuracy = 0.1)) +
         theme_bw() +
@@ -2102,7 +2091,7 @@ pew_out <- function(PRE = TRUE,
         
         labs(x = NULL, y = "Estimated Vote Difference (95% CI)") +
         ggtitle(paste(pew_ver, " Pew on TRUE CCES Vote Difference\n",  NAs_lab,
-                      popw_lab, ageb, dnk)) +
+                      popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE) {
                                              ifelse(comp_df_real_diff$source_name
@@ -2115,14 +2104,17 @@ pew_out <- function(PRE = TRUE,
                                                         best_b,
                                                     "bold","plain")
                                          })) +
-        annotate(geom = "text", x = nrow(comp_df_real_diff) +1.35, y = natl_margin * 100,
-                 label = " True\n National\n Margin",
+        annotate(geom = "text", 
+                 x = nrow(comp_df_real_diff) +1.35,
+                 y = if(popw) {natl_diff * 100} else {comp_df_real_diff$est[comp_df_real_diff$source_name == 
+                                               "CCES\ Orig"]},
+                 label = if(popw){" True\n National\n Diff"} else {""},
                  hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
-        annotate(geom = "text", x = nrow(comp_df_real_diff) +1.35,
+        annotate(geom = "text", x = nrow(comp_df_real_diff) +1,
                  y = comp_df_real_diff$est[comp_df_real_diff$source_name == 
                                                "CCES\ Orig"],
-                 label = " CCES\n Target",
+                 label = if(popw)" Weighted\n CCES\n Target" else {" Unweighted\n CCES\n Target"},
                  hjust = 0, angle = 90, size = 3) +
         #for spacing
          annotate(geom = "text", x = nrow(comp_df_real_diff) +2.75,
@@ -2154,15 +2146,18 @@ pew_out <- function(PRE = TRUE,
             } 
         ) +
         geom_hline(yintercept = c(0, 
-                                  #natl_margin*100,
-                                 # comp_df_diff$est[comp_df_diff$source_name == "CCES\n Orig"],
+                                  if(popw) {natl_diff*100},
+                                 if(popw) {comp_df_diff$est[comp_df_diff$source_name == "CCES Orig"]},
                                   comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]),
-                   linetype = c("solid", #"dashed", #"longdash",
+                   linetype = c("solid", 
+                                if(popw) {"dashed"}, if(popw) {"longdash"},
                                 "dashed"),
-                   color = c("black",# "gray60", #"black",
+                   color = c("black", 
+                             if(popw) {"gray60"}, if(popw) {"black"},
                              "purple")) +
+        
         geom_pointrange(data = if(display_pew_mod) {comp_df_diff_merge} else {comp_df_diff}) +
-        scale_y_continuous(breaks = c(natl_margin, seq(-5, 10, 5)),
+        scale_y_continuous(breaks = c(natl_diff*100, seq(-5, 10, 5)),
                            minor_breaks = NULL,
                            labels = scales::percent_format(scale=1, accuracy = 0.1)) +
         theme_bw() +
@@ -2170,7 +2165,7 @@ pew_out <- function(PRE = TRUE,
         
         labs(x = NULL, y = "Estimated Modeled Vote Difference (95% CI)") +
         ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled Mean Indiv Vote Diff p(D) - p(R)",
-                      out_lab,"modeled\n", NAs_lab, popw_lab, ageb, dnk)) +
+                      out_lab,"modeled\n", NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
                                              ifelse(comp_df_diff$source_name %in% 
@@ -2183,17 +2178,27 @@ pew_out <- function(PRE = TRUE,
                                                        best_b,
                                                     "bold","plain")
                                          })) +
-        # annotate(geom = "text", x = nrow(comp_df_diff)+0.35, y = natl_margin * 100,
-        #          label = " True\n National\n Margin",
-        #          hjust = 0, angle = -90,
-        #          color = "gray60", size = 3) +
-        annotate(geom = "text", x = nrow(comp_df_diff)+.35,
+        annotate(geom = "text", 
+                 x =if(display_pew_mod) {nrow(comp_df_pR_merge)+0.55} else{nrow(comp_df_pR)+.55}, 
+                 y = if(popw) {natl_diff * 100} else {comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]},
+                 label = if(popw) {" True\n National\n Diff"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.55} else{nrow(comp_df_pR)+.55},
                  y = comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"],
                  label = " CCES\n XGB Target",
                  color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)-2.1} else{nrow(comp_df_pR)-2.1}, 
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else { comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]},
+                 label = if(popw){" Weighted\n CCES\n Target"} else {""},
+                 color = "black",
                  hjust = 0, angle = -90, size = 3) +
         #for spacing
-        annotate(geom = "text", x = nrow(comp_df_pR)+.55,
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+2.55} else{nrow(comp_df_pR)+2.55},
                  y = comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"],
                  label = "",
                  color = "purple",
@@ -2224,14 +2229,14 @@ pew_out <- function(PRE = TRUE,
             } 
         ) +
         geom_hline(yintercept = c(0, 
-                                  #natl_margin*100,
-                                 # comp_df_margin$est[comp_df_margin$source_name == "CCES\n Orig"],
+                                  if(popw) {natl_margin*100},
+                                 if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]},
                                   comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]),
                    linetype = c("solid", 
-                                #"dashed", #"longdash",
+                                if(popw) {"dashed"}, if(popw) {"longdash"},
                                 "dashed"),
                    color = c("black", 
-                             #"gray60", #"black",
+                             if(popw) {"gray60"}, if(popw){"black"},
                              "purple")) +
         geom_pointrange(data = if(display_pew_mod) {comp_df_margin_merge} else {comp_df_margin}) +
         #geom_pointrange(data = comp_df_margin_pewoutcome, alpha = 0.4) +
@@ -2243,7 +2248,7 @@ pew_out <- function(PRE = TRUE,
         
         labs(x = NULL, y = "Estimated Modeled Vote Margin (95% CI)") +
         ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled Mean Indiv Vote Margin",
-                       out_lab,"modeled\n",NAs_lab, popw_lab, ageb, dnk)) +
+                       out_lab,"modeled\n",NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
                                              ifelse(comp_df_margin$source_name %in% 
@@ -2256,17 +2261,27 @@ pew_out <- function(PRE = TRUE,
                                                         best_b,
                                                     "bold","plain")
                                          })) +
-        # annotate(geom = "text", x = nrow(comp_df_margin), y = natl_margin * 100,
-        #          label = " True\n National\n Margin",
-        #          hjust = 0, angle = 90,
-        #          color = "gray60", size = 3) +
-        annotate(geom = "text", x =  nrow(comp_df_pR)-1,
+         annotate(geom = "text", 
+                  x = if(display_pew_mod){nrow(comp_df_margin_merge)+0.55} else {nrow(comp_df_margin)+0.55}, 
+                 y = if(popw) {natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]},
+                 label = if(popw) {" True\n National\n Margin"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){ nrow(comp_df_pR_merge)+.55}else{ nrow(comp_df_pR)+.55},
                  y = comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"],
                  label = " CCES\n XGB Target",
                  color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){ nrow(comp_df_pR_merge)-2.2} else { nrow(comp_df_pR)-2.2},
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else {comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]}, 
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 color = "black",
                  hjust = 0, angle = -90, size = 3) +
         #for spacing
-        annotate(geom = "text", x =  nrow(comp_df_pR)+.75,
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+1.75} else {nrow(comp_df_pR)+1.75},
                  y = comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"],
                  label = "",
                  color = "purple",
@@ -2297,12 +2312,12 @@ pew_out <- function(PRE = TRUE,
             } 
         ) +
         
-        geom_hline(yintercept = c(natl_Rep*100,
-                                  #comp_df_pR$est[comp_df_pR$source_name == "CCES\n Orig"],
+        geom_hline(yintercept = c(if(popw) {natl_Rep*100},
+                                  if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]},
                                   comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]),
-                   linetype = c( "dashed", #"longdash", 
+                   linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
                                  "dashed"),
-                   color = c("gray60",# "black",
+                   color = c(if(popw) {"gray60"},if(popw) {"black"},
                              "purple")) +
         geom_pointrange(data = if(display_pew_mod) {comp_df_pR_merge} else {comp_df_pR}) +
        # geom_pointrange(data = comp_df_pR_pewoutcome, alpha = 0.4) +
@@ -2314,7 +2329,7 @@ pew_out <- function(PRE = TRUE,
         
         labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
         ggtitle(paste(pew_ver,"Pew on CCES XGB Modeled p(R)", out_lab,"modeled\n",
-                      popw_lab, ageb, dnk)) +
+                      popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
                                              ifelse(comp_df_pR$source_name %in% 
@@ -2327,32 +2342,37 @@ pew_out <- function(PRE = TRUE,
                                                         best_b,
                                                     "bold","plain")
                                          })) +
-        annotate(geom = "text", x =  nrow(comp_df_pR)+.35, y = natl_Rep * 100,
-                 label = " True\n National\n % Rep",
-                 hjust = 0, angle = -90,
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.35} else {nrow(comp_df_pR)+.35}, 
+                 y = if(popw) {natl_Rep * 100} else {comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]},
+                 label = if(popw) {" True\n National\n % Rep"} else {""},
+                 hjust = 0, angle = +90,
                  color = "gray60", size = 3) +
-        # annotate(geom = "text", x = nrow(comp_df_pR),
-        #          y = comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"],
-        #          label = " CCES\n Target",
-        #          hjust = 0, angle = 90, size = 3) +
-        annotate(geom = "text", x = nrow(comp_df_pR),
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+1} else {nrow(comp_df_pR)+1},
+                 y = if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]} else {comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]},
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 hjust = 0, angle = -90, size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.55} else {nrow(comp_df_pR)+.55},
                  y = comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"],
                  label = " CCES\n XGB Target",
                  color = "purple",
-                 hjust = 0, angle = -90, size = 3) +
+                 hjust = 0, angle = 90, size = 3) +
         #for spacing
-        annotate(geom = "text", x = nrow(comp_df_pR)+.55,
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.85} else {nrow(comp_df_pR)+1.75},
                  y = comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"],
                  label = "",
                  color = "purple",
-                 hjust = 0, angle = 90, size = 3) +
+                 hjust = 0, angle = -90, size = 3) +
         
         scale_alpha_discrete(range=c(1, .4)) +
         theme(legend.title = element_blank())
     
     
     
-    ###### p(R) plot
+    ###### p(D) plot
     
     comp_df_plot_both_pD <-
         ggplot() +
@@ -2374,16 +2394,16 @@ pew_out <- function(PRE = TRUE,
             } 
         ) +
         
-        geom_hline(yintercept = c( natl_Dem*100,
-                                   #comp_df_pD$est[comp_df_pD$source_name == "CCES\n Orig"],
-                                   comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"]),
-                   linetype = c( "dashed", #"longdash", 
+        geom_hline(yintercept = c(if(popw) {natl_Dem*100},
+                                  if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]},
+                                  comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"]),
+                   linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
                                  "dashed"),
-                   color = c("gray60", #"black", 
+                   color = c(if(popw) {"gray60"},if(popw) {"black"},
                              "purple")) +
         geom_pointrange(data = if(display_pew_mod) {comp_df_pD_merge} else {comp_df_pD}) +
         #geom_pointrange(data = comp_df_pD_pewoutcome, alpha = 0.4) +
-        scale_y_continuous(breaks = c(natl_Rep, seq(40, 56, 4)),
+        scale_y_continuous(breaks = c(natl_Dem*100, seq(40, 56, 4)),
                            minor_breaks = NULL,
                            labels = scales::percent_format(scale=1, accuracy = 0.1)) +
         theme_bw() +
@@ -2391,7 +2411,7 @@ pew_out <- function(PRE = TRUE,
         
         labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
         ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled p(D)", out_lab,"modeled\n",
-                      popw_lab, ageb, dnk)) +
+                      popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
                                              ifelse(comp_df_pD$source_name %in% 
@@ -2404,20 +2424,25 @@ pew_out <- function(PRE = TRUE,
                                                        best_b,
                                                     "bold","plain")
                                          })) +
-        annotate(geom = "text", x = nrow(comp_df_pR)+.35, y = natl_Dem * 100,
-                 label = " True\n National\n % Rep",
-                 hjust = 0, angle = 90,
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.35} else {nrow(comp_df_pR)+.35},
+                 y = if(popw) {natl_Dem * 100} else {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]},
+                 label = if(popw){" True\n National\n % Rep"} else {""},
+                 hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
-        # annotate(geom = "text", x = nrow(comp_df_pR),
-        #          y = comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"],
-        #          label = " CCES\n Target",
-        #          hjust = 0, angle = 90, size = 3) +
-        annotate(geom = "text", x = nrow(comp_df_pR)-1,
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1}else {nrow(comp_df_pR)+1},
+                 y = if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]} else { comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"]},
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod)  {nrow(comp_df_pR_merge)+.55}else {nrow(comp_df_pR)+.55},
                  y = comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"],
                  label = " CCES\n XGB Target",
                  color = "purple",
-                 hjust = 0, angle = 90, size = 3) +
-        annotate(geom = "text", x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.75} else {nrow(comp_df_pR)+1.75},
+                 hjust = 0, angle = -90, size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.65} else {nrow(comp_df_pR)+1.65},
                  y = comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"],
                  label = "",
                  color = "purple",
@@ -2581,8 +2606,23 @@ t(t(conf_test$table)/colSums(conf_test$table))
 # RUN 
 
 ```{r}
+# internal testing
+# PRE = TRUE
+# age_buckets = FALSE
+# popw = TRUE
+# three_way = TRUE
+# noDNK_weights = TRUE
+# drop_ccesNAs = TRUE
+# xgb_cces_mod = xgb_cces
+# bigB = TRUE
+# smallB = TRUE
+# cat_kernel  = TRUE
+# display_pew_mod = FALSE
+# NEWpopw = FALSE
+# tolerance = 1e-06
+# maxit = 500
 
-cat_kernel_out <- pew_out(PRE = TRUE,
+cat_kernel_NOpopw <- pew_out(PRE = TRUE,
                            age_buckets = FALSE, 
                            popw = FALSE,
                            three_way = TRUE,
@@ -2596,17 +2636,17 @@ cat_kernel_out <- pew_out(PRE = TRUE,
 
 
 
-cat_kernel_out$plot_real_diff
+cat_kernel_NOpopw$plot_real_diff
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vdiff_allb.pdf", width = 14, height = 8)
-cat_kernel_out$plot_diff
+cat_kernel_NOpopw$plot_diff
 ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
-cat_kernel_out$plot_real_margin
+cat_kernel_NOpopw$plot_real_margin
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vmargin_allb.pdf", width = 14, height = 8)
-cat_kernel_out$plot_margin
+cat_kernel_NOpopw$plot_margin
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_vmargin_allb.pdf", width = 14, height = 8)
-cat_kernel_out$plot_pR
+cat_kernel_NOpopw$plot_pR
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_pR_allb.pdf", width = 14, height = 8)
-cat_kernel_out$plot_pD
+cat_kernel_NOpopw$plot_pD
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_pD_allb.pdf", width = 14, height = 8)
 
 # View(cat_kernel$comp_df_margin)
@@ -2615,6 +2655,90 @@ cat_kernel_out$plot_pD
 # View(cat_kernel$comp_df_real_margin)
 
 
+cat_kernel_NOpopw_neg4 <- pew_out(PRE = TRUE,
+                           age_buckets = FALSE, 
+                           popw = FALSE,
+                           three_way = TRUE,
+                           drop_ccesNAs = TRUE, 
+                           noDNK_weights = TRUE, 
+                           xgb_cces_mod = xgb_cces,
+                           bigB = TRUE, 
+                           smallB = TRUE,
+                           cat_kernel = TRUE, 
+                      display_pew_mod = FALSE,
+                      tolerance = 1e-04)
+
+cat_kernel_NOpopw_neg4$plot_diff
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/votediff_t1e-04_m500_allb.pdf", width = 14, height = 8)
+
+
+#ok so these are like identical
+#they are only difference on the pre-wave pew which is becuase we reruan the xgb model in between
+#somewhat concerning that rerunning the model produces 1% chance differences
+#I should probably do lots of xgb ccess runs and see how much variance we get...and whether the weights appropriately weight een as teh target adn variable moves around XXXXX
+compare_tolerance <- data.frame(source = cat_kernel_NOpopw_neg4$comp_df_diff$source, 
+                                outcome = cat_kernel_NOpopw_neg4$comp_df_diff$model,
+                                neg6 = cat_kernel_NOpopw$comp_df_diff$est, 
+                                neg4 =  cat_kernel_NOpopw_neg4$comp_df_diff$est) %>% mutate(diff = neg6 - neg4)
+
+View(compare_tolerance)
+
+
+
+
+
+### WITH POP WEIGHTS
+#Old method (weight U)
+cat_kernel_popw <- pew_out(PRE = TRUE,
+                           age_buckets = FALSE, 
+                           popw = TRUE,
+                           three_way = TRUE,
+                           drop_ccesNAs = TRUE, 
+                           noDNK_weights = TRUE, 
+                           xgb_cces_mod = xgb_cces,
+                           bigB = TRUE, 
+                           smallB = TRUE,
+                           cat_kernel = TRUE, 
+                      display_pew_mod = FALSE)
+
+cat_kernel_popw$plot_real_diff
+cat_kernel_popw$plot_diff
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/POPW_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+cat_kernel_popw$plot_real_margin
+cat_kernel_popw$plot_margin
+cat_kernel_popw$plot_pR
+cat_kernel_popw$plot_pD
+
+
+#New method (weight K)
+cat_kernel_NEWpopw <- pew_out(PRE = TRUE,
+                           age_buckets = FALSE, 
+                           popw = TRUE,
+                           three_way = TRUE,
+                           drop_ccesNAs = TRUE, 
+                           noDNK_weights = TRUE, 
+                           xgb_cces_mod = xgb_cces,
+                           bigB = TRUE, 
+                           smallB = TRUE,
+                           cat_kernel = TRUE, 
+                           NEWpopw = TRUE,
+                      display_pew_mod = FALSE)
+
+cat_kernel_NEWpopw$plot_real_diff
+cat_kernel_NEWpopw$plot_diff
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/NEWPOPW_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+cat_kernel_NEWpopw$plot_real_margin
+cat_kernel_NEWpopw$plot_margin
+cat_kernel_NEWpopw$plot_pR
+cat_kernel_NEWpopw$plot_pD
+
+
+compare_weighting<- data.frame(source = cat_kernel_popw$comp_df_diff$source, 
+                                outcome = cat_kernel_popw$comp_df_diff$model,
+                                oldW = cat_kernel_popw$comp_df_diff$est, 
+                                newW =  cat_kernel_NEWpopw$comp_df_diff$est) %>% mutate(diff = oldW - newW)
+
+View(compare_weighting)
 
 
 

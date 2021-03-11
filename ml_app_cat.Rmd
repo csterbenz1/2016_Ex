@@ -1949,6 +1949,9 @@ pew_out <- function(PRE = TRUE,
     } else {
         NAs_lab = " No CCES NAs"
     }
+    tol_label = paste0(" tol=",as.character(tolerance))
+    maxit_label = paste0( "maxit=", as.character(maxit))
+    
     
     pres <- readRDS(paste0(path_data, "election.rds"))
     
@@ -2629,7 +2632,8 @@ cat_kernel_NOpopw <- pew_out(PRE = TRUE,
                            xgb_cces_mod = xgb_cces,
                            bigB = TRUE, 
                            smallB = TRUE,
-                           cat_kernel = TRUE, 
+                           tolerance = 1e-06,
+                           cat_kernel = TRUE,
                       display_pew_mod = FALSE)
 
 
@@ -3521,6 +3525,7 @@ cat_margins_popw$kable_margins
 
 cat_margins_NEWpopw <- allmargins(pop_weights = TRUE, 
                                   NEWpopw = TRUE,
+                                  three_way = TRUE, 
                              age_buckets = FALSE, 
                              b = b_run[2],
                              pew_xgb_dat = cat_kernel_popw$pew_dat,
@@ -3531,7 +3536,30 @@ View(cat_margins_NEWpopw$wmabserr)
 cat_margins_NEWpopw$kable_err
 cat_margins_NEWpopw$kable_outmom
 
+# 
+# compare_margins <- data.frame(var = rbind(cat_margins_popw$wmabserr$var,
+#                                           cat_margins_NEWpopw$wmabserr$var),
+#                              kpop =   rbind(cat_margins_popw$wmabserr$kpop,
+#                                           cat_margins_NEWpopw$wmabserr$kpop),
+#                              kpop_conv =  rbind(cat_margins_popw$wmabserr$kpop_conv,
+#                                           cat_margins_NEWpopw$wmabserr$kpop_conv), 
+#                              kpop_mf =  rbind(cat_margins_popw$wmabserr$kpop_mf,
+#                                           cat_margins_NEWpopw$wmabserr$Kpop_mf),
+#                              weight = c(rep("wU", nrow(cat_margins_popw$wmabserr)), 
+#                                         rep("wK", nrow(cat_margins_popw$wmabserr))) )
 
+compare_margins <- data.frame(var = as.character(cat_margins_popw$wmabserr$var),
+                             kpop_wU =  cat_margins_popw$wmabserr$kpop,
+                             kpop_wK =  cat_margins_NEWpopw$wmabserr$kpop,
+                             kpop_conv_wU = cat_margins_popw$wmabserr$kpop_conv,
+                             kpop_conv_wK = cat_margins_NEWpopw$wmabserr$kpop_conv, 
+                             kpop_mf_wU = cat_margins_popw$wmabserr$kpop_mf,
+                             kpop_mf_wK = cat_margins_NEWpopw$wmabserr$kpop_mf) %>%
+    mutate(diff_kpop = abs(kpop_wU - kpop_wK),
+           diff_kpop_conv = abs(kpop_conv_wU - kpop_conv_wK),
+           diff_kpop_mf = abs(kpop_mf_wU - kpop_mf_wK))
+
+View(compare_margins %>% select(var, diff_kpop, diff_kpop_conv, diff_kpop_mf))
 # 
 # 
 # 

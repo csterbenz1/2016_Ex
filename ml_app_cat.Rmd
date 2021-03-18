@@ -118,6 +118,93 @@ create_targets <- function (target_design, target_formula) {
 
 ```
 
+```{r data_manip}
+ cces <- cces %>% mutate(
+    #36 levels
+    recode_educ_pid_race = as.factor(paste(recode_educ_3way,
+                                           recode_pid_3way, 
+                                           recode_race, sep = ", ")),
+    #12 levels
+    recode_pid_race = as.factor(paste(recode_pid_3way, 
+                                           recode_race, sep = ", ")),
+    #9 levels
+    recode_educ_pid = as.factor(paste(recode_educ_3way,
+                                      recode_pid_3way, sep = ", ")),
+    recode_agesq = recode_age*recode_age,
+    recode_agecubed = recode_age*recode_age*recode_age,
+    #13 levles
+    recode_midwest_edu_race = as.factor(
+        case_when(recode_region == "Midwest" ~ paste(recode_region,
+                                                     recode_race,
+                                                     recode_educ_3way, 
+                                                     sep = ", "),
+                  TRUE ~ "No Split")), 
+    #4 levels ( low educated whites in midwest only)
+    recode_midwest_wh_edu = factor(case_when(
+        (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
+        TRUE ~ as.character(recode_educ_3way)), 
+        levels = c("No Split", "No College", "College", "Post-grad")), 
+    recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
+                                         TRUE ~ "92+")) )
+
+
+###### SURVEY DATA (PEW) ####
+# if(PRE) {
+    pew <- readRDS(paste0(path_data, "pew_new.rds"))
+    # #in pre: eliminate don't know plan to vote respondents:
+    pew <- pew %>%
+        filter(plan1 %in% c("Plan to vote", "Already voted"))
+# } else {
+#     age_buckets = FALSE
+#     warning("with postwave, kpop weights are currently only without age buckets",
+#             immediate. = TRUE)
+#     pew <- readRDS(paste0(path_data, "pew_post_CS_q4.rds"))
+# }
+
+pew <- pew %>% mutate(recode_attndch_bin = 
+                        factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
+
+pew <- bind_cols(pew, pew %>% 
+                     unite("strata", all.vars(formula_ps), remove = FALSE) %>%
+                     unite("strata_reduc", all.vars(formula_ps_reduc), 
+                           remove = FALSE) %>%
+                     unite("strata_all", all.vars(formula_ps_all)) %>%
+                     dplyr::select(strata, strata_reduc, strata_all))
+
+
+
+pew <- pew %>% mutate(
+        #this has 36 levles
+        recode_educ_pid_race = as.factor(paste(recode_educ_3way,
+                                               recode_pid_3way, 
+                                               recode_race, sep = ", ")),
+        #12 levels
+        recode_pid_race = as.factor(paste(recode_pid_3way, 
+                                          recode_race, sep = ", ")),
+        #this has 9 levles
+        recode_educ_pid = as.factor(paste(recode_educ_3way,
+                                          recode_pid_3way, sep = ", ")),
+        recode_agesq = recode_age*recode_age,
+        recode_agecubed = recode_age*recode_age*recode_age,
+        
+        #this has 13 levels
+        recode_midwest_edu_race = as.factor(
+            case_when(recode_region == "Midwest" ~ paste(recode_region,
+                                                         recode_race,
+                                                         recode_educ_3way, 
+                                                         sep = ", "),
+                      TRUE ~ "No Split")),
+        #this has 4 levels
+        recode_midwest_wh_edu = factor(case_when(
+            (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
+            TRUE ~ as.character(recode_educ_3way)), 
+            levels = c("No Split", "No College", "College", "Post-grad")),
+        recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
+                                             TRUE ~ "92+")) )
+
+
+
+```
 
 
 
@@ -130,7 +217,10 @@ pew_out <- function(PRE = TRUE,
                     three_way = TRUE,
                     noDNK_weights = TRUE, 
                     drop_ccesNAs = TRUE,
-                    xgb_cces_mod, 
+                    xgb_cces_mod = NULL, 
+                    lasso_cces_mod = NULL,
+                    lasso_lambda_cces = NULL, 
+                    best_b_plot = TRUE, 
                     bigB, 
                     smallB,
                     cat_kernel, 
@@ -141,28 +231,7 @@ pew_out <- function(PRE = TRUE,
     
     if(!noDNK_weights) {warning("weights with DNK voters not supported well atm",
                                 immediate. = T)}
-    ####### SURVEY DATA (PEW) ####
-    if(PRE) {
-        pew <- readRDS(paste0(path_data, "pew_new.rds"))
-        # #in pre: eliminate don't know plan to vote respondents:
-        pew <- pew %>%
-            filter(plan1 %in% c("Plan to vote", "Already voted"))
-    } else {
-        age_buckets = FALSE
-        warning("with postwave, kpop weights are currently only without age buckets",
-                immediate. = TRUE)
-        pew <- readRDS(paste0(path_data, "pew_post_CS_q4.rds"))
-    }
     
-    pew <- pew %>% mutate(recode_attndch_bin = 
-                            factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
-    
-    pew <- bind_cols(pew, pew %>% 
-                         unite("strata", all.vars(formula_ps), remove = FALSE) %>%
-                         unite("strata_reduc", all.vars(formula_ps_reduc), 
-                               remove = FALSE) %>%
-                         unite("strata_all", all.vars(formula_ps_all)) %>%
-                         dplyr::select(strata, strata_reduc, strata_all))
 
     #these are the strata in the population but not in the sample
     if(drop_ccesNAs) {
@@ -177,9 +246,6 @@ pew_out <- function(PRE = TRUE,
         age_buckets = FALSE
         #popw = FALSE
     }
-    
-    
-    ##### RUN XGB on PEW ##################
     
     #this subsets cces strata to only those in pew
    
@@ -228,395 +294,696 @@ pew_out <- function(PRE = TRUE,
     #note this also means we need to go and drop it from the kpop weights so 
     #i will keep track of the index
     #problem_index <- which(pew$strata %in% problem)
-    #
-    
-    if(three_way) {
-        pew_model_dat = pew
-        classes = 3
-    } else {
-        pew_model_dat = pew[pew$recode_vote_2016 != "Other",]
-        classes = 2
-    }
-    pew_outcome = pew_model_dat$recode_vote_2016
-    pew_out_int <- as.integer(as.factor(pew_outcome))-1
-    
-    pew_matrix_sparse <- pew_model_dat %>%
-        dplyr::select(recode_age,
-               recode_female,
-               recode_race,
-               recode_region,
-               recode_pid_3way,
-               recode_educ,
-               recode_income,
-               #recode_relig has 38 Nas so need to use buckets
-               recode_relig_6way,
-               recode_born,
-               #recode_attndch has some nas need to use buckegs
-               recode_attndch_4way,
-               recode_race_educ_reg) %>%
-        sparse.model.matrix(as.formula("~."), .)
-    
-    pew_matrix_sparse = pew_matrix_sparse[,-1]
     
     
-    pew_percent <- sample.int(nrow(pew_model_dat), (nrow(pew_model_dat)/10)*8)
-    pew_dat_xgb_train <- xgb.DMatrix(data = pew_matrix_sparse[pew_percent,], 
-                                     label = pew_out_int[pew_percent])
-    pew_dat_xgb_outofsamp <- xgb.DMatrix(data =
-                                             pew_matrix_sparse[-pew_percent,], 
-                                         label = pew_out_int[-pew_percent])
-    
-    #using the same params as cces:
-    params = list(
-        booster="gbtree",
-        eta=0.3,
-        max_depth=10,
-        min_child_weight = 4,
-        gamma=3,
-        subsample= 0.7,
-        colsample_bytree=1,
-        objective="multi:softprob",
-        num_class= classes,
-        eval_metric = "merror"
-        )
-    pew_xgbcv <- xgb.cv( params = params,
-                         data = pew_dat_xgb_train, 
-                         nrounds = 500,
-                         nfold = 5, 
-                         early_stopping_rounds = 50,
-                         showsd = T, 
-                         stratified = T, 
-                         print_every_n = 10, 
-                         early_stop_round = 20, 
-                         maximize = F)
-    
-    low_test  = which(pew_xgbcv$evaluation_log$test_merror_mean ==
-                          min(pew_xgbcv$evaluation_log$test_merror_mean))
-    low_test
-    pew_xgbcv$best_iteration
-    
-    #run
-    xgb_pew =xgb.train(params=params,
-                       data=pew_dat_xgb_train,
-                       nrounds= pew_xgbcv$best_iteration,
-                       watchlist = list(validation = pew_dat_xgb_outofsamp),
-                       nthreads=2,
-                       print_every_n = 10)
-    
-    
-    pew_xgb_outcome = predict(xgb_pew, pew_dat_xgb_train, reshape=T)
-    pew_xgb_outofsamp = predict(xgb_pew, pew_dat_xgb_outofsamp, reshape =T)
-    
-    #getting outcome with max prob
-    pew_xgb_plurality_train <- apply(pew_xgb_outcome,1, which.max)
-    pew_xgb_plurality_test <- apply(pew_xgb_outofsamp,1, which.max)
-    
-    sum(pew_xgb_plurality_train -1 == 
-            pew_out_int[pew_percent])/length(pew_out_int[pew_percent])
-    sum(pew_xgb_plurality_test - 1 == 
-            pew_out_int[-pew_percent])/length(pew_out_int[-pew_percent])
-    #rep = 2, dem = 0 other = 1
-    if(three_way) {
-         pew_xgb_train_char = factor(case_when(pew_xgb_plurality_train == 1
-                                               ~ "Democrat",
-                                          pew_xgb_plurality_train  == 3 
-                                          ~ "Republican",
-                                          pew_xgb_plurality_train  == 2 
-                                          ~ "Other"),
-                                levels = c("Democrat", "Other", "Republican"))
-    
-         pew_xgb_test_char = factor(case_when(pew_xgb_plurality_test  == 1 
-                                              ~ "Democrat",
-                                         pew_xgb_plurality_test  == 3 
-                                         ~ "Republican",
-                                         pew_xgb_plurality_test  == 2 
-                                         ~ "Other"), 
-                               levels = c("Democrat", "Other", "Republican"))
-    } else {
-        pew_xgb_train_char = factor(case_when(pew_xgb_plurality_train-1  == 0 
-                                              ~ "Democrat",
-                                            pew_xgb_plurality_train-1  == 1 
-                                            ~ "Republican"),
-                            levels = c("Democrat", "Republican"))
-
-
-        pew_xgb_test_char = factor(case_when(pew_xgb_plurality_test-1  == 0 ~ "Democrat",
-                                            pew_xgb_plurality_test-1  == 1 ~ "Republican"), 
-                           levels = c("Democrat", "Republican"))
-    }
-   
-    #check
-    sum(pew_xgb_train_char == pew_outcome[pew_percent])/length(pew_percent)
-    sum(pew_xgb_test_char == pew_outcome[-pew_percent])/length(pew_outcome[-pew_percent])
-    
-    pew_conf_train = confusionMatrix(as.factor(pew_xgb_train_char), 
+     ##### RUN XGB on PEW ##################
+    if(!is.null(xgb_cces_mod)) {
+         if(three_way) {
+                pew_model_dat = pew
+                classes = 3
+            } else {
+                pew_model_dat = pew[pew$recode_vote_2016 != "Other",]
+                classes = 2
+            }
+            pew_outcome = pew_model_dat$recode_vote_2016
+            pew_out_int <- as.integer(as.factor(pew_outcome))-1
+            
+            pew_matrix_sparse <- pew_model_dat %>%
+                dplyr::select(recode_age,
+                       recode_female,
+                       recode_race,
+                       recode_region,
+                       recode_pid_3way,
+                       recode_educ,
+                       recode_income,
+                       #recode_relig has 38 Nas so need to use buckets
+                       recode_relig_6way,
+                       recode_born,
+                       #recode_attndch has some nas need to use buckegs
+                       recode_attndch_4way,
+                       recode_race_educ_reg) %>%
+                sparse.model.matrix(as.formula("~."), .)
+            
+            pew_matrix_sparse = pew_matrix_sparse[,-1]
+            
+            
+            pew_percent <- sample.int(nrow(pew_model_dat), (nrow(pew_model_dat)/10)*8)
+            pew_dat_xgb_train <- xgb.DMatrix(data = pew_matrix_sparse[pew_percent,], 
+                                             label = pew_out_int[pew_percent])
+            pew_dat_xgb_outofsamp <- xgb.DMatrix(data =
+                                                     pew_matrix_sparse[-pew_percent,], 
+                                                 label = pew_out_int[-pew_percent])
+            
+            #using the same params as cces:
+            params = list(
+                booster="gbtree",
+                eta=0.3,
+                max_depth=10,
+                min_child_weight = 4,
+                gamma=3,
+                subsample= 0.7,
+                colsample_bytree=1,
+                objective="multi:softprob",
+                num_class= classes,
+                eval_metric = "merror"
+                )
+            pew_xgbcv <- xgb.cv( params = params,
+                                 data = pew_dat_xgb_train, 
+                                 nrounds = 500,
+                                 nfold = 5, 
+                                 early_stopping_rounds = 50,
+                                 showsd = T, 
+                                 stratified = T, 
+                                 print_every_n = 10, 
+                                 early_stop_round = 20, 
+                                 maximize = F)
+            
+            low_test  = which(pew_xgbcv$evaluation_log$test_merror_mean ==
+                                  min(pew_xgbcv$evaluation_log$test_merror_mean))
+            low_test
+            pew_xgbcv$best_iteration
+            
+            #run
+            xgb_pew =xgb.train(params=params,
+                               data=pew_dat_xgb_train,
+                               nrounds= pew_xgbcv$best_iteration,
+                               watchlist = list(validation = pew_dat_xgb_outofsamp),
+                               nthreads=2,
+                               print_every_n = 10)
+            
+            
+            pew_xgb_outcome = predict(xgb_pew, pew_dat_xgb_train, reshape=T)
+            pew_xgb_outofsamp = predict(xgb_pew, pew_dat_xgb_outofsamp, reshape =T)
+            
+            #getting outcome with max prob
+            pew_xgb_plurality_train <- apply(pew_xgb_outcome,1, which.max)
+            pew_xgb_plurality_test <- apply(pew_xgb_outofsamp,1, which.max)
+            
+            sum(pew_xgb_plurality_train -1 == 
+                    pew_out_int[pew_percent])/length(pew_out_int[pew_percent])
+            sum(pew_xgb_plurality_test - 1 == 
+                    pew_out_int[-pew_percent])/length(pew_out_int[-pew_percent])
+            #rep = 2, dem = 0 other = 1
+            if(three_way) {
+                 pew_xgb_train_char = factor(case_when(pew_xgb_plurality_train == 1
+                                                       ~ "Democrat",
+                                                  pew_xgb_plurality_train  == 3 
+                                                  ~ "Republican",
+                                                  pew_xgb_plurality_train  == 2 
+                                                  ~ "Other"),
+                                        levels = c("Democrat", "Other", "Republican"))
+            
+                 pew_xgb_test_char = factor(case_when(pew_xgb_plurality_test  == 1 
+                                                      ~ "Democrat",
+                                                 pew_xgb_plurality_test  == 3 
+                                                 ~ "Republican",
+                                                 pew_xgb_plurality_test  == 2 
+                                                 ~ "Other"), 
+                                       levels = c("Democrat", "Other", "Republican"))
+            } else {
+                pew_xgb_train_char = factor(case_when(pew_xgb_plurality_train-1  == 0 
+                                                      ~ "Democrat",
+                                                    pew_xgb_plurality_train-1  == 1 
+                                                    ~ "Republican"),
+                                    levels = c("Democrat", "Republican"))
+        
+        
+                pew_xgb_test_char = factor(case_when(pew_xgb_plurality_test-1  == 0 ~ "Democrat",
+                                                    pew_xgb_plurality_test-1  == 1 ~ "Republican"), 
+                                   levels = c("Democrat", "Republican"))
+            }
+           
+            #check
+            sum(pew_xgb_train_char == pew_outcome[pew_percent])/length(pew_percent)
+            sum(pew_xgb_test_char == pew_outcome[-pew_percent])/length(pew_outcome[-pew_percent])
+            
+            pew_conf_train = confusionMatrix(as.factor(pew_xgb_train_char), 
                                 as.factor(pew_model_dat$recode_vote_2016)[pew_percent])
-    
-    pew_conf_test = confusionMatrix(pew_xgb_test_char, 
-                                as.factor(pew_model_dat$recode_vote_2016)[-pew_percent])
-    cat("Confusion Matrix: Pew on Pew Training\n")
-    print(t(t(pew_conf_train$table)/colSums(pew_conf_train$table)))
-    cat("Confusion Matrix: Pew on Pew Testing\n")
-    print(t(t(pew_conf_test$table)/colSums(pew_conf_test$table)))
-    
-    
-    ########  PREDICTING XBG CCES OUTCOME ###############
-    #need full pew in case this is two way
-    pew_matrix_all <- pew %>%
-        dplyr::select(recode_age,
-               recode_female,
-               recode_race,
-               recode_region,
-               recode_pid_3way,
-               recode_educ,
-               recode_income,
-               #recode_relig has 38 Nas so need to use buckets
-               recode_relig_6way,
-               recode_born,
-               #recode_attndch has some nas need to use buckegs
-               recode_attndch_4way,
-               recode_race_educ_reg) %>%
-        sparse.model.matrix(as.formula("~."), .)
+            
+            pew_conf_test = confusionMatrix(pew_xgb_test_char, 
+                                  as.factor(pew_model_dat$recode_vote_2016)[-pew_percent])
+            cat("Confusion Matrix: Pew on Pew Training\n")
+            print(t(t(pew_conf_train$table)/colSums(pew_conf_train$table)))
+            cat("Confusion Matrix: Pew on Pew Testing\n")
+            print(t(t(pew_conf_test$table)/colSums(pew_conf_test$table)))
+            
+            
+            ########  PREDICTING XBG CCES OUTCOME ###############
+            #need full pew in case this is two way
+            pew_matrix_all <- pew %>%
+                dplyr::select(recode_age,
+                       recode_female,
+                       recode_race,
+                       recode_region,
+                       recode_pid_3way,
+                       recode_educ,
+                       recode_income,
+                       #recode_relig has 38 Nas so need to use buckets
+                       recode_relig_6way,
+                       recode_born,
+                       #recode_attndch has some nas need to use buckegs
+                       recode_attndch_4way,
+                       recode_race_educ_reg) %>%
+                sparse.model.matrix(as.formula("~."), .)
+                
+            pew_matrix_all = pew_matrix_all[,-1]
+            
+             #with cces data, predict cces modeled outcome; must use full cces data regardless 
+            #of model
+            cces_matrix_all <- cces %>%
+            dplyr::select(recode_age,
+                   recode_female,
+                   recode_race,
+                   recode_region,
+                   recode_pid_3way,
+                   recode_educ,
+                   recode_income,
+                   #recode_relig has 38 Nas so need to use buckets
+                   recode_relig_6way,
+                   recode_born,
+                   #recode_attndch has some nas need to use buckegs
+                   recode_attndch_4way,
+                   recode_race_educ_reg) %>%
+            sparse.model.matrix(as.formula("~."), .)
         
-    pew_matrix_all = pew_matrix_all[,-1]
-    
-     #with cces data, predict cces modeled outcome; must use full cces data regardless 
-    #of model
-    cces_matrix_all <- cces %>%
-    dplyr::select(recode_age,
-           recode_female,
-           recode_race,
-           recode_region,
-           recode_pid_3way,
-           recode_educ,
-           recode_income,
-           #recode_relig has 38 Nas so need to use buckets
-           recode_relig_6way,
-           recode_born,
-           #recode_attndch has some nas need to use buckegs
-           recode_attndch_4way,
-           recode_race_educ_reg) %>%
-    sparse.model.matrix(as.formula("~."), .)
+            cces_matrix_all = cces_matrix_all[,-1]
+            
+            
+            ######## PRED ON PEW #######
+            ### 1. CCES ON PEW
+            mod_cces_on_pew = predict(xgb_cces_mod, pew_matrix_all, reshape=T)
+            mod_cces_on_pew_plur <- apply(mod_cces_on_pew,1, which.max)
+            sum(mod_cces_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
+            #same thing just with characters to make confusion matrix easier to read
+            if(three_way) {
+                 mod_cces_on_pew_out <- case_when(mod_cces_on_pew_plur-1 == 2 ~ 
+                                                      "Republican",
+                                             mod_cces_on_pew_plur-1 == 1 ~ "Other", 
+                                             mod_cces_on_pew_plur-1 == 0 ~ "Democrat")
+            } else {
+                mod_cces_on_pew_out <- case_when(mod_cces_on_pew_plur-1 == 1 ~  "Republican",
+                                         mod_cces_on_pew_plur-1 == 0 ~ "Democrat")
+            }
+            #includes predictions on others forced to be binary in two-way
+            #if want only on modeled data use pew_model_dat (makes no difference for three way)
+            sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew <- confusionMatrix(as.factor(mod_cces_on_pew_out), 
+                                        as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: CCES on Pew (All Data)\n")
+            print(t(t(conf_pew$table)/colSums(conf_pew$table)))
+            
+            ### 2. PEW ON PEW
+            #with pew data, predict pew modeled outcome
+            mod_pew_on_pew = predict(xgb_pew, pew_matrix_all, reshape=T)
+            mod_pew_on_pew_plur <- apply(mod_pew_on_pew,1, which.max)
+            #this only works for three waty for two way need to adjust length of mod_pew_on_pew
+            #sum(mod_pew_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
+            
+            if(three_way) {
+                mod_pew_on_pew_out <- factor(case_when(mod_pew_on_pew_plur-1 == 2 ~
+                                                           "Republican",
+                                                   mod_pew_on_pew_plur-1 == 1 ~ "Other", 
+                                                   mod_pew_on_pew_plur-1 == 0 ~ "Democrat"),
+                                         levels = c("Democrat", "Other", "Republican"))
+            } else {
+                mod_pew_on_pew_out <- factor(case_when(mod_pew_on_pew_plur-1 == 1 ~  "Republican",
+                                               mod_pew_on_pew_plur-1 == 0 ~ "Democrat"),
+                                     levels = c("Democrat", "Republican"))
+            }
+            #evaluating the performance on all pew data
+            #for two way this means all those Other will be wrong automatically
+            sum(mod_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out, 
+                                            as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: Pew on Pew (All Data)\n")
+            print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
+            
+            ####### PRED ON CCES ######
+            ### 3. PEW on CCES
+            mod_pew_on_cces = predict(xgb_pew, cces_matrix_all, reshape=T)
+            mod_pew_on_cces_plur <- apply(mod_pew_on_cces,1, which.max)
+            #need to run xgb cces first for this to work (out_int definted)
+            #sum(mod_pew_on_cces_plur -1 == out_int)/length(out_int)
+            
+            if(three_way) {
+                mod_pew_on_cces_out <- factor(case_when(mod_pew_on_cces_plur-1 == 2 ~
+                                                     "Republican",
+                                             mod_pew_on_cces_plur-1 == 1 ~ "Other", 
+                                             mod_pew_on_cces_plur-1 == 0 ~ "Democrat"), 
+                                              levels = c("Democrat", "Other", "Republican"))
+            } else {
+                mod_pew_on_cces_out <- case_when(mod_pew_on_cces_plur-1 == 1 ~
+                                                     "Republican",
+                                         mod_pew_on_cces_plur-1 == 0 ~ "Democrat")
+            }
+            #to get these perecents just use full otucome where NAs are cosidered other
+            outcome <- cces$recode_vote_2016
+            outcome[is.na(outcome)] <- "Other"
+            sum(mod_pew_on_cces_out == outcome)/length(outcome)
+            conf_pew_on_cces <- confusionMatrix(as.factor(mod_pew_on_cces_out),
+                                                as.factor(outcome))
+            cat("Confusion Matrix: Pew on CCES (All Data)\n")
+            print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
+            
+            
+            #### 4. CCES ON CCES
+            #(this could be done outside the function but it's nice to keep it all together for
+            #2 and 3 way keeping track)
+            ### CCES ON CCES
+            mod_cces_on_cces = predict(xgb_cces_mod, cces_matrix_all, reshape=T)
+            
+            mod_cces_on_cces_plur <- apply(mod_cces_on_cces,1, which.max)
+            # sum(mod_cces_on_cces_plur -1 == out_int)/length(out_int)
+            if(three_way) {
+               mod_cces_on_cces_out <- factor(case_when(mod_cces_on_cces_plur-1 == 2 ~ 
+                                                            "Republican",
+                                              mod_cces_on_cces_plur-1 == 1 ~ "Other", 
+                                              mod_cces_on_cces_plur-1 == 0 ~ "Democrat"), 
+                                              levels = c("Democrat", "Other", "Republican"))
+            } else {
+                 mod_cces_on_cces_out <- case_when(mod_cces_on_cces_plur-1 == 1 ~  "Republican",
+                                              mod_cces_on_cces_plur-1 == 0 ~ "Democrat")
+            }
+           
+            sum(mod_cces_on_cces_out == outcome)/length(outcome)
+            conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
+                                                 as.factor(outcome))
+            cat("Confusion Matrix: CCES on CCES (All Data)\n")
+            print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
+        
+            
+            ################### POST PROCESS #######################
+            #max prob is
+            #xgb_cces_on_pew_plur <- apply(xgb_cces_on_pew,1, max)
+            #mod_pew_on_pew_plur <- apply(mod_pew_on_pew,1, max)
+            
+            if(three_way) {
+                #prob rep
+                mod_cces_on_pew_pR <- mod_cces_on_pew[,3]
+                mod_pew_on_pew_pR <- mod_pew_on_pew[,3]
+                
+                #prob dem
+                mod_cces_on_pew_pD <- mod_cces_on_pew[,1]
+                mod_pew_on_pew_pD <-  mod_pew_on_pew[,1]
+                
+                #prob other
+                mod_cces_on_pew_pO <- mod_cces_on_pew[,2]
+                mod_pew_on_pew_pO <-  mod_pew_on_pew[,2]
+            } else {
+                #prob rep
+                mod_cces_on_pew_pR <- mod_cces_on_pew[,2]
+                mod_pew_on_pew_pR <- mod_pew_on_pew[,2]
+        
+                #prob dem
+                mod_cces_on_pew_pD <- mod_cces_on_pew[,1]
+                mod_pew_on_pew_pD <-  mod_pew_on_pew[,1]
+            }
+            
+            #individual level margins
+            margin_cces_on_pew = (mod_cces_on_pew_pD - mod_cces_on_pew_pR)/ 
+                (mod_cces_on_pew_pR + mod_cces_on_pew_pD)
+            margin_pew_on_pew = (mod_pew_on_pew_pD- mod_pew_on_pew_pR)/
+                (mod_pew_on_pew_pR + mod_pew_on_pew_pD)
+            #indiv level diff
+            diff_cces_on_pew = mod_cces_on_pew_pD - mod_cces_on_pew_pR
+            diff_pew_on_pew = mod_pew_on_pew_pD- mod_pew_on_pew_pR
+            
+            pew_xgb <- cbind(pew, 
+                             mod_cces_on_pew_pR,
+                             mod_pew_on_pew_pR,
+                             mod_cces_on_pew_pD,
+                             mod_pew_on_pew_pD,
+                             margin_cces_on_pew,
+                             margin_pew_on_pew,
+                             diff_cces_on_pew,
+                             diff_pew_on_pew) 
+         
+            if(three_way) {
+                pew_mod <- cbind(pew_xgb, 
+                                 mod_cces_on_pew_pO, mod_pew_on_pew_pO)
+            }
+            
+            ### CCES:
+            
+            #max prob is
+            mod_cces_on_cces_plur <- apply(mod_cces_on_cces,1, max)
+            mod_pew_on_cces_plur <- apply(mod_pew_on_cces,1, max)
+            
+            if(three_way) {
+                #prob rep
+                mod_cces_on_cces_pR <- mod_cces_on_cces[,3]
+                mod_pew_on_cces_pR <- mod_pew_on_cces[,3]
+                
+                #prob dem
+                mod_cces_on_cces_pD <- mod_cces_on_cces[,1]
+                mod_pew_on_cces_pD <-  mod_pew_on_cces[,1]
+                
+                #prob dem
+                mod_cces_on_cces_pO <- mod_cces_on_cces[,2]
+                mod_pew_on_cces_pO <-  mod_pew_on_cces[,2]
+                
+            } else {
+                #prob rep
+                mod_cces_on_cces_pR <- mod_cces_on_cces[,2]
+                mod_pew_on_cces_pR <- mod_pew_on_cces[,2]
+                
+                #prob dem
+                mod_cces_on_cces_pD <- mod_cces_on_cces[,1]
+                mod_pew_on_cces_pD <-  mod_pew_on_cces[,1]
+            }
+            
+            margin_cces_on_cces = (mod_cces_on_cces_pD - mod_cces_on_cces_pR)/ 
+                (mod_cces_on_cces_pR + mod_cces_on_cces_pD)
+            margin_pew_on_cces = (mod_pew_on_cces_pD - mod_pew_on_cces_pR)/ 
+                (mod_pew_on_cces_pR + mod_pew_on_cces_pD)
+           
+            diff_cces_on_cces = mod_cces_on_cces_pD - mod_cces_on_cces_pR
+            diff_pew_on_cces = mod_pew_on_cces_pD - mod_pew_on_cces_pR
+            
+            cces_xgb <- cbind(cces, 
+                              mod_cces_on_cces_out,
+                              mod_pew_on_cces_out,
+                              mod_cces_on_cces_plur,
+                              mod_pew_on_cces_plur,
+                              mod_cces_on_cces_pD,
+                              mod_pew_on_cces_pD,
+                              mod_cces_on_cces_pR,
+                              mod_pew_on_cces_pR,
+                              margin_cces_on_cces,
+                              margin_pew_on_cces,
+                              diff_cces_on_cces,
+                              diff_pew_on_cces)
+            if(three_way) {
+                cces_xgb <- cbind(cces_xgb, mod_cces_on_cces_pO, mod_pew_on_cces_pO)
+            }
+    } else if(!is.null(lasso_cces_mod)) {
+        warning("drop_NAs must be true with lasso model", .immediate = T)
+        cces <- cces %>% filter(!is.na(recode_vote_2016))
+         ## Drop the "Other" responses so we can model two-way vote share 
+        stack_data <- data.frame(bind_rows(pew, cces), 
+                                 S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
+        
+        #base model is the selection model used in the sims
+        C_model = as.formula(~recode_female:recode_pid_3way + 
+                              recode_age:recode_pid_3way +
+                              recode_race:recode_region:recode_educ_wh_3way:recode_pid_3way + 
+                                 recode_midwest_wh_edu + recode_race_educ_reg +
+                                 recode_age_bucket + recode_educ +
+                                 recode_income_5way + recode_relig_6way + recode_born + 
+                                 recode_attndch_4way +
+                              recode_age +
+                              I(recode_age^2))
+        
+        mod <- model.matrix(C_model, data = stack_data)
+        ncol(mod)
+        # ## Remove columns where Pew missing strata
+        mod <- mod[, apply(mod[stack_data$S == 1, ], 2, sum) != 0]
+        ## Remove columns where CCES missing Strata
+        mod <- mod[, apply(mod[stack_data$S == 0, ], 2, sum) != 0]
+        #the dropped columns appear to be the same in pew and cces... interesting
+        #wtf why do we drop mroe columns in selection mode than C model when its the same??
+        ncol(mod)
+        
+        if(!three_way) {
+            
+            pew <- pew %>% mutate(recode_vote_2016_binary =
+                            as.numeric(recode_vote_2016 == "Republican"))
+            
+            
+          ##### Pew model
+            lasso_lambda_pew <- cv.glmnet(x= mod[stack_data$recode_vote_2016 != "Other" & 
+                                         stack_data$S == 1,-1], 
+                          y = pew$recode_vote_2016_binary[pew$recode_vote_2016 != "Other"],
+                          alpha = 1,
+                          family = "binomial",
+                          intercept = TRUE)
+            
+            lasso_vote_pew <- glmnet(x= mod[stack_data$recode_vote_2016 != "Other" & 
+                                         stack_data$S == 1, -1], 
+                                     y = pew$recode_vote_2016_binary[pew$recode_vote_2016 != "Other"],
+                        alpha = 1,
+                        lambda = lasso_lambda_pew$lambda.1se,
+                        family = "binomial",
+                        intercept = TRUE)
 
-    cces_matrix_all = cces_matrix_all[,-1]
 
+   
+            ######### Predict on PEW
+            lasso_cces_on_pew = predict(lasso_cces_mod,
+                      s = lasso_lambda_cces$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==1,-1])
+            
+            lasso_pew_on_pew = predict(lasso_vote_pew,
+                      s = lasso_lambda_pew$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==1,-1])
+            
+            
+            
+            ##### Predict on CCES
+            lasso_cces_on_cces = predict(lasso_cces_mod,
+                      s = lasso_lambda_cces$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==0,-1])
+            
+            lasso_pew_on_cces = predict(lasso_vote_pew,
+                      s = lasso_lambda_pew$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==0,-1])
+            
+            ############### Model Performance
+            #1. cces on pew
+            mod_cces_on_pew_out <- case_when(lasso_cces_on_pew > .5 ~  "Republican",
+                                             TRUE ~ "Democrat")
+            
+            sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew <- confusionMatrix(as.factor(mod_cces_on_pew_out), 
+                                        as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: CCES on Pew (All Data)\n")
+            print(t(t(conf_pew$table)/colSums(conf_pew$table)))
+            
+            ### 2. PEW ON PEW
+            mod_pew_on_pew_out <- case_when(lasso_pew_on_pew > .5 ~  "Republican",
+                                             TRUE ~ "Democrat")
+            sum(mod_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out, 
+                                            as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: Pew on Pew (All Data)\n")
+            print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
+            
+            ####### PRED ON CCES ######
+            ### 3. PEW on CCES
+            mod_pew_on_cces_out <- case_when(lasso_pew_on_cces > .5 ~  "Republican",
+                                             TRUE ~ "Democrat")
+            
+            outcome <- cces$recode_vote_2016
+            #got rid of this in the lasso case
+            #outcome[is.na(outcome)] <- "Other"
+            sum(mod_pew_on_cces_out == outcome)/length(outcome)
+            conf_pew_on_cces <- confusionMatrix(as.factor(mod_pew_on_cces_out),
+                                                as.factor(outcome))
+            cat("Confusion Matrix: Pew on CCES (All Data)\n")
+            print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
+            
+            
+            #### 4. CCES ON CCES
+            mod_cces_on_cces_out <- case_when(lasso_cces_on_cces > .5 ~  "Republican",
+                                             TRUE ~ "Democrat")
+            sum(mod_cces_on_cces_out == outcome)/length(outcome)
+            conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
+                                                 as.factor(outcome))
+            cat("Confusion Matrix: CCES on CCES (All Data)\n")
+            print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
+            
+            
+            #########
+            # ## Add simulated results to CCES data
+            cces_xgb <- cces %>%
+              mutate(mod_cces_on_cces_pD = 1- lasso_cces_on_cces, 
+                     mod_cces_on_cces_pR = lasso_cces_on_cces, 
+                     mod_pew_on_cces_pD = 1- lasso_pew_on_cces,
+                     mod_pew_on_cces_pR = lasso_pew_on_cces) %>% 
+                mutate(diff_cces_on_cces = mod_cces_on_cces_pD -
+                           mod_cces_on_cces_pR, 
+                       diff_pew_on_cces = mod_pew_on_cces_pD -
+                           mod_pew_on_cces_pR, 
+                       margin_cces_on_cces = (mod_cces_on_cces_pD -
+                                                        mod_cces_on_cces_pR)/( 
+                                                            mod_cces_on_cces_pD +
+                                                                mod_cces_on_cces_pR),
+                       margin_pew_on_cces = (mod_pew_on_cces_pD -
+                                                        mod_pew_on_cces_pR)/( 
+                                                            mod_pew_on_cces_pD +
+                                                                mod_pew_on_cces_pR)
+                       )
+            pew_xgb <- pew %>%
+              mutate(mod_cces_on_pew_pD = 1- lasso_cces_on_pew, 
+                     mod_cces_on_pew_pR = lasso_cces_on_pew, 
+                     mod_pew_on_pew_pD = 1- lasso_pew_on_pew,
+                     mod_pew_on_pew_pR = lasso_pew_on_pew) %>% 
+                mutate(diff_cces_on_pew = mod_cces_on_pew_pD -
+                           mod_cces_on_pew_pR, 
+                       diff_pew_on_pew = mod_pew_on_pew_pD -
+                           mod_pew_on_pew_pR, 
+                       margin_cces_on_pew = (mod_cces_on_pew_pD -
+                                                        mod_cces_on_pew_pR)/( 
+                                                            mod_cces_on_pew_pD +
+                                                                mod_cces_on_pew_pR),
+                       margin_pew_on_pew = (mod_pew_on_pew_pD -
+                                                        mod_pew_on_pew_pR)/( 
+                                                            mod_pew_on_pew_pD +
+                                                                mod_pew_on_pew_pR)
+                       )
+        } else {
+            ###################### LASSO ####################
+            #### pew model 
+            lasso_lambda_pew <- cv.glmnet(x= mod[stack_data$S == 1,-1], 
+                                      y = pew$recode_vote_2016,
+                                      alpha = 1,
+                                      family = "multinomial",
+                                      intercept = TRUE)
+            
+            lasso_vote_pew <- glmnet(x= mod[stack_data$S == 1, -1], 
+                                 y = pew$recode_vote_2016,
+                                    alpha = 1,
+                                    lambda = lasso_lambda_pew$lambda.1se,
+                                    family = "multinomial",
+                                    intercept = TRUE)
+            
+           ######### Predict on PEW
+            lasso_cces_on_pew = predict(lasso_cces_mod,
+                      s = lasso_lambda_cces$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==1,-1])
+            
+            lasso_pew_on_pew = predict(lasso_vote_pew,
+                      s = lasso_lambda_pew$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==1,-1])
+            
+            
+            
+            ##### Predict on CCES
+            lasso_cces_on_cces = predict(lasso_cces_mod,
+                      s = lasso_lambda_cces$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==0,-1])
+            
+            lasso_pew_on_cces = predict(lasso_vote_pew,
+                      s = lasso_lambda_pew$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data$S==0,-1])
+            
+            ######## Model performance
+            mod_cces_on_pew_plur <- apply(lasso_cces_on_pew,1, which.max)
+            pew_out_int=  as.integer(as.factor(pew$recode_vote_2016))
+            sum(mod_cces_on_pew_plur == pew_out_int)/length(pew_out_int)
+            
+            mod_cces_on_pew_out <- case_when(mod_cces_on_pew_plur -1== 2 ~ 
+                                              "Republican",
+                                     mod_cces_on_pew_plur-1 == 1 ~ "Other", 
+                                     mod_cces_on_pew_plur-1 == 0 ~ "Democrat")
+        
+            
+            sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew <- confusionMatrix(as.factor(mod_cces_on_pew_out), 
+                                        as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: CCES on Pew (All Data)\n")
+            print(t(t(conf_pew$table)/colSums(conf_pew$table)))
+            
+            ### 2. PEW ON PEW
+            mod_pew_on_pew_plur <- apply(lasso_pew_on_pew,1, which.max)
+            mod_pew_on_pew_out <- factor(case_when(mod_pew_on_pew_plur-1 == 2 ~
+                                                       "Republican",
+                                               mod_pew_on_pew_plur-1 == 1 ~ "Other", 
+                                               mod_pew_on_pew_plur-1 == 0 ~ "Democrat"),
+                                     levels = c("Democrat", "Other", "Republican"))
+       
+            sum(mod_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+            conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out, 
+                                            as.factor(pew$recode_vote_2016))
+            cat("Confusion Matrix: Pew on Pew (All Data)\n")
+            print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
+            
+            ####### PRED ON CCES ######
+            ### 3. PEW on CCES
+            mod_pew_on_cces_plur <- apply(lasso_pew_on_cces,1, which.max)
+            
+            mod_pew_on_cces_out <- factor(case_when(mod_pew_on_cces_plur-1 == 2 ~
+                                                     "Republican",
+                                             mod_pew_on_cces_plur-1 == 1 ~ "Other", 
+                                             mod_pew_on_cces_plur-1 == 0 ~ "Democrat"), 
+                                              levels = c("Democrat", "Other", "Republican"))
+            
+            outcome <- cces$recode_vote_2016
+            #outcome[is.na(outcome)] <- "Other"
+            sum(mod_pew_on_cces_out == outcome)/length(outcome)
+            conf_pew_on_cces <- confusionMatrix(as.factor(mod_pew_on_cces_out),
+                                                as.factor(outcome))
+            cat("Confusion Matrix: Pew on CCES (All Data)\n")
+            print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
+            
+            
+            #### 4. CCES ON CCES
+            mod_cces_on_cces_plur <- apply(lasso_cces_on_cces,1, which.max)
+            mod_cces_on_cces_out <- factor(case_when(mod_cces_on_cces_plur-1 == 2 ~ 
+                                                            "Republican",
+                                              mod_cces_on_cces_plur-1 == 1 ~ "Other", 
+                                              mod_cces_on_cces_plur-1 == 0 ~ "Democrat"),
+                                           levels = c("Democrat", "Other", "Republican"))
+            sum(mod_cces_on_cces_out == outcome)/length(outcome)
+            conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
+                                                 as.factor(outcome))
+            cat("Confusion Matrix: CCES on CCES (All Data)\n")
+            print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
+            
 
-    
-    
-    
-    ######## PRED ON PEW #######
-    ### 1. CCES ON PEW
-    xgb_cces_on_pew = predict(xgb_cces_mod, pew_matrix_all, reshape=T)
-    xgb_cces_on_pew_plur <- apply(xgb_cces_on_pew,1, which.max)
-    sum(xgb_cces_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
-    #same thing just with characters to make confusion matrix easier to read
-    if(three_way) {
-         xgb_cces_on_pew_out <- case_when(xgb_cces_on_pew_plur-1 == 2 ~  "Republican",
-                                     xgb_cces_on_pew_plur-1 == 1 ~ "Other", 
-                                     xgb_cces_on_pew_plur-1 == 0 ~ "Democrat")
+            #########
+            # ## Add simulated results to CCES data
+            cces_xgb <- cces %>%
+              mutate(mod_cces_on_cces_pD = lasso_cces_on_cces[,"Democrat",], 
+                      mod_cces_on_cces_pR = lasso_cces_on_cces[,"Republican",],
+                     mod_pew_on_cces_pD = lasso_pew_on_cces[,"Democrat",],
+                     mod_pew_on_cces_pR = lasso_pew_on_cces[,"Republican",]) %>% 
+                mutate(diff_cces_on_cces = mod_cces_on_cces_pD -
+                           mod_cces_on_cces_pR, 
+                       diff_pew_on_cces = mod_pew_on_cces_pD -
+                           mod_pew_on_cces_pR, 
+                       margin_cces_on_cces = (mod_cces_on_cces_pD -
+                                                        mod_cces_on_cces_pR)/( 
+                                                            mod_cces_on_cces_pD +
+                                                                mod_cces_on_cces_pR),
+                       margin_pew_on_cces = (mod_pew_on_cces_pD -
+                                                        mod_pew_on_cces_pR)/( 
+                                                            mod_pew_on_cces_pD +
+                                                                mod_pew_on_cces_pR)
+                       )
+            pew_xgb <- pew %>%
+              mutate(mod_cces_on_pew_pD = lasso_cces_on_pew[,"Democrat",], 
+                     mod_cces_on_pew_pR = lasso_cces_on_pew[,"Republican",], 
+                     mod_pew_on_pew_pD = lasso_pew_on_pew[,"Democrat",],
+                     mod_pew_on_pew_pR = lasso_pew_on_pew[,"Republican",]) %>% 
+                mutate(diff_cces_on_pew = mod_cces_on_pew_pD -
+                           mod_cces_on_pew_pR, 
+                       diff_pew_on_pew = mod_pew_on_pew_pD -
+                           mod_pew_on_pew_pR, 
+                       margin_cces_on_pew = (mod_cces_on_pew_pD -
+                                                        mod_cces_on_pew_pR)/( 
+                                                            mod_cces_on_pew_pD +
+                                                                mod_cces_on_pew_pR),
+                       margin_pew_on_pew = (mod_pew_on_pew_pD -
+                                                        mod_pew_on_pew_pR)/( 
+                                                            mod_pew_on_pew_pD +
+                                                                mod_pew_on_pew_pR)
+                       )
+        }
     } else {
-        xgb_cces_on_pew_out <- case_when(xgb_cces_on_pew_plur-1 == 1 ~  "Republican",
-                                 xgb_cces_on_pew_plur-1 == 0 ~ "Democrat")
-    }
-    #includes predictions on others forced to be binary in two-way
-    #if want only on modeled data use pew_model_dat (makes no difference for three way)
-    sum(xgb_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
-    conf_pew <- confusionMatrix(as.factor(xgb_cces_on_pew_out), 
-                                as.factor(pew$recode_vote_2016))
-    cat("Confusion Matrix: CCES on Pew (All Data)\n")
-    print(t(t(conf_pew$table)/colSums(conf_pew$table)))
-    
-    ### 2. PEW ON PEW
-    #with pew data, predict pew modeled outcome
-    xgb_pew_on_pew = predict(xgb_pew, pew_matrix_all, reshape=T)
-    xgb_pew_on_pew_plur <- apply(xgb_pew_on_pew,1, which.max)
-    #this only works for three waty for two way need to adjust length of xgb_pew_on_pew
-    #sum(xgb_pew_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
-    
-    if(three_way) {
-        xgb_pew_on_pew_out <- factor(case_when(xgb_pew_on_pew_plur-1 == 2 ~
-                                                   "Republican",
-                                           xgb_pew_on_pew_plur-1 == 1 ~ "Other", 
-                                           xgb_pew_on_pew_plur-1 == 0 ~ "Democrat"),
-                                 levels = c("Democrat", "Other", "Republican"))
-    } else {
-        xgb_pew_on_pew_out <- factor(case_when(xgb_pew_on_pew_plur-1 == 1 ~  "Republican",
-                                       xgb_pew_on_pew_plur-1 == 0 ~ "Democrat"),
-                             levels = c("Democrat", "Republican"))
-    }
-    #evaluating the performance on all pew data
-    #for two way this means all those Other will be wrong automatically
-    sum(xgb_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
-    conf_pew_pew <- confusionMatrix(xgb_pew_on_pew_out, 
-                                    as.factor(pew$recode_vote_2016))
-    cat("Confusion Matrix: Pew on Pew (All Data)\n")
-    print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
-    
-    ####### PRED ON CCES ######
-    ### 3. PEW on CCES
-    xgb_pew_on_cces = predict(xgb_pew, cces_matrix_all, reshape=T)
-    xgb_pew_on_cces_plur <- apply(xgb_pew_on_cces,1, which.max)
-    #need to run xgb cces first for this to work (out_int definted)
-    #sum(xgb_pew_on_cces_plur -1 == out_int)/length(out_int)
-    
-    if(three_way) {
-        xgb_pew_on_cces_out <- factor(case_when(xgb_pew_on_cces_plur-1 == 2 ~
-                                             "Republican",
-                                     xgb_pew_on_cces_plur-1 == 1 ~ "Other", 
-                                     xgb_pew_on_cces_plur-1 == 0 ~ "Democrat"), 
-                                      levels = c("Democrat", "Other", "Republican"))
-    } else {
-        xgb_pew_on_cces_out <- case_when(xgb_pew_on_cces_plur-1 == 1 ~
-                                             "Republican",
-                                 xgb_pew_on_cces_plur-1 == 0 ~ "Democrat")
-    }
-    #to get these perecents just use full otucome where NAs are cosidered other
-    outcome <- cces$recode_vote_2016
-    outcome[is.na(outcome)] <- "Other"
-    sum(xgb_pew_on_cces_out == outcome)/length(outcome)
-    conf_pew_on_cces <- confusionMatrix(as.factor(xgb_pew_on_cces_out),
-                                        as.factor(outcome))
-    cat("Confusion Matrix: Pew on CCES (All Data)\n")
-    print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
-    
-    
-    #### 4. CCES ON CCES
-    #(this could be done outside the function but it's nice to keep it all together for
-    #2 and 3 way keeping track)
-    ### CCES ON CCES
-    xgb_cces_on_cces = predict(xgb_cces_mod, cces_matrix_all, reshape=T)
-    
-    xgb_cces_on_cces_plur <- apply(xgb_cces_on_cces,1, which.max)
-    # sum(xgb_cces_on_cces_plur -1 == out_int)/length(out_int)
-    if(three_way) {
-       xgb_cces_on_cces_out <- factor(case_when(xgb_cces_on_cces_plur-1 == 2 ~ 
-                                                    "Republican",
-                                      xgb_cces_on_cces_plur-1 == 1 ~ "Other", 
-                                      xgb_cces_on_cces_plur-1 == 0 ~ "Democrat"), 
-                                      levels = c("Democrat", "Other", "Republican"))
-    } else {
-         xgb_cces_on_cces_out <- case_when(xgb_cces_on_cces_plur-1 == 1 ~  "Republican",
-                                      xgb_cces_on_cces_plur-1 == 0 ~ "Democrat")
+        stop("missing classification model")
     }
    
-    sum(xgb_cces_on_cces_out == outcome)/length(outcome)
-    conf_cces_on_cces <- confusionMatrix(as.factor(xgb_cces_on_cces_out),
-                                         as.factor(outcome))
-    cat("Confusion Matrix: CCES on CCES (All Data)\n")
-    print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
-
-    
-    ################### POST PROCESS #######################
-    #max prob is
-    xgb_cces_on_pew_plur <- apply(xgb_cces_on_pew,1, max)
-    xgb_pew_on_pew_plur <- apply(xgb_pew_on_pew,1, max)
-    
-    if(three_way) {
-        #prob rep
-        xgb_cces_on_pew_pR <- xgb_cces_on_pew[,3]
-        xgb_pew_on_pew_pR <- xgb_pew_on_pew[,3]
-        
-        #prob dem
-        xgb_cces_on_pew_pD <- xgb_cces_on_pew[,1]
-        xgb_pew_on_pew_pD <-  xgb_pew_on_pew[,1]
-        
-        #prob other
-        xgb_cces_on_pew_pO <- xgb_cces_on_pew[,2]
-        xgb_pew_on_pew_pO <-  xgb_pew_on_pew[,2]
-    } else {
-        #prob rep
-        xgb_cces_on_pew_pR <- xgb_cces_on_pew[,2]
-        xgb_pew_on_pew_pR <- xgb_pew_on_pew[,2]
-
-        #prob dem
-        xgb_cces_on_pew_pD <- xgb_cces_on_pew[,1]
-        xgb_pew_on_pew_pD <-  xgb_pew_on_pew[,1]
-    }
-    
-    #individual level margins
-    margin_cces_on_pew = (xgb_cces_on_pew_pD - xgb_cces_on_pew_pR)/ 
-        (xgb_cces_on_pew_pR + xgb_cces_on_pew_pD)
-    margin_pew_on_pew = (xgb_pew_on_pew_pD- xgb_pew_on_pew_pR)/
-        (xgb_pew_on_pew_pR + xgb_pew_on_pew_pD)
-    #indiv level diff
-    diff_cces_on_pew = xgb_cces_on_pew_pD - xgb_cces_on_pew_pR
-    diff_pew_on_pew = xgb_pew_on_pew_pD- xgb_pew_on_pew_pR
-    
-    pew_xgb <- cbind(pew, 
-                     xgb_cces_on_pew_out, 
-                     xgb_pew_on_pew_out,
-                     xgb_cces_on_pew_plur,
-                     xgb_pew_on_pew_plur,
-                     xgb_cces_on_pew_pR,
-                     xgb_pew_on_pew_pR,
-                     xgb_cces_on_pew_pD,
-                     xgb_pew_on_pew_pD,
-                     margin_cces_on_pew,
-                     margin_pew_on_pew,
-                     diff_cces_on_pew,
-                     diff_pew_on_pew) 
- 
-    if(three_way) {
-        pew_xgb <- cbind(pew_xgb, 
-                         xgb_cces_on_pew_pO, xgb_pew_on_pew_pO)
-    }
-    
     pew_srs_xgb <- svydesign(ids = ~1, data = pew_xgb)
     pew_w_srs <-  svydesign(ids = ~1, weights = ~weight, data = pew_xgb)
-    
-    ### CCES:
-    
-    #max prob is
-    xgb_cces_on_cces_plur <- apply(xgb_cces_on_cces,1, max)
-    xgb_pew_on_cces_plur <- apply(xgb_pew_on_cces,1, max)
-    
-    if(three_way) {
-        #prob rep
-        xgb_cces_on_cces_pR <- xgb_cces_on_cces[,3]
-        xgb_pew_on_cces_pR <- xgb_pew_on_cces[,3]
-        
-        #prob dem
-        xgb_cces_on_cces_pD <- xgb_cces_on_cces[,1]
-        xgb_pew_on_cces_pD <-  xgb_pew_on_cces[,1]
-        
-        #prob dem
-        xgb_cces_on_cces_pO <- xgb_cces_on_cces[,2]
-        xgb_pew_on_cces_pO <-  xgb_pew_on_cces[,2]
-        
-    } else {
-        #prob rep
-        xgb_cces_on_cces_pR <- xgb_cces_on_cces[,2]
-        xgb_pew_on_cces_pR <- xgb_pew_on_cces[,2]
-        
-        #prob dem
-        xgb_cces_on_cces_pD <- xgb_cces_on_cces[,1]
-        xgb_pew_on_cces_pD <-  xgb_pew_on_cces[,1]
-    }
-    
-    margin_cces_on_cces = (xgb_cces_on_cces_pD - xgb_cces_on_cces_pR)/ 
-        (xgb_cces_on_cces_pR + xgb_cces_on_cces_pD)
-    margin_pew_on_cces = (xgb_pew_on_cces_pD - xgb_pew_on_cces_pR)/ 
-        (xgb_pew_on_cces_pR + xgb_pew_on_cces_pD)
-   
-    diff_cces_on_cces = xgb_cces_on_cces_pD - xgb_cces_on_cces_pR
-    diff_pew_on_cces = xgb_pew_on_cces_pD - xgb_pew_on_cces_pR
-    
-    cces_xgb <- cbind(cces, 
-                      xgb_cces_on_cces_out,
-                      xgb_pew_on_cces_out,
-                      xgb_cces_on_cces_plur,
-                      xgb_pew_on_cces_plur,
-                      xgb_cces_on_cces_pD,
-                      xgb_pew_on_cces_pD,
-                      xgb_cces_on_cces_pR,
-                      xgb_pew_on_cces_pR,
-                      margin_cces_on_cces,
-                      margin_pew_on_cces,
-                      diff_cces_on_cces,
-                      diff_pew_on_cces)
-    if(three_way) {
-        cces_xgb <- cbind(cces_xgb, xgb_cces_on_cces_pO, xgb_pew_on_cces_pO)
-    }
     
     cces_awt_xgb <- svydesign(ids = ~1, weights = ~commonweight_vv_post, 
                               data = cces_xgb)
@@ -1749,7 +2116,7 @@ pew_out <- function(PRE = TRUE,
             mutate(source_name = factor(source, 
                                         levels = as.character(df$source) ,
                                         labels = c("CCES Orig",
-                                                   if(!real){"CCES XGB"},
+                                                   if(!real){"CCES Modeled"},
                                                    "Pew Unweighted", 
                                                    "Pew Weights",
                                                    "Raking Demos NO Education", 
@@ -1762,9 +2129,9 @@ pew_out <- function(PRE = TRUE,
                                                    if(cat_kernel) {"Kpop b=mean"},
                                                     if(cat_kernel) {"Kpop Conv b=mean"},
                                                     if(cat_kernel) {"Kpop MF b=mean"},
-                                                   if(cat_kernel) {"Kpop b=max(var(K))*2"},
-                                            if(cat_kernel) {"Kpop Conv b=max(var(K))*2"},
-                                            if(cat_kernel) {"Kpop MF b=max(var(K))*2"},
+                                                   if(cat_kernel) {"Kpop b=argmax var K*2"},
+                                            if(cat_kernel) {"Kpop Conv b=argmax var(K)*2"},
+                                            if(cat_kernel) {"Kpop MF b=argmax var(K)*2"},
                                                    if(bigB&!cat_kernel) {"Kpop b=24576x"},
                                                     if(bigB&!cat_kernel) {"Kpop b=16384x"},
                                                     if(bigB&!cat_kernel) {"Kpop b=8192x"},
@@ -1861,8 +2228,8 @@ pew_out <- function(PRE = TRUE,
                                            smallB = smallB,
                                           cat_kernel = cat_kernel)
     comp_df_pR <- df_build("recode_vote_2016", 
-                           "xgb_cces_on_cces_pR",
-                           "xgb_cces_on_pew_pR",
+                           "mod_cces_on_cces_pR",
+                           "mod_cces_on_pew_pR",
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB,
                             smallB = smallB,
@@ -1871,8 +2238,8 @@ pew_out <- function(PRE = TRUE,
 )
     
     comp_df_pR_pewoutcome <- df_build("recode_vote_2016", 
-                           "xgb_pew_on_cces_pR",
-                           "xgb_pew_on_pew_pR",
+                           "mod_pew_on_cces_pR",
+                           "mod_pew_on_pew_pR",
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB,
                             smallB = smallB,
@@ -1880,16 +2247,16 @@ pew_out <- function(PRE = TRUE,
                            vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 ))
     
     comp_df_pD <- df_build("recode_vote_2016", 
-                           "xgb_cces_on_cces_pD",
-                           "xgb_cces_on_pew_pD",
+                           "mod_cces_on_cces_pD",
+                           "mod_cces_on_pew_pD",
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB, smallB = smallB,
                            cat_kernel = cat_kernel, 
                            vote_form = quote((recode_vote_2016Democrat +recode_vote_2016Democrat)/2 ))
         
     comp_df_pD_pewoutcome <- df_build("recode_vote_2016", 
-                           "xgb_pew_on_cces_pD",
-                           "xgb_pew_on_pew_pD",
+                           "mod_pew_on_cces_pD",
+                           "mod_pew_on_pew_pD",
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB, smallB = smallB,
                            cat_kernel = cat_kernel)
@@ -1915,8 +2282,6 @@ pew_out <- function(PRE = TRUE,
     
     
     ######## PLOT ESTIMATES: Pre-wave Indiv Average Margin ########
-
-    
     if(PRE) {
         pew_ver = "Pre-Wave"
     } else {
@@ -1948,6 +2313,11 @@ pew_out <- function(PRE = TRUE,
         NAs_lab = " No CCES NAs"
     } else {
         NAs_lab = " No CCES NAs"
+    }
+    if(!is.null(xgb_cces_mod)) {
+        mod_lab = "XGB Modeled"
+    } else {
+        mod_lab = "Lasso (lambda 1se) Modeled"
     }
     tol_label = paste0(" tol=",as.character(tolerance))
     maxit_label = paste0( "maxit=", as.character(maxit))
@@ -2027,6 +2397,11 @@ pew_out <- function(PRE = TRUE,
                 as.character((comp_df_diff %>% filter(b == b_mf) %>%
                      dplyr::select(source_name))[3,] %>% pull()))
     best_b
+    if(!best_b_plot) {
+        best_b <- c("Kpop b=argmax var",
+                    "Kpop Conv b=argmax var",
+                    "Kpop MF b=argmax var")
+    }
     
     comp_df_plot_real_margin <-
         ggplot() +
@@ -2149,7 +2524,7 @@ pew_out <- function(PRE = TRUE,
         geom_hline(yintercept = c(0, 
                                   if(popw) {natl_diff*100},
                                  if(popw) {comp_df_diff$est[comp_df_diff$source_name == "CCES Orig"]},
-                                  comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]),
+                                  comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]),
                    linetype = c("solid", 
                                 if(popw) {"dashed"}, if(popw) {"longdash"},
                                 "dashed"),
@@ -2165,7 +2540,7 @@ pew_out <- function(PRE = TRUE,
         theme(plot.title = element_text(hjust = 0.5)) +
         
         labs(x = NULL, y = "Estimated Modeled Vote Difference (95% CI)") +
-        ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled Mean Indiv Vote Diff p(D) - p(R)",
+        ggtitle(paste(pew_ver, "Pew on CCES",mod_lab,"Mean Indiv Vote Diff p(D) - p(R)",
                       out_lab,"modeled\n", NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
@@ -2181,26 +2556,26 @@ pew_out <- function(PRE = TRUE,
                                          })) +
         annotate(geom = "text", 
                  x =if(display_pew_mod) {nrow(comp_df_pR_merge)+0.55} else{nrow(comp_df_pR)+.55}, 
-                 y = if(popw) {natl_diff * 100} else {comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]},
+                 y = if(popw) {natl_diff * 100} else {comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
                  label = if(popw) {" True\n National\n Diff"} else {""},
                  hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
         annotate(geom = "text",
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.55} else{nrow(comp_df_pR)+.55},
-                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"],
-                 label = " CCES\n XGB Target",
+                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
                  color = "purple",
                  hjust = 0, angle = 90, size = 3) +
         annotate(geom = "text", 
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)-2.1} else{nrow(comp_df_pR)-2.1}, 
-                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else { comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"]},
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else { comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
                  label = if(popw){" Weighted\n CCES\n Target"} else {""},
                  color = "black",
                  hjust = 0, angle = -90, size = 3) +
         #for spacing
         annotate(geom = "text", 
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)+2.55} else{nrow(comp_df_pR)+2.55},
-                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES XGB"],
+                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
                  label = "",
                  color = "purple",
                  hjust = 0, angle = -90, size = 3) +
@@ -2232,7 +2607,7 @@ pew_out <- function(PRE = TRUE,
         geom_hline(yintercept = c(0, 
                                   if(popw) {natl_margin*100},
                                  if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]},
-                                  comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]),
+                                  comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]),
                    linetype = c("solid", 
                                 if(popw) {"dashed"}, if(popw) {"longdash"},
                                 "dashed"),
@@ -2248,7 +2623,7 @@ pew_out <- function(PRE = TRUE,
         theme(plot.title = element_text(hjust = 0.5)) +
         
         labs(x = NULL, y = "Estimated Modeled Vote Margin (95% CI)") +
-        ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled Mean Indiv Vote Margin",
+        ggtitle(paste(pew_ver, "Pew on CCES", mod_lab, "Mean Indiv Vote Margin",
                        out_lab,"modeled\n",NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
@@ -2264,26 +2639,26 @@ pew_out <- function(PRE = TRUE,
                                          })) +
          annotate(geom = "text", 
                   x = if(display_pew_mod){nrow(comp_df_margin_merge)+0.55} else {nrow(comp_df_margin)+0.55}, 
-                 y = if(popw) {natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]},
+                 y = if(popw) {natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]},
                  label = if(popw) {" True\n National\n Margin"} else {""},
                  hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
         annotate(geom = "text", 
                  x = if(display_pew_mod){ nrow(comp_df_pR_merge)+.55}else{ nrow(comp_df_pR)+.55},
-                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"],
-                 label = " CCES\n XGB Target",
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
                  color = "purple",
                  hjust = 0, angle = 90, size = 3) +
         annotate(geom = "text", 
                  x = if(display_pew_mod){ nrow(comp_df_pR_merge)-2.2} else { nrow(comp_df_pR)-2.2},
-                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else {comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"]}, 
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]}, 
                  label = if(popw) {" Weighted\n CCES\n Target"} else {""},
                  color = "black",
                  hjust = 0, angle = -90, size = 3) +
         #for spacing
         annotate(geom = "text",
                  x = if(display_pew_mod){nrow(comp_df_pR_merge)+1.75} else {nrow(comp_df_pR)+1.75},
-                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES XGB"],
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"],
                  label = "",
                  color = "purple",
                  hjust = 0, angle = -90, size = 3) +
@@ -2315,7 +2690,7 @@ pew_out <- function(PRE = TRUE,
         
         geom_hline(yintercept = c(if(popw) {natl_Rep*100},
                                   if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]},
-                                  comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]),
+                                  comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]),
                    linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
                                  "dashed"),
                    color = c(if(popw) {"gray60"},if(popw) {"black"},
@@ -2329,7 +2704,7 @@ pew_out <- function(PRE = TRUE,
         theme(plot.title = element_text(hjust = 0.5)) +
         
         labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
-        ggtitle(paste(pew_ver,"Pew on CCES XGB Modeled p(R)", out_lab,"modeled\n",
+        ggtitle(paste(pew_ver,"Pew on CCES", mod_lab,  "p(R)", out_lab,"modeled\n",
                       popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
@@ -2345,25 +2720,25 @@ pew_out <- function(PRE = TRUE,
                                          })) +
         annotate(geom = "text", 
                  x = if(display_pew_mod){nrow(comp_df_pR_merge)+.35} else {nrow(comp_df_pR)+.35}, 
-                 y = if(popw) {natl_Rep * 100} else {comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]},
+                 y = if(popw) {natl_Rep * 100} else {comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]},
                  label = if(popw) {" True\n National\n % Rep"} else {""},
                  hjust = 0, angle = +90,
                  color = "gray60", size = 3) +
         annotate(geom = "text",
                  x = if(display_pew_mod){nrow(comp_df_pR_merge)+1} else {nrow(comp_df_pR)+1},
-                 y = if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]} else {comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"]},
+                 y = if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]} else {comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]},
                  label = if(popw) {" Weighted\n CCES\n Target"} else {""},
                  hjust = 0, angle = -90, size = 3) +
         annotate(geom = "text",
                  x = if(display_pew_mod){nrow(comp_df_pR_merge)+.55} else {nrow(comp_df_pR)+.55},
-                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"],
-                 label = " CCES\n XGB Target",
+                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
                  color = "purple",
                  hjust = 0, angle = 90, size = 3) +
         #for spacing
         annotate(geom = "text", 
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.85} else {nrow(comp_df_pR)+1.75},
-                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES XGB"],
+                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"],
                  label = "",
                  color = "purple",
                  hjust = 0, angle = -90, size = 3) +
@@ -2397,7 +2772,7 @@ pew_out <- function(PRE = TRUE,
         
         geom_hline(yintercept = c(if(popw) {natl_Dem*100},
                                   if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]},
-                                  comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"]),
+                                  comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"]),
                    linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
                                  "dashed"),
                    color = c(if(popw) {"gray60"},if(popw) {"black"},
@@ -2411,7 +2786,7 @@ pew_out <- function(PRE = TRUE,
         theme(plot.title = element_text(hjust = 0.5)) +
         
         labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
-        ggtitle(paste(pew_ver, "Pew on CCES XGB Modeled p(D)", out_lab,"modeled\n",
+        ggtitle(paste(pew_ver, "Pew on CCES", mod_lab, "p(D)", out_lab,"modeled\n",
                       popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
@@ -2433,18 +2808,18 @@ pew_out <- function(PRE = TRUE,
                  color = "gray60", size = 3) +
         annotate(geom = "text", 
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1}else {nrow(comp_df_pR)+1},
-                 y = if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]} else { comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"]},
+                 y = if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]} else { comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"]},
                  label = if(popw) {" Weighted\n CCES\n Target"} else {""},
                  hjust = 0, angle = 90, size = 3) +
         annotate(geom = "text", 
                  x = if(display_pew_mod)  {nrow(comp_df_pR_merge)+.55}else {nrow(comp_df_pR)+.55},
-                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"],
-                 label = " CCES\n XGB Target",
+                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
                  color = "purple",
                  hjust = 0, angle = -90, size = 3) +
         annotate(geom = "text",
                  x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.65} else {nrow(comp_df_pR)+1.65},
-                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES XGB"],
+                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"],
                  label = "",
                  color = "purple",
                  hjust = 0, angle = 90, size = 3) +
@@ -2483,11 +2858,12 @@ pew_out <- function(PRE = TRUE,
 
 ## XGB CCES RUN - 3WAY
 
-```{r xgb_cces_3way}
+```{r xgb_cces_3way, eval  = F}
 outcome = cces$recode_vote_2016
 #if want to keep NA
 outcome[is.na(cces$recode_vote_2016)] = "Other"
 out_int <- as.integer(as.factor(outcome))-1
+
 
 #### 1: RUNNING XGB ON CCES 3WAY VOTE OUTCOME #####
 
@@ -2508,6 +2884,9 @@ cces_matrix_sparse <- cces %>%
     sparse.model.matrix(as.formula("~."), .)
 
 cces_matrix_sparse = cces_matrix_sparse[,-1]
+
+#test
+cces_matrix_sparse <- cces$common cces_matrix_sparse
 
 
 percent <- sample.int(nrow(cces), (nrow(cces)/10)*8)
@@ -2603,25 +2982,79 @@ t(t(conf_test$table)/colSums(conf_test$table))
 ```
 
 
+# LASSO CCES RUN - 3way
 
-# RUN 
+```{r lasso_cces}
+#for lasso drop the NAs
+cces <- cces %>%
+    filter(!is.na(recode_vote_2016))
+
+stack_data <- data.frame(bind_rows(pew, cces), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
+
+#base model is the selection model used in the sims
+C_model = as.formula(~recode_female:recode_pid_3way + 
+                      recode_age:recode_pid_3way +
+                      recode_race:recode_region:recode_educ_wh_3way:recode_pid_3way + 
+                         recode_midwest_wh_edu + recode_race_educ_reg +
+                         recode_age_bucket + recode_educ +
+                         recode_income_5way + recode_relig_6way + recode_born + 
+                         recode_attndch_4way +
+                      recode_age +
+                      I(recode_age^2))
+
+mod <- model.matrix(C_model, data = stack_data)
+ncol(mod)
+# ## Remove columns where Pew missing strata
+mod <- mod[, apply(mod[stack_data$S == 1, ], 2, sum) != 0]
+## Remove columns where CCES missing Strata
+mod <- mod[, apply(mod[stack_data$S == 0, ], 2, sum) != 0]
+#the dropped columns appear to be the same in pew and cces... interesting
+#wtf why do we drop mroe columns in selection mode than C model when its the same??
+ncol(mod)
+
+
+#lambda from 10 fold default CV
+lasso_lambda <- cv.glmnet(x= mod[stack_data$S == 0,-1], 
+                          y = cces$recode_vote_2016,
+                          alpha = 1,
+                          family = "multinomial",
+            weights = cces$commonweight_vv_post,
+                          intercept = TRUE)
+
+lasso_cces <- glmnet(x= mod[stack_data$S == 0, -1], 
+        y = cces$recode_vote_2016,
+                        alpha = 1,
+                        lambda = lasso_lambda$lambda.1se,
+                        family = "multinomial",
+        weights = cces$commonweight_vv_post,
+                        intercept = TRUE)
+```      
+
+
+
+
+
+# RUN Pew Funct
 
 ```{r}
 # internal testing
-# PRE = TRUE
-# age_buckets = FALSE
-# popw = TRUE
-# three_way = TRUE
-# noDNK_weights = TRUE
-# drop_ccesNAs = TRUE
-# xgb_cces_mod = xgb_cces
-# bigB = TRUE
-# smallB = TRUE
-# cat_kernel  = TRUE
-# display_pew_mod = FALSE
-# NEWpopw = FALSE
-# tolerance = 1e-06
-# maxit = 500
+PRE = TRUE
+age_buckets = FALSE
+popw = TRUE
+three_way = TRUE
+noDNK_weights = TRUE
+drop_ccesNAs = TRUE
+#xgb_cces_mod = xgb_cces
+lasso_cces_mod = lasso_cces
+lasso_lambda_cces = lasso_lambda
+bigB = TRUE
+smallB = TRUE
+cat_kernel  = TRUE
+display_pew_mod = FALSE
+NEWpopw = FALSE
+tolerance = 1e-06
+maxit = 500
 
 cat_kernel_NOpopw <- pew_out(PRE = TRUE,
                            age_buckets = FALSE, 
@@ -2641,7 +3074,7 @@ cat_kernel_NOpopw <- pew_out(PRE = TRUE,
 cat_kernel_NOpopw$plot_real_diff
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vdiff_allb.pdf", width = 14, height = 8)
 cat_kernel_NOpopw$plot_diff
-ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+#ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
 cat_kernel_NOpopw$plot_real_margin
 #ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/app_cat_real_vmargin_allb.pdf", width = 14, height = 8)
 cat_kernel_NOpopw$plot_margin
@@ -2705,7 +3138,7 @@ cat_kernel_popw <- pew_out(PRE = TRUE,
 
 cat_kernel_popw$plot_real_diff
 cat_kernel_popw$plot_diff
-ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/POPW_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+#ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/POPW_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
 cat_kernel_popw$plot_real_margin
 cat_kernel_popw$plot_margin
 cat_kernel_popw$plot_pR
@@ -2744,13 +3177,52 @@ View(compare_weighting)
 
 
 
+######################## Runs on popw + lasso
+cat_kernel_popw_lasso <- pew_out(PRE = TRUE,
+                           age_buckets = FALSE, 
+                           popw = TRUE,
+                           three_way = TRUE,
+                           drop_ccesNAs = TRUE, 
+                           noDNK_weights = TRUE, 
+                           lasso_cces_mod = lasso_cces,
+                           lasso_lambda_cces = lasso_lambda,
+                           best_b_plot = FALSE,
+                           bigB = TRUE, 
+                           smallB = TRUE,
+                           cat_kernel = TRUE, 
+                           NEWpopw = FALSE,
+                      display_pew_mod = FALSE)
+
+
+cat_kernel_popw_lasso$plot_diff
+#ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/lasso_popw_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+cat_kernel_popw_lasso$plot_pR
+cat_kernel_popw_lasso$plot_pD
+
+# cat_kernel_NEWpopw_lasso <- pew_out(PRE = TRUE,
+#                            age_buckets = FALSE, 
+#                            popw = TRUE,
+#                            three_way = TRUE,
+#                            drop_ccesNAs = TRUE, 
+#                            noDNK_weights = TRUE, 
+#                            lasso_cces_mod = lasso_cces,
+#                            lasso_lambda_cces = lasso_lambda,
+#                            best_b_plot = FALSE,
+#                            bigB = TRUE, 
+#                            smallB = TRUE,
+#                            cat_kernel = TRUE, 
+#                            NEWpopw = TRUE,
+#                       display_pew_mod = FALSE)
+# 
+# cat_kernel_NEWpopw_lasso$plot_diff
+
 ```
 
 
 
 
 
-# Eval Margins
+# Eval Margins Function
 
 ```{r margins}
 ########## Margins Function #############
@@ -2810,66 +3282,6 @@ allmargins <- function(pop_weights = FALSE,
             stop("Must enter b in range of b_run")
         }
     }
-    
-    #build some interactions we want to lookat:
-    cces_xgb_dat <- cces_xgb_dat %>% mutate(
-    #36 levels
-    recode_educ_pid_race = as.factor(paste(recode_educ_3way,
-                                           recode_pid_3way, 
-                                           recode_race, sep = ", ")),
-    #12 levels
-    recode_pid_race = as.factor(paste(recode_pid_3way, 
-                                           recode_race, sep = ", ")),
-    #9 levels
-    recode_educ_pid = as.factor(paste(recode_educ_3way,
-                                      recode_pid_3way, sep = ", ")),
-    recode_agesq = recode_age*recode_age,
-    recode_agecubed = recode_age*recode_age*recode_age,
-    #13 levles
-    recode_midwest_edu_race = as.factor(
-        case_when(recode_region == "Midwest" ~ paste(recode_region,
-                                                     recode_race,
-                                                     recode_educ_3way, 
-                                                     sep = ", "),
-                  TRUE ~ "No Split")), 
-    #4 levels ( low educated whites in midwest only)
-    recode_midwest_wh_edu = factor(case_when(
-        (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
-        TRUE ~ as.character(recode_educ_3way)), 
-        levels = c("No Split", "No College", "College", "Post-grad")), 
-    recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
-                                         TRUE ~ "92+")) )
-
-
-    pew_xgb_dat <- pew_xgb_dat %>% mutate(
-        #this has 36 levles
-        recode_educ_pid_race = as.factor(paste(recode_educ_3way,
-                                               recode_pid_3way, 
-                                               recode_race, sep = ", ")),
-        #12 levels
-        recode_pid_race = as.factor(paste(recode_pid_3way, 
-                                          recode_race, sep = ", ")),
-        #this has 9 levles
-        recode_educ_pid = as.factor(paste(recode_educ_3way,
-                                          recode_pid_3way, sep = ", ")),
-        recode_agesq = recode_age*recode_age,
-        recode_agecubed = recode_age*recode_age*recode_age,
-        
-        #this has 13 levels
-        recode_midwest_edu_race = as.factor(
-            case_when(recode_region == "Midwest" ~ paste(recode_region,
-                                                         recode_race,
-                                                         recode_educ_3way, 
-                                                         sep = ", "),
-                      TRUE ~ "No Split")),
-        #this has 4 levels
-        recode_midwest_wh_edu = factor(case_when(
-            (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
-            TRUE ~ as.character(recode_educ_3way)), 
-            levels = c("No Split", "No College", "College", "Post-grad")),
-        recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
-                                             TRUE ~ "92+")) )
-    
     
     pew_nowt <- suppressWarnings(svydesign(ids = ~1, data = pew_xgb_dat))
     
@@ -3104,8 +3516,8 @@ allmargins <- function(pop_weights = FALSE,
     if(is.null(margins_formula)) {
         if(three_way) {
             margins_formula <- ~recode_vote_2016 +
-                xgb_cces_on_pew_pD + xgb_cces_on_pew_pR + xgb_cces_on_pew_pO +
-                xgb_pew_on_pew_pD + xgb_pew_on_pew_pR + xgb_pew_on_pew_pO + 
+                mod_cces_on_pew_pD + mod_cces_on_pew_pR + mod_cces_on_pew_pO +
+                mod_pew_on_pew_pD + mod_pew_on_pew_pR + mod_pew_on_pew_pO + 
                 recode_pid_3way + 
                 recode_female + recode_race +recode_region + recode_educ +recode_relig_6way+
                 recode_born + recode_attndch_4way + recode_income_5way +
@@ -3119,8 +3531,8 @@ allmargins <- function(pop_weights = FALSE,
 
 
           margins_formula_cces <- ~recode_vote_2016 +
-            xgb_cces_on_cces_pD + xgb_cces_on_cces_pR + xgb_cces_on_cces_pO +
-            xgb_pew_on_cces_pD + xgb_pew_on_cces_pR + xgb_pew_on_cces_pO + 
+            mod_cces_on_cces_pD + mod_cces_on_cces_pR + mod_cces_on_cces_pO +
+            mod_pew_on_cces_pD + mod_pew_on_cces_pR + mod_pew_on_cces_pO + 
             recode_pid_3way + 
             recode_female + recode_race +recode_region + recode_educ + recode_relig_6way + 
             recode_born + recode_attndch_4way + recode_income_5way +
@@ -3133,8 +3545,8 @@ allmargins <- function(pop_weights = FALSE,
             recode_midwest_wh_edu
      } else {
          margins_formula <- ~recode_vote_2016 +
-                xgb_cces_on_pew_pD + xgb_cces_on_pew_pR + 
-                xgb_pew_on_pew_pD + xgb_pew_on_pew_pR + 
+                mod_cces_on_pew_pD + mod_cces_on_pew_pR + 
+                mod_pew_on_pew_pD + mod_pew_on_pew_pR + 
                 recode_pid_3way + 
                 recode_female + recode_race +recode_region + recode_educ +recode_relig_6way+
                 recode_born + recode_attndch_4way + recode_income_5way +
@@ -3147,8 +3559,8 @@ allmargins <- function(pop_weights = FALSE,
                 recode_midwest_wh_edu
          
           margins_formula_cces <- ~recode_vote_2016 +
-            xgb_cces_on_cces_pD + xgb_cces_on_cces_pR + 
-            xgb_pew_on_cces_pD + xgb_pew_on_cces_pR + 
+            mod_cces_on_cces_pD + mod_cces_on_cces_pR + 
+            mod_pew_on_cces_pD + mod_pew_on_cces_pR + 
             recode_pid_3way + 
             recode_female + recode_race +recode_region + recode_educ + recode_relig_6way + 
             recode_born + recode_attndch_4way + recode_income_5way +
@@ -3504,6 +3916,9 @@ allmargins <- function(pop_weights = FALSE,
 
 ```
 
+
+
+# Run Margins
 ```{r run_specific}
 load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
 
@@ -3599,7 +4014,7 @@ View(compare_margins %>% select(var, diff_kpop, diff_kpop_conv, diff_kpop_mf))
 
 
 
-# updating bb
+# Updating bb
 ```{r}
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/bigB_noNAs_nopopw.Rdata")
 #  load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/cat_nodnk_noNas_nopopw.Rdata")
@@ -3655,260 +4070,8 @@ kable(biasbound,
 
 
 
-```{r run_margins}
-#RUN
-
-nopopw_margins_wNAs <- allmargins(pop_weights = FALSE, 
-                             age_buckets = FALSE, 
-                             three_way = TRUE, 
-                             b = 32,
-                             pew_xgb_dat = pre_nopopw_3way$pew_dat,
-                             cces_xgb_dat = pre_nopopw_3way$cces_dat, 
-                             drop_ccesNAs = FALSE)
-
-nopopw_margins_2way_wNAs <- allmargins(pop_weights = FALSE, 
-                             age_buckets = FALSE, 
-                             three_way = FALSE, 
-                             b = 32,
-                             pew_xgb_dat = pre_nopopw_2way$pew_dat,
-                             cces_xgb_dat = pre_nopopw_2way$cces_dat,
-                             drop_ccesNAs = FALSE)
-
-nopopw_margins_noNAs <- allmargins(pop_weights = FALSE, 
-                             age_buckets = FALSE, 
-                             three_way = TRUE, 
-                             b = 32,
-                             pew_xgb_dat = pre_nopopw_3way$pew_dat,
-                             cces_xgb_dat = pre_nopopw_3way$cces_dat, 
-                             drop_ccesNAs = TRUE)
-
-nopopw_margins_noNAs$kable_err
-
-nopopw_margins_2way_noNAs <- allmargins(pop_weights = FALSE, 
-                             age_buckets = FALSE, 
-                             three_way = FALSE, 
-                             b = 32,
-                             pew_xgb_dat = pre_nopopw_2way$pew_dat,
-                             cces_xgb_dat = pre_nopopw_2way$cces_dat,
-                             drop_ccesNAs = TRUE)
 
 
-
-out <- rbind(nopopw_margins_wNAs$wmabserr[-12, ] %>% summarise(mean(kpop), 
-                                                  mean(kpop_conv), 
-                                                  mean(kpop_mf), 
-                                                  mean(rake_demos_noeduc),
-                                                  mean(rake_demos_weduc), 
-                                                  mean(post_stratification), 
-                                                  mean(rake_retrospective)),
-             nopopw_margins_noNAs$wmabserr[, ] %>% summarise(mean(kpop),
-                                                  mean(kpop_conv), 
-                                                  mean(kpop_mf), 
-                                                  mean(rake_demos_noeduc),
-                                                  mean(rake_demos_weduc), 
-                                                  mean(post_stratification), 
-                                                  mean(rake_retrospective)),
-             nopopw_margins_2way_wNAs$wmabserr[-12, ] %>% summarise(mean(kpop), 
-                                                       mean(kpop_conv),
-                                                       mean(kpop_mf), 
-                                                  mean(rake_demos_noeduc),
-                                                  mean(rake_demos_weduc), 
-                                                  mean(post_stratification), 
-                                                  mean(rake_retrospective)),
-             nopopw_margins_2way_noNAs$wmabserr[, ] %>% summarise(mean(kpop), 
-                                                  mean(kpop_conv), 
-                                                  mean(kpop_mf), 
-                                                  mean(rake_demos_noeduc),
-                                                  mean(rake_demos_weduc), 
-                                                  mean(post_stratification), 
-                                                  mean(rake_retrospective)))
-out <- as.data.frame(out)
-rownames(out) <- c("3way NAs",
-                   "3way noNAs", 
-                   "2way NAs",
-                   "2way noNAs")
-
-kable(out, 
-      format = "latex",
-      caption = "Average MAE Across Above Margins",
-          booktabs = T, digits= 4)
-```
-
-
-```{r doublecheck, eval = T}
-
-#DOUBLE CHECK SURVEY PACKAGE IS DOING WHAT I THINK IT'S DOING
-nopopw_margins$margins["femaleFemale", "kpop"]
-kpop_weights <- kpop_w[1:(nrow(pew_xgb_dat))]
-a <- mean(kpop_weights*(pew_xgb_dat$recode_female== "Female"))*100
-a
-a_targ <- mean(cces_xgb_dat$recode_female == "Female")*100
-
-#so yes direct survey mean on femal is the same as just mean of logical
-svymean(~recode_female, svydesign(~1, data = cces_xgb_dat), na.rm = TRUE)
-
-
-#WTF IS GOING ON WITH SVYMEAN ON MULTIPLE VARS
-formula <- ~recode_female + recode_vote_2016 + 
-    recode_race + recode_region + recode_educ + 
-    recode_relig_6way + recode_born + recode_attndch_4way + recode_income_5way +
-    recode_educ_wh_3way + 
-    xgb_cces_on_cces_pO + xgb_pew_on_cces_pD + xgb_pew_on_cces_pR + 
-    xgb_pew_on_cces_pO + recode_pid_3way + recode_age_bucket 
-#Ok turns out this is because there are NAs in recode_vote_2016 so if we remove them we drop lots of units and that changes the overall mean of female even though it doesnt itse;f have any NAs so we get different cces margins and therefore different mae if we drop them or not
-all <- data.frame(svymean(formula, svydesign(~1, data = cces_xgb_dat), na.rm = TRUE))
-all[c("recode_femaleFemale", "recode_femaleMale"),]
-svymean(~recode_female, svydesign(~1, data = cces_xgb_dat), na.rm = TRUE)
-
-#w mean abs error
-#have to drop the NAs to get the same thing as what's in the above function
-cces_noNAs <- cces %>% filter(!is.na(recode_vote_2016))
-
-nopopw_margins$margins["femaleFemale", "cces_margins"]
-mean(cces_noNAs$recode_female == "Female")*100
-
-abs(mean(cces_noNAs$recode_female == "Female") - mean(kpop_weights*(pew_xgb_dat$recode_female== "Female")))*100 
-
-nopopw_margins$wmabserr[nopopw_margins$wmabserr$var =="female", "kpop"]
-
-#so yes they are the same thank jesus
-
-
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r graveyard}
-
-#to get outcomes (all this info is int h e comp_df objects in the output of the pew funct)
-
-votemargins_cces <- function(survey) {
-    return(
-        c(
-            vote_2016 = svycontrast(svymean(~recode_vote_2016, 
-                                            survey, na.rm = TRUE), vote_contrast),
-            xgb_cces_avg_marg = svymean(~margin_cces_on_cces, 
-                                        survey, na.rm = TRUE),
-            xgb_pew_avg_marg = svymean(~margin_pew_on_cces, 
-                                       survey, na.rm = TRUE),
-            xgb_cces_marg_at_avg = (svymean(~xgb_cces_on_cces_pD, survey) -
-                                        svymean(~xgb_cces_on_cces_pR, survey))
-                                    / (svymean(~xgb_cces_on_cces_pD, survey) +
-                                          svymean(~xgb_cces_on_cces_pR, survey)),
-            xgb_pew_marg_at_avg = (svymean(~xgb_pew_on_cces_pD, survey) -
-                                       svymean(~xgb_pew_on_cces_pR, survey))
-                                    /(svymean(~xgb_pew_on_cces_pD, survey)
-                                      + svymean(~xgb_pew_on_cces_pR, survey)) ) 
-    )
-}
-
-votemargins_pew <- function(survey) {
-    return(
-        c(
-            vote_2016 = svycontrast(svymean(~recode_vote_2016, 
-                                            survey, na.rm = TRUE), vote_contrast),
-            xgb_cces_avg_marg = svymean(~margin_cces_on_pew, 
-                                        survey, na.rm = TRUE),
-            xgb_pew_avg_marg = svymean(~margin_pew_on_pew, 
-                                       survey, na.rm = TRUE),
-            xgb_cces_marg_at_avg = (svymean(~xgb_cces_on_pew_pD, survey) -
-                                        svymean(~xgb_cces_on_pew_pR, survey)) 
-                                    /(svymean(~xgb_cces_on_pew_pD, survey) +
-                                          svymean(~xgb_cces_on_pew_pR, survey)),
-            xgb_pew_marg_at_avg = (svymean(~xgb_pew_on_pew_pD, survey) - 
-                                       svymean(~xgb_pew_on_pew_pR, survey))
-                                    /(svymean(~xgb_pew_on_pew_pD, survey)
-                                      + svymean(~xgb_pew_on_pew_pR, survey)) ) 
-    )
-    
-}
-
-###### difference #######
-votediff_cces <- function(survey) {
-    return(
-        c(
-         vote_2016 = svycontrast(svymean(~recode_vote_2016, 
-                                            survey, na.rm = TRUE), vote_contrast),
-            xgb_cces_avg_marg = svymean(~margin_cces_on_cces, 
-                                        survey, na.rm = TRUE),
-            xgb_pew_avg_marg = svymean(~margin_pew_on_cces, 
-                                       survey, na.rm = TRUE),
-            xgb_cces_marg_at_avg = (svymean(~xgb_cces_on_cces_pD, survey) -
-                                        svymean(~xgb_cces_on_cces_pR, survey)),
-            xgb_pew_marg_at_avg = (svymean(~xgb_pew_on_cces_pD, survey) -
-                                       svymean(~xgb_pew_on_cces_pR, survey)) ) 
-    )
-}
-
-votediff_pew <- function(survey) {
-    return(
-        c(
-            vote_2016 = svycontrast(svymean(~recode_vote_2016, 
-                                            survey, na.rm = TRUE), vote_contrast),
-            xgb_cces_avg_marg = svymean(~margin_cces_on_pew, 
-                                        survey, na.rm = TRUE),
-            xgb_pew_avg_marg = svymean(~margin_pew_on_pew, 
-                                       survey, na.rm = TRUE),
-            xgb_cces_marg_at_avg = (svymean(~xgb_cces_on_pew_pD, survey) -
-                                        svymean(~xgb_cces_on_pew_pR, survey)),
-            xgb_pew_marg_at_avg = (svymean(~xgb_pew_on_pew_pD, survey) - 
-                                       svymean(~xgb_pew_on_pew_pR, survey)) ) 
-    )
-}
-
-
-### cces on pew
-    votemargin_pew <- cbind(
-                        pew = votemargins_pew(pew_nowt),
-                        cces = votemargins_cces(cces_svy),
-                        kpop = votemargins_pew(kpop), 
-                        kpop_mf = votemargins_pew(kpop_mf),
-                        kpop_conv = votemargins_pew(kpop_conv),
-                        rake_noedu = votemargins_pew(rake_demos_noeduc),
-                        rake_wedu = votemargins_pew(rake_demos_weduc), 
-                        ps = votemargins_pew(post_stratification), 
-                        rake_retro =  votemargins_pew(rake_retrospective))
-    
-    votemargin_pew <- as.data.frame(votemargin_pew*100)
-    rownames(votemargin_pew) <- sapply(rownames(votemargin_pew),
-                                       function(x) gsub("\\..*","", x ) ) 
-    
-    
-     caption_o = paste0("Outcomes (Difference): ", popw_lab, ageb, "(no dnk) ",
-                       "b=", b, xgb_lab)
-    caption_vm = paste0("Vote Margins: ", popw_lab, ageb, " (no dnk) ", 
-                        "b=", b, xgb_lab)
-       
-    kable_outcomes <- kable(margins_diff[c(1:9),],
-          format = "latex",
-          caption = caption_o,
-          col.names = colnames_bottom,
-          booktabs = T, digits= 3) 
-    
-    kable_vm <- kable(votemargin,
-                      format = "latex",
-                      caption = caption_vm,
-                      col.names = colnames_bottom,
-                      booktabs = T, digits= 2)
-
-```
 
 
 
@@ -4037,17 +4200,36 @@ cat("Confusion Matrix: CCES 2way on CCES Training")
 t(t(conf_test$table)/colSums(conf_test$table))
 
 ```
-```{r 2way, eval = F}
-pre_nopopw_2way <- pew_out(PRE = TRUE,    
-                           age_buckets = FALSE, 
-                              popw = FALSE,
-                              three_way = FALSE,
-                              noDNK_weights = TRUE, 
-                           drop_ccesNAs = TRUE,
-                              xgb_cces_mod = xgb_cces_DR)
 
-pre_nopopw_2way$plot_diff
-#margin is bolding 16, diff is bolding 16, pR and ufcking pD WHY
 
-#ggsave("./app_xgb_diff_2way_wCCES_NAs.pdf", width = 14, height = 8)
+## Lasso CCES Run - 2ㅈ묘
+```{r lasso_cces_2way, eval = F}
+
+
+## two way
+#two way
+# cces <- cces %>% mutate(recode_vote_2016_binary =
+#                             as.numeric(recode_vote_2016 == "Republican"))
+# Y_keep <- stack_data$recode_vote_2016 != "Other" & stack_data$S == 0
+        
+# ###################### LASSO ####################
+# #lambda from 10 fold default CV
+# lasso_lambda <- cv.glmnet(x= mod[Y_keep,-1], 
+#                           y = cces$recode_vote_2016_binary[cces$recode_vote_2016 != "Other"],
+#                           alpha = 1,
+#                           family = "binomial",
+#             weights = cces$commonweight_vv_post[cces$recode_vote_2016 != "Other"],
+#                           intercept = TRUE)
+# 
+# lasso_vote <- glmnet(x= mod[Y_keep, -1], 
+#         y = cces$recode_vote_2016_binary[cces$recode_vote_2016 != "Other"],
+#                         alpha = 1,
+#                         lambda = lasso_lambda$lambda.1se,
+#                         family = "binomial",
+#         weights = cces$commonweight_vv_post[cces$recode_vote_2016 != "Other"],
+#                         intercept = TRUE)
+
+
+
+
 ```

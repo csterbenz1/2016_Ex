@@ -9,7 +9,7 @@ editor_options:
 
 ```{r setup, include = F}
 #rm(list = ls())
-knitr::opts_chunk$set(echo = TRU
+knitr::opts_chunk$set(echo = TRUE)
 set.seed(9345876)
 
 ### Packages
@@ -202,7 +202,9 @@ pew <- pew %>% mutate(
         recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
                                              TRUE ~ "92+")) )
 
-
+#to save memory also to prevent model.matrix from dropping rows unncess bc other cols are msissing
+pew <- pew[,c(210:ncol(pew))]
+cces <- cces[, c(3,564:ncol(cces))]
 
 ```
 
@@ -280,13 +282,13 @@ pew_out <- function(PRE = TRUE,
                    "/", nrow(pew), "\n"), immediate. = TRUE)
      }
      if(length(problem_reduc) != 0) {
-     warning(paste("NB: strata present in pew not in cces (3way)will be dropped in ps:\n",
+     warning(paste("NB: strata reduc present in pew not in cces (3way)will be dropped in ps:\n",
                    "\nrepresenting", nrow(pew %>% filter(strata_reduc %in%
                                                              problem_reduc)),
                    "/", nrow(pew), "\n"), immediate. = TRUE)
      }
      if(length(problem_all) != 0) {
-     warning(paste("NB: strata present in pew not in cces (3way)will be dropped in ps:\n",
+     warning(paste("NB: strata all present in pew not in cces (3way)will be dropped in ps:\n",
                    "\nrepresenting", nrow(pew %>% filter(strata_all %in% problem_all)),
                    "/", nrow(pew), "\n"), immediate. = TRUE)
      }
@@ -327,7 +329,8 @@ pew_out <- function(PRE = TRUE,
             pew_matrix_sparse = pew_matrix_sparse[,-1]
             
             
-            pew_percent <- sample.int(nrow(pew_model_dat), (nrow(pew_model_dat)/10)*8)
+            pew_percent <- sample.int(n = nrow(pew_model_dat),
+                                      size = round((nrow(pew_model_dat)/10)*8) )
             pew_dat_xgb_train <- xgb.DMatrix(data = pew_matrix_sparse[pew_percent,], 
                                              label = pew_out_int[pew_percent])
             pew_dat_xgb_outofsamp <- xgb.DMatrix(data =
@@ -872,10 +875,11 @@ pew_out <- function(PRE = TRUE,
             pew_out_int=  as.integer(as.factor(pew$recode_vote_2016))
             sum(mod_cces_on_pew_plur == pew_out_int)/length(pew_out_int)
             
-            mod_cces_on_pew_out <- case_when(mod_cces_on_pew_plur -1== 2 ~ 
+            mod_cces_on_pew_out <- factor(case_when(mod_cces_on_pew_plur -1== 2 ~ 
                                               "Republican",
                                      mod_cces_on_pew_plur-1 == 1 ~ "Other", 
-                                     mod_cces_on_pew_plur-1 == 0 ~ "Democrat")
+                                     mod_cces_on_pew_plur-1 == 0 ~ "Democrat"), 
+                                      levels = c("Democrat", "Other", "Republican"))
         
             
             sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
@@ -1008,14 +1012,27 @@ pew_out <- function(PRE = TRUE,
                                                                 missing_strata_all)))
             if(cat_kernel & NEWpopw) {
                 load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata")
+                cat("OLD MF loading: allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata")
                 clean <- out_cat
                 weights <- weights_cat[3:13]
                 weights_alt <- weights_cat[1:2]
             } else if(cat_kernel) {
-                load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
-                clean <- out_cat
-                weights <- weights_cat[3:13]
-                weights_alt <- weights_cat[1:2]
+                
+                if(tolerance == 1e-06 & maxit == 500) { 
+                         load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+                    cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+                        clean <- out_cat
+                        weights <- weights_cat[3:13]
+                        weights_alt <- weights_cat[1:2]
+                }
+                if(maxit == 800 & tolerance == 1e-04) {
+                     load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+                      cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+                      clean <- out_cat
+                        weights <- weights_cat[3:13]
+                        weights_alt <- weights_cat[1:2]
+                    }
+               
             }
             # if(age_buckets) {
             #     #this was run WITH CCES  voteNAs because its 47344
@@ -1056,11 +1073,17 @@ pew_out <- function(PRE = TRUE,
                 #increased tolerance (issue w maxit)
                 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
                 #tolerance 1e-6, maxit 500, maxnumdims 500
-                if(tolerance == 1e-06) {
-                    load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-18.Rdata")
-                } else if(tolerance == 1e-04) {
+                if(maxit == 500 & tolerance == 1e-06) {
+                    load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+                    cat("OLD MF loading: allB_cat_par_m500_t1e-06_2021-03-18.Rdata")
+                } else if(maxit == 500 & tolerance == 1e-04) {
                     load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-04_2021-03-05.Rdata")
+                    cat("OLD MF loading: allB_cat_par_m500_t1e-04_2021-03-05.Rdata")
                     
+                }
+                if(maxit == 800 & tolerance == 1e-04) {
+                     load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+                    cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
                 }
                 
                #weights_cat <- weights_cat
@@ -1479,6 +1502,15 @@ pew_out <- function(PRE = TRUE,
     
     ##### START GIANT PLOTS PREP
     # a little ridiculous but here we are
+    #testing
+    # var_orig = "recode_vote_2016"
+    # var_cces = "diff_cces_on_cces"
+    # var_pew = "diff_cces_on_pew"
+    # drop_ccesNAs = drop_ccesNAs
+    # bigB = bigB
+    # smallB = smallB
+    # cat_kernel = cat_kernel
+    
     df_build <- function(var_orig, var_cces, var_pew, drop_ccesNAs, vote_form = vote_diff,
                          real = FALSE, bigB, smallB, cat_kernel) {
         if(!real) {
@@ -1488,7 +1520,7 @@ pew_out <- function(PRE = TRUE,
                                             cces_svy, na.rm = TRUE),
                                     vote_form),
             #this is cces modeled outcome on cces
-            cces_xgb = svymean(as.formula(paste0("~", var_cces)), cces_svy, na.rm = TRUE),
+            cces_mod = svymean(as.formula(paste0("~", var_cces)), cces_svy, na.rm = TRUE),
             
             #outcome = modeled cces predicted with pew (cces on pew)
             unweighted = svymean(as.formula(paste0("~", var_pew)), pew_srs_xgb, na.rm = TRUE),
@@ -2108,7 +2140,17 @@ pew_out <- function(PRE = TRUE,
                 }
             b_num <- c(b_num, rep(rep, 3))
         }
-        
+        df$b <- NA
+        df$b[grep("b", df$source) ]<- b_num
+        df$MF <- "NA"
+        df$MF[grep("mf", df$source)] <- "MF"
+        df$MF[!grepl("mf", df$source) & grepl("kpop", df$source)]<- "No MF"
+        df$Conv <- "NA"
+        df$Conv[!grepl("conv", df$source) & 
+                              grepl("kpop", df$source)]<- "Conv Not Required"
+        df$Conv[c(grep("conv", df$source),
+                            grep("mf", df$source))] <- "Conv Required"
+        df <- df %>% arrange(!is.na(b), b)
         df <- df %>% 
             mutate(source_name = factor(source, 
                                         levels = as.character(df$source) ,
@@ -2123,76 +2165,82 @@ pew_out <- function(PRE = TRUE,
                                                    "Post-Strat (reduced)",
                                                    "Post-Strat (all)",
                                                    "Raking Retrospective", 
+                                                   if(smallB&!cat_kernel) {"Kpop b=1x"},
+                                                    if(smallB&!cat_kernel) {"Kpop Conv b=1x"},
+                                                   if(smallB&!cat_kernel) {"Kpop MF b=1x"},
+                                                   
+                                                   if(smallB) {"Kpop b=2x"},
+                                                   if(smallB) {"Kpop MF b=2x"},
+                                                   if(smallB) {"Kpop Conv b=2x"},
+                                                   
+                                                   if(smallB) {"Kpop b=4x"},
+                                                   if(smallB) {"Kpop Conv b=4x"},
+                                                   if(smallB) {"Kpop MF b=4x"},
+                                                   
                                                    if(cat_kernel) {"Kpop b=mean"},
                                                     if(cat_kernel) {"Kpop Conv b=mean"},
                                                     if(cat_kernel) {"Kpop MF b=mean"},
+                                                   
+                                                    if(smallB) {"Kpop b=8x"},
+                                                   if(smallB) {"Kpop Conv b=8x"},
+                                                   if(smallB) {"Kpop MF b=8x"},
+                                                   
+                                                   
                                                    if(cat_kernel) {"Kpop b=argmax var K*2"},
                                             if(cat_kernel) {"Kpop Conv b=argmax var(K)*2"},
                                             if(cat_kernel) {"Kpop MF b=argmax var(K)*2"},
-                                                   if(bigB&!cat_kernel) {"Kpop b=24576x"},
-                                                    if(bigB&!cat_kernel) {"Kpop b=16384x"},
-                                                    if(bigB&!cat_kernel) {"Kpop b=8192x"},
-                                                    if(bigB&!cat_kernel) {"Kpop b=4096x"},
-                                                    if(bigB) {"Kpop b=2048x"},
-                                                    if(bigB) {"Kpop b=1024x"},
-                                                    if(bigB) {"Kpop b=512x"}, 
-                                                    if(bigB) {"Kpop b=256x"},
-                                                    if(bigB) {"Kpop b=128x"},
-                                                   if(smallB) {"Kpop b=64x"},
+                                                
+                                            if(smallB) {"Kpop b=16x"},
+                                            if(smallB) {"Kpop MF b=16x"},
+                                            if(smallB) {"Kpop Conv b=16x"},
+                                            
+                                            
                                                     if(smallB) {"Kpop b=32x"},
-                                                    if(smallB) {"Kpop b=16x"},
-                                                    if(smallB) {"Kpop b=8x"},
-                                                    if(smallB) {"Kpop b=4x"},
-                                                    if(smallB) {"Kpop b=2x"},
-                                            if(smallB&!cat_kernel) {"Kpop b=1x"},
-                                            if(bigB&!cat_kernel) {"Kpop Conv b=24576x"},
-                                            if(bigB&!cat_kernel) {"Kpop Conv b=16384x"},
-                                            if(bigB&!cat_kernel) {"Kpop Conv b=8192x"},
-                                            if(bigB&!cat_kernel) {"Kpop Conv b=4096x"},
-                                                    if(bigB) {"Kpop Conv b=2048x"},
-                                                    if(bigB) {"Kpop Conv b=1024x"},
-                                                    if(bigB) {"Kpop Conv b=512x"}, 
-                                                    if(bigB) {"Kpop Conv b=256x"},
-                                                    if(bigB) {"Kpop Conv b=128x"},
-                                                   if(smallB) {"Kpop Conv b=64x"},
                                                     if(smallB) {"Kpop Conv b=32x"},
-                                                    if(smallB) {"Kpop Conv b=16x"},
-                                                    if(smallB) {"Kpop Conv b=8x"},
-                                                    if(smallB) {"Kpop Conv b=4x"},
-                                                    if(smallB) {"Kpop Conv b=2x"},
-                                            if(smallB&!cat_kernel) {"Kpop Conv b=1x"},
-                                            if(bigB&!cat_kernel) { "Kpop MF b=24576x"},
-                                        if(bigB&!cat_kernel) { "Kpop MF b=16384x"},
-                                        if(bigB&!cat_kernel) {"Kpop MF b=8192x"},
-                                            if(bigB&!cat_kernel) {"Kpop MF b=4096x"},
-                                                    if(bigB) {"Kpop MF b=2048x"},
-                                                    if(bigB) {"Kpop MF b=1024x"},
-                                                    if(bigB) {"Kpop MF b=512x"}, 
-                                                    if(bigB) {"Kpop MF b=256x"},
-                                                if(bigB) {"Kpop MF b=128x"},
-                                                  if(smallB) {"Kpop MF b=64x"},
                                                     if(smallB) {"Kpop MF b=32x"},
-                                                    if(smallB) {"Kpop MF b=16x"},
-                                                    if(smallB) {"Kpop MF b=8x"},
-                                                    if(smallB) {"Kpop MF b=4x"},
-                                                    if(smallB) {"Kpop MF b=2x"},
-                                            if(smallB&!cat_kernel) {"Kpop MF b=1x"})
-                                            ))
-        
-        df$MF <- "NA"
-        df$MF[grep("MF", levels(df$source_name))] <- "MF"
-        df$MF[!grepl("MF", levels(df$source_name)) & 
-                            grepl("Kpop", levels(df$source_name))]<- "No MF"
-        df$Conv <- "NA"
-        df$Conv[!grepl("Conv", levels(df$source_name)) & 
-                              grepl("Kpop", levels(df$source_name))]<- "Conv Not Required"
-        df$Conv[c(grep("Conv", levels(df$source_name)),
-                            grep("MF", levels(df$source_name)))] <- "Conv Required"
-        
-        df$b <- NA
-        df$b[grep("b=", levels(df$source_name)) ]<- b_num
-        
+                                            
+                                                    if(smallB) {"Kpop b=64x"},
+                                                    if(smallB) {"Kpop Conv b=64x"},
+                                                    if(smallB) {"Kpop MF b=64x"},
+                                            
+                                                    if(bigB) {"Kpop b=128x"},
+                                                    if(bigB) {"Kpop Conv b=128x"},
+                                                    if(bigB) {"Kpop MF b=128x"},
+                                            
+                                            if(bigB) {"Kpop b=256x"},
+                                                    if(bigB) {"Kpop Conv b=256x"},
+                                                    if(bigB) {"Kpop MF b=256x"},
+                                            
+                                            if(bigB) {"Kpop b=512x"},
+                                                    if(bigB) {"Kpop Conv b=512x"},
+                                                    if(bigB) {"Kpop MF b=512x"},
+                                            
+                                            if(bigB) {"Kpop b=1024x"},
+                                                    if(bigB) {"Kpop Conv b=1024x"},
+                                                    if(bigB) {"Kpop MF b=1024x"},
+                                            
+                                            if(bigB) {"Kpop b=2048x"},
+                                                    if(bigB) {"Kpop Conv b=2048x"},
+                                                    if(bigB) {"Kpop MF b=2048x"},
+                                            
+                                            if(bigB&!cat_kernel) {"Kpop b=4096x"},
+                                            if(bigB&!cat_kernel) {"Kpop Conv b=4096x"},
+                                            if(bigB&!cat_kernel) {"Kpop MF b=4096x"},
+                                            
+                                            if(bigB&!cat_kernel) {"Kpop b=8192x"},
+                                            if(bigB&!cat_kernel) {"Kpop Conv b=8192x"},
+                                            if(bigB&!cat_kernel) {"Kpop MF b=8192x"},
+                                        
+                                            if(bigB&!cat_kernel) {"Kpop b=16384x"},
+                                            if(bigB&!cat_kernel) {"Kpop Conv b=16384x"},
+                                            if(bigB&!cat_kernel) { "Kpop MF b=16384x"},
+                                        
+                                            if(bigB&!cat_kernel) {"Kpop b=24576x"},
+                                            if(bigB&!cat_kernel) {"Kpop Conv b=24576x"},
+                                            if(bigB&!cat_kernel) { "Kpop MF b=24576x"}
+                                            )))
         df <- df %>% filter(!is.na(est))
+        
         return(df)
     }
     
@@ -2200,7 +2248,7 @@ pew_out <- function(PRE = TRUE,
                              drop_ccesNAs = drop_ccesNAs, 
                              bigB = bigB, smallB = smallB,
                              cat_kernel = cat_kernel)
-    comp_df_diff <- comp_df_diff %>% arrange(!is.na(b), b)
+    #comp_df_diff <- comp_df_diff %>% arrange(!is.na(b), b)
     
     comp_df_diff_pewoutcome <- df_build("recode_vote_2016", 
                                         "diff_pew_on_cces",
@@ -2208,7 +2256,7 @@ pew_out <- function(PRE = TRUE,
                                         drop_ccesNAs = drop_ccesNAs,
                                         bigB = bigB, smallB = smallB,
                                         cat_kernel = cat_kernel) 
-    comp_df_diff_pewoutcome <- comp_df_diff_pewoutcome %>% arrange(!is.na(b), b)
+    #comp_df_diff_pewoutcome <- comp_df_diff_pewoutcome %>% arrange(!is.na(b), b)
 
 ###### XXX do I want to have diff with cces_on_pew as well for cces_xgb or as below just use cces_on_ccess for cces_xgb for both
     comp_df_margin <- df_build("recode_vote_2016", 
@@ -2217,7 +2265,7 @@ pew_out <- function(PRE = TRUE,
                                         drop_ccesNAs = drop_ccesNAs, 
                                bigB = bigB,  smallB = smallB,
                                cat_kernel = cat_kernel)  
-    comp_df_margin <- comp_df_margin %>% arrange(!is.na(b), b)
+    #comp_df_margin <- comp_df_margin %>% arrange(!is.na(b), b)
     
     comp_df_margin_pewoutcome <- df_build("recode_vote_2016", 
                                           "margin_pew_on_cces",
@@ -2226,7 +2274,7 @@ pew_out <- function(PRE = TRUE,
                                           bigB = bigB,
                                            smallB = smallB,
                                           cat_kernel = cat_kernel)  
-    comp_df_margin_pewoutcome <- comp_df_margin_pewoutcome %>% arrange(!is.na(b), b)
+    #comp_df_margin_pewoutcome <- comp_df_margin_pewoutcome %>% arrange(!is.na(b), b)
     
     comp_df_pR <- df_build("recode_vote_2016", 
                            "mod_cces_on_cces_pR",
@@ -2246,7 +2294,7 @@ pew_out <- function(PRE = TRUE,
                             smallB = smallB,
                            cat_kernel = cat_kernel, 
                            vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 )) 
-    comp_df_pR_pewoutcome <- comp_df_pR_pewoutcome %>% arrange(!is.na(b), b)
+    #comp_df_pR_pewoutcome <- comp_df_pR_pewoutcome %>% arrange(!is.na(b), b)
     
     comp_df_pD <- df_build("recode_vote_2016", 
                            "mod_cces_on_cces_pD",
@@ -2255,7 +2303,7 @@ pew_out <- function(PRE = TRUE,
                            bigB = bigB, smallB = smallB,
                            cat_kernel = cat_kernel, 
                            vote_form = quote((recode_vote_2016Democrat +recode_vote_2016Democrat)/2 )) 
-    comp_df_pD <- comp_df_pD  %>% arrange(!is.na(b), b)
+    #comp_df_pD <- comp_df_pD  %>% arrange(!is.na(b), b)
         
     comp_df_pD_pewoutcome <- df_build("recode_vote_2016", 
                            "mod_pew_on_cces_pD",
@@ -2263,7 +2311,7 @@ pew_out <- function(PRE = TRUE,
                             drop_ccesNAs = drop_ccesNAs, 
                            bigB = bigB, smallB = smallB,
                            cat_kernel = cat_kernel)  
-    comp_df_pD_pewoutcome <- comp_df_pD_pewoutcome %>%arrange(!is.na(b), b)
+    #comp_df_pD_pewoutcome <- comp_df_pD_pewoutcome %>%arrange(!is.na(b), b)
     
     comp_df_real <- df_build("recode_vote_2016", 
                            "recode_vote_2016",
@@ -2274,7 +2322,7 @@ pew_out <- function(PRE = TRUE,
                            bigB = bigB,
                             smallB = smallB,
                            cat_kernel = cat_kernel)  %>% arrange(!is.na(b), b)
-    comp_df_real <- comp_df_real%>% arrange(!is.na(b), b)
+    #comp_df_real <- comp_df_real%>% arrange(!is.na(b), b)
     
     comp_df_real_diff <-  df_build("recode_vote_2016", 
                            "recode_vote_2016",
@@ -2283,7 +2331,7 @@ pew_out <- function(PRE = TRUE,
                            real = TRUE, bigB = bigB, 
                             smallB = smallB,
                            cat_kernel = cat_kernel) 
-    comp_df_real_diff <- comp_df_real_diff %>% arrange(!is.na(b), b)
+    #comp_df_real_diff <- comp_df_real_diff %>% arrange(!is.na(b), b)
     
     ######## PLOT ESTIMATES: Pre-wave Indiv Average Margin ########
     if(PRE) {
@@ -2893,7 +2941,7 @@ cces_matrix_sparse = cces_matrix_sparse[,-1]
 cces_matrix_sparse <- cces$common cces_matrix_sparse
 
 
-percent <- sample.int(nrow(cces), (nrow(cces)/10)*8)
+percent <- sample.int(n=nrow(cces), size = round((nrow(cces)/10)*8) )
 dat_xgb_train <- xgb.DMatrix(data = cces_matrix_sparse[percent,], 
                              label = out_int[percent])
 dat_xgb_outofsamp <- xgb.DMatrix(data = cces_matrix_sparse[-percent,], 
@@ -2989,16 +3037,39 @@ t(t(conf_test$table)/colSums(conf_test$table))
 # LASSO CCES RUN - 3way
 
 ```{r lasso_cces}
-percent <- sample.int(nrow(cces), (nrow(cces)/10)*8)
-
-
+#set.seed(9345876)
 #for lasso drop the NAs
 cces <- cces %>%
     filter(!is.na(recode_vote_2016))
+percent <- sample.int(n = nrow(cces),  size = round((nrow(cces)/10)*8))
+max(percent)
+nrow(cces)
+if(max(percent) > nrow(cces)) {cat("SAMPING MESSED UP")}
 
-stack_data_train <- data.frame(bind_rows(pew, cces[percent,]), 
-                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces[percent,]))))
-
+stack_data_train <- data.frame(bind_rows(pew %>% 
+                                             dplyr::select(recode_female,
+                                                    recode_pid_3way,
+                                                    recode_educ,
+                                                     recode_region,
+                                                     recode_income_5way, 
+                                                     recode_relig_6way, 
+                                                     recode_born, 
+                                                     recode_race,
+                                                     recode_attndch_4way,
+                                                     recode_age),
+                                         cces[percent,] %>% 
+                                              dplyr::select(recode_female,
+                                                    recode_pid_3way,
+                                                    recode_educ,
+                                                     recode_region,
+                                                     recode_income_5way, 
+                                                     recode_relig_6way, 
+                                                     recode_born, 
+                                                     recode_race,
+                                                     recode_attndch_4way,
+                                                     recode_age) ), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces[percent,])) ) )
+nrow(pew) + length(percent)
 #base model is the selection model used in the sims
 C_model = as.formula(~ recode_female + 
                          recode_pid_3way + 
@@ -3014,8 +3085,11 @@ C_model = as.formula(~ recode_female +
                          recode_female:recode_pid_3way + 
                          recode_age:recode_pid_3way)
 
+#this doesnt work bc it drops rows that are missing on some of the other cols not in C_model which is stupid
 mod <- model.matrix(C_model, data = stack_data_train)
 ncol(mod)
+nrow(mod) == nrow(stack_data_train)
+
 # ## Remove columns where Pew missing strata
 pew_cols <- apply(mod[stack_data_train$S == 1, ], 2, sum) != 0
 mod <- mod[, pew_cols ]
@@ -3096,6 +3170,48 @@ print(t(t(conf_cces_train$table)/colSums(conf_cces_train$table)))
 
 
 
+#performance on outcome
+stack_data_all <- data.frame(bind_rows(pew, cces), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
+
+
+mod_all <- model.matrix(C_model, data = stack_data_all)
+mod_all <- mod_all[, pew_cols ]
+mod_all <- mod_all[, cces_cols]
+nrow(mod_all[stack_data_all$S==0,-1])
+nrow(cces)
+lasso_pvote_3way = predict(lasso_cces,
+                      s= lasso_lambda$lambda.1se,
+                      type = "response",
+                      newx = mod_all[stack_data_all$S==0,-1])
+cces_temp <- cces %>%
+  mutate(lasso_cces_on_cces_pD = lasso_pvote_3way[,"Democrat",], 
+         lasso_cces_on_cces_pR = lasso_pvote_3way[,"Republican",]) %>% 
+    mutate(lasso_cces_on_cces_diff = lasso_cces_on_cces_pD - lasso_cces_on_cces_pR, 
+           lasso_cces_on_cces_margin = (lasso_cces_on_cces_pD -
+                                            lasso_cces_on_cces_pR)/(lasso_cces_on_cces_pD +
+                                                                        lasso_cces_on_cces_pR) )
+
+############## Lasso weighted:
+vote_contrast <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /
+                               (recode_vote_2016Democrat + recode_vote_2016Republican))
+
+vote_diff <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /(recode_vote_2016Democrat + recode_vote_2016Republican + recode_vote_2016Other)) 
+
+vote_form = vote_diff
+var_orig = "recode_vote_2016"
+var_cces = "lasso_cces_on_cces_diff"
+cces_awt <- svydesign(ids = ~1, weights = ~commonweight_vv_post, 
+                              data = cces_temp)
+cces_nowt <- svydesign(ids = ~1, data = cces_temp)
+cces_svy = cces_awt
+cces_orig = svycontrast(svymean(as.formula(paste0("~", var_orig)), 
+                                            cces_svy, na.rm = TRUE),
+                                    vote_form)
+cces_lasso = svymean(as.formula(paste0("~", var_cces)), cces_svy, na.rm = TRUE)
+cces_orig*100 - cces_lasso*100
+
+
 ```      
 
 
@@ -3112,7 +3228,7 @@ print(t(t(conf_cces_train$table)/colSums(conf_cces_train$table)))
 # three_way = TRUE
 # noDNK_weights = TRUE
 # drop_ccesNAs = TRUE
-# #xgb_cces_mod = xgb_cces
+# xgb_cces_mod = NULL
 # lasso_cces_mod = lasso_cces
 # lasso_lambda_cces = lasso_lambda
 # bigB = TRUE
@@ -3255,6 +3371,7 @@ cat_kernel_popw_lasso <- pew_out(PRE = TRUE,
                            lasso_lambda_cces = lasso_lambda,
                            best_b_plot = FALSE,
                            tolerance = 1e-06,
+                           maxit = 500,
                            bigB = TRUE, 
                            smallB = TRUE,
                            cat_kernel = TRUE, 
@@ -3262,8 +3379,9 @@ cat_kernel_popw_lasso <- pew_out(PRE = TRUE,
                       display_pew_mod = FALSE)
 
 
+
 cat_kernel_popw_lasso$plot_diff
-ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/lassosimple_MFnomc_popw_votediff_t1e-06_m500_allb.pdf", width = 14, height = 8)
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/lasso_popw_votediff_t1e-06_m500_allb.pdf", width = 11, height = 8.5)
 cat_kernel_popw_lasso$plot_pR
 cat_kernel_popw_lasso$plot_pD
 View(cat_kernel_popw_lasso$comp_df_diff)
@@ -3391,17 +3509,34 @@ allmargins <- function(pop_weights = FALSE,
         # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_parallel_2021-02-26.Rdata")
         
         #tolerance 1e-6 and increase maxit to 500, maxnumdims 500
-        if(pop_weights & !NEWpopw) {
+        if(pop_weights & !NEWpopw & maxit == 500 & tolerance == 1e-06) {
             # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
             #load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18_OLD.Rdata")
             load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+            cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18 \n")
             #load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
-        } else if(pop_weights) {
+        } else if(pop_weights & maxit == 800 & tolerance == 1e-04) {
+            
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+            cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23 \n")
+            
+        } else if(pop_weights & NEWpopw & maxit == 500 & tolerance == 1e-06) {
+            
             load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata") 
-        } else if(!pop_weights & tolerance == 1e-06) {
+            cat("loading: allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09 \n")
+            
+        } else if(!pop_weights & tolerance == 1e-06 & maxit == 500) {
+            
             load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
-        } else if(!pop_weights & tolerance == 1e-04) {
+            cat("OLD MF loading:allB_cat_par_m500_t1e-06_2021-03-04 \n")
+            
+        } else if(!pop_weights & tolerance == 1e-04 & maxit == 500) {
+            
             load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-04_2021-03-05.Rdata")
+            cat("OLD MF loading:allB_cat_par_m500_t1e-04_2021-03-05\n")
+        } else if(!pop_weights & tolerance == 1e-04 & maxit == 800) {
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wFALSE_m800_t1e-04_2021-03-23.Rdata")
+            cat("loading: allB_cat_par_wFALSE_m800_t1e-04_2021-03-23.Rdata")
         }
 
         
@@ -3593,6 +3728,7 @@ allmargins <- function(pop_weights = FALSE,
          
          kpop_full_constr <-  svydesign(~1, data = pew_xgb_dat,
                               weights = kpop_full_constr_w[kbal_data_sampled ==1])
+         
          
     }
     
@@ -3801,23 +3937,32 @@ allmargins <- function(pop_weights = FALSE,
     maxit_label = paste0( " maxit=", as.character(maxit))
     
     
-    if(!cat_kernel) {
+    if(!cat_kernel & pop_weights) {
         caption_m = paste0("Margins (Difference): ",NAs_lab, popw_lab, ageb, " (no dnk) ",
                        "b=", round(b, 2), xgb_lab)
-        caption_o = paste0("Absolute Error on Margins of Outcomes and First Moments: ",
+        caption_o = paste0("Absolute Error on Margins of Outcomes: ",
                        NAs_lab, popw_lab, ageb, " (no dnk) ",
                        "b=", round(b, 2), xgb_lab)
     
         caption_err = paste0("Weighted Mean Abs Error: ", NAs_lab, popw_lab, ageb, " (no dnk) ",
                        "b=", round(b, 2), xgb_lab)
-    } else {
+    } else if(cat_kernel) {
         caption_m = paste0("Margins (Difference): Unscaled K ", "b=", round(b, 2),NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
                        xgb_lab, tol_label, maxit_label)
-        caption_o = paste0("Absolute Error on Margins of Outcomes and First Moments: Unscaled K ","b=", round(b, 2),
+        caption_o = paste0("Absolute Error on Margins of Outcomes: Unscaled K ","b=", round(b, 2),
                        NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
                         xgb_lab, tol_label, maxit_label)
     
         caption_err = paste0("Weighted Mean Abs Error: Unscaled K ","b=", round(b, 2), NAs_lab, popw_lab,
+                              " Age Buckets Only (no dnk) ",xgb_lab, tol_label, maxit_label)
+    } else {
+        caption_m = paste0("Margins (Difference): Former K ", "b=", round(b, 2),NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
+                       xgb_lab, tol_label, maxit_label)
+        caption_o = paste0("Absolute Error on Margins of Outcomes: Unscaled K ","b=", round(b, 2),
+                       NAs_lab, popw_lab, " Age Buckets Only (no dnk) ",
+                        xgb_lab, tol_label, maxit_label)
+    
+        caption_err = paste0("Weighted Mean Abs Error: Former K ","b=", round(b, 2), NAs_lab, popw_lab,
                               " Age Buckets Only (no dnk) ",xgb_lab, tol_label, maxit_label)
     }
     
@@ -4018,7 +4163,7 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
 
 b_run <- out_cat$b
 
-cat_margins_popw <- allmargins(pop_weights = TRUE, 
+cat_margins_popw <- allmargins(pop_weights = FALSE, 
                                NEWpopw = FALSE,
                              age_buckets = FALSE, 
                              three_way = TRUE, 
@@ -4026,8 +4171,10 @@ cat_margins_popw <- allmargins(pop_weights = TRUE,
                              pew_xgb_dat = cat_kernel_popw_lasso$pew_dat,
                              cces_xgb_dat = cat_kernel_popw_lasso$cces_dat, 
                              drop_ccesNAs = TRUE, 
+                             tolerance = 1e-06,
+                             maxit = 500,
                               cat_kernel = TRUE, 
-                             full_constr = TRUE)
+                             full_constr = FALSE)
 View(cat_margins_popw$wmabserr)
 cat_margins_popw$kable_err
 cat_margins_popw$kable_outmom
@@ -4075,7 +4222,7 @@ View(compare_margins %>% select(var, diff_kpop, diff_kpop_conv, diff_kpop_mf))
 # 
 # 
 # 
-# kpop_w_age <- (kpop_w[kbal_data_sampled ==1]*pew_xgb_dat$recode_age)
+# kpop_w_age <- (kpop_w[kbal_data_sampled ==1]*pew_xgb_dat$recode_agße)
 # 
 # ks.test(kpop_w_age, cces_xgb_dat$recode_age)
 # 
@@ -4139,9 +4286,14 @@ View(compare_margins %>% select(var, diff_kpop, diff_kpop_conv, diff_kpop_mf))
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
 # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_NEWwTRUE_m500_t1e-06_2021-03-09.Rdata")
-load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+
+load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+#load("../allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+
 
 biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, bbr_constr, bbr_full_constr, numdims, numdims_conv, numdims_mf, numdims_constr, numdims_full_constr, mf_append_dims)) %>% arrange(b)
+
+biasbound <- rbind(out_cat %>% dplyr::select(b, bbr, bbr_conv, bbr_mf, bbr_constr, numdims, numdims_conv, numdims_mf, numdims_constr )) %>% arrange(b)
 
 
 # #add variance of K
@@ -4158,7 +4310,7 @@ biasbound %>% filter(max(bbr_constr) == bbr_constr) %>% dplyr::select(b)
 biasbound %>% filter(max(bbr_full_constr) == bbr_full_constr) %>% dplyr::select(b)
 kable(biasbound,
        format = "latex",
-       caption = "Unscaled Kernel + POPW (Weighted U): Bias Bound (Orig:Optimal) and Dims Selected", 
+       caption = "Unscaled Kernel + No Pop W: Bias Bound (Orig:Optimal) and Dims Selected; Tol = 1e=-06 Maxit = 500", 
        booktabs = T,
        digits = 3)
 ```
@@ -4223,8 +4375,8 @@ nrow(cces_DR)
 cces_matrix_sparse_DR = cces_matrix_sparse_DR[,-1]
 
 #using 80% to train
-percent <- sample.int(nrow(cces_DR),
-                      (nrow(cces_DR)/10)*8)
+percent <- sample.int(n = nrow(cces_DR),
+                      size = round((nrow(cces_DR)/10)*8) )
 
 dat_xgb_train <- xgb.DMatrix(data = cces_matrix_sparse_DR[percent,], 
                              label = out_int[percent])

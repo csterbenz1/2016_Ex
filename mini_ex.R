@@ -46,12 +46,16 @@ weighted.mean(samp[,3], w = ebal_out$w)
 
 ########## Kbal
 
-#1. Understanding the kernel: compute raw "misses" 
-#Kernel matrix is simply: K[i,j] = e^(- sum of raw "misses" between unit i and unit j across all columns of the data) = e^-(euclidean distance between i and j)
+#1. Understanding the kernel: compute exp( raw "misses"/normalization)
+#Kernel matrix is simply: K[i,j] = e^(- sum of raw "misses" between unit i and unit j across all columns of the data/b) = e^-(euclidean distance between i and j/b)
 #specifically it is the sum of misses with a one-hot encoding of all variables then divided by 2 to compensate for this double counting hence b =2 here
 #in this case that is explicitly sum( (rep_i - rep_j)^2 + (notrep_i - notrep_j)^2 + (white_i - white_j)^2 + (notwhite_i - notwhite_j)^2)
+#we choose the normalization b/width of the gaussian according to what yields the maximum variance in the kernel matrix 
+
 
 #NB: the way to force your df to be factors depends on your version of R, this is for 3.6
+#if you have 4.0 try: replacing the first line with: 
+#onehot_data <- data.frame(lapply(X, as.factor))
 onehot_data <- data.frame(apply(X,2, as.factor))
 onehot_data <- model.matrix(~ ., onehot_data,
                           contrasts.arg = lapply(onehot_data, contrasts, contrasts=FALSE))
@@ -90,16 +94,17 @@ var_K= function(b, n_d){
 #run optim:
 #we need to know the frequences each number of "misses" and dplyr is much faster than table
 n_d <- data.frame(diff = c(raw_counts)) %>% group_by(diff) %>% summarise(n())
-n_d <- as.vector(n_d[,2] %>% pull())
-n_d
+n_d=
 #visually we can see these
 hist(as.vector(raw_counts))
 
+n_d <- as.vector(n_d[,2] %>% pull())
 res = optimize(var_K, n_d = n_d,
                interval=c(0,2000), maximum=TRUE)
 b_maxvar <- res$maximum
 b_maxvar
-
+#yields this much variance in K
+res$objective
 
 
 #3. Run kbal with this choice of b
@@ -108,7 +113,7 @@ kbalout = kbal::kbal(allx= X,
                      useasbases=rep(1,nrow(X)),
                      sampled = sampled,
                      ebal.convergence = FALSE,
-                     b = b_maxvar,
+                     b = b_maxvar*2,
                      fullSVD = TRUE,
                      sampledinpop = FALSE)
 # The weights now vary:

@@ -24,8 +24,8 @@ library(kableExtra)
 
 ```{r load_dat}
 #loading the updated data:
-path_data= "/Users/Ciara/Dropbox/kpop/application/data/"
-path_weights = "/Users/Ciara/Dropbox/kpop/application/weights/"
+path_data= "/Users/Ciara/Dropbox/kpop/Updated/application/data/"
+path_weights = "/Users/Ciara/Dropbox/kpop/Updated/application/weights/"
 POPW = TRUE
 
 if(POPW) {

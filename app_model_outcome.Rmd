@@ -1,0 +1,851 @@
+---
+title: "Constructing Modeled Outcome"
+author: "Ciara Sterbenz"
+date: "4/7/2021"
+output:
+  pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = F}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(9345876)
+
+### Packages
+library(MASS)
+library(tidyverse)
+library(glmnet)
+library(xgboost)
+library(caret)
+```
+
+
+```{r load_data}
+path_data= "/Users/Ciara/Dropbox/kpop/application/data/"
+
+# AUXILIARY INFORMATION (CCES)
+cces <- readRDS(paste0(path_data, "cces_new.rds"))
+
+### Drop invalid cases
+cces <- cces %>%
+    filter((CC16_401 == "I definitely voted in the General Election.") &
+               !is.na(commonweight_vv_post) 
+               ) %>% 
+    mutate(commonweight_vv_post = commonweight_vv_post/ mean(commonweight_vv_post))
+
+
+#NB: all kpop results (sims and application) are run on the cces where missing vote choice respondents were dropped and are dropped here in the lasso (though the xgb previously coded them as other)
+sum(is.na(cces$recode_vote_2016))
+cces <- cces %>%
+    filter(!is.na(recode_vote_2016))
+```
+
+
+Building a few interactions to test the performance of kpop here so they will be saved in the new datafiles and we don't need to build them again in all the subsequent results files
+
+```{r build_interactions}
+cces <- cces %>% mutate(
+    #36 levels
+    recode_educ_pid_race = as.factor(paste(recode_educ_3way,
+                                           recode_pid_3way, 
+                                           recode_race, sep = ", ")),
+    #12 levels
+    recode_pid_race = as.factor(paste(recode_pid_3way, 
+                                           recode_race, sep = ", ")),
+    #9 levels
+    recode_educ_pid = as.factor(paste(recode_educ_3way,
+                                      recode_pid_3way, sep = ", ")),
+    recode_agesq = recode_age*recode_age,
+    recode_agecubed = recode_age*recode_age*recode_age,
+    #13 levles
+    recode_midwest_edu_race = as.factor(
+        case_when(recode_region == "Midwest" ~ paste(recode_region,
+                                                     recode_race,
+                                                     recode_educ_3way, 
+                                                     sep = ", "),
+                  TRUE ~ "No Split")), 
+    #4 levels ( low educated whites in midwest only)
+    recode_midwest_wh_edu = factor(case_when(
+        (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
+        TRUE ~ as.character(recode_educ_3way)), 
+        levels = c("No Split", "No College", "College", "Post-grad")), 
+    recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
+                                         TRUE ~ "92+")) )
+
+cces <- cces %>% mutate(recode_attndch_bin = 
+                            factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
+
+
+###### SURVEY DATA (PEW) ####
+pew <- readRDS(paste0(path_data, "pew_new.rds"))
+#eliminate don't know plan to vote respondents:
+pew <- pew %>%
+    filter(plan1 %in% c("Plan to vote", "Already voted"))
+
+pew <- pew %>% mutate(
+        #this has 36 levles
+        recode_educ_pid_race = as.factor(paste(recode_educ_3way,
+                                               recode_pid_3way, 
+                                               recode_race, sep = ", ")),
+        #12 levels
+        recode_pid_race = as.factor(paste(recode_pid_3way, 
+                                          recode_race, sep = ", ")),
+        #this has 9 levles
+        recode_educ_pid = as.factor(paste(recode_educ_3way,
+                                          recode_pid_3way, sep = ", ")),
+        recode_agesq = recode_age*recode_age,
+        recode_agecubed = recode_age*recode_age*recode_age,
+        
+        #this has 13 levels
+        recode_midwest_edu_race = as.factor(
+            case_when(recode_region == "Midwest" ~ paste(recode_region,
+                                                         recode_race,
+                                                         recode_educ_3way, 
+                                                         sep = ", "),
+                      TRUE ~ "No Split")),
+        #this has 4 levels
+        recode_midwest_wh_edu = factor(case_when(
+            (recode_race != "White" | recode_region != "Midwest") ~ "No Split", 
+            TRUE ~ as.character(recode_educ_3way)), 
+            levels = c("No Split", "No College", "College", "Post-grad")),
+        recode_age_factor = factor(case_when(recode_age <92 ~ as.character(recode_age), 
+                                             TRUE ~ "92+")) )
+
+pew <- pew %>% mutate(recode_attndch_bin = 
+                        factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
+
+
+
+#to save memory also to prevent model.matrix from dropping rows unncess bc other cols have missing vals
+pew <- pew[,c(210:ncol(pew))]
+cces <- cces[, c(3,564:ncol(cces))]
+
+```
+
+
+
+# LASSO CCES RUN - 3way for Population Weights
+
+Running a lasso multinomial to predict 3way vote choice with population weights from CCES.
+
+```{r lasso_cces}
+#train percent 80%
+percent <- sample.int(n = nrow(cces),  size = round((nrow(cces)/10)*8))
+max(percent)
+nrow(cces)
+if(max(percent) > nrow(cces)) {cat("SAMPING MESSED UP")}
+
+stack_data_train <-  data.frame(bind_rows(pew, cces[percent,]), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces[percent,]))))
+#base model is the selection model used in the sims
+C_model = as.formula(~ recode_female + 
+                         recode_pid_3way + 
+                         recode_educ +
+                         recode_region +
+                         recode_income_5way + 
+                         recode_relig_6way + 
+                         recode_born + 
+                         recode_race +
+                         recode_attndch_4way +
+                         recode_age +
+                      I(recode_age^2) + 
+                         recode_female:recode_pid_3way + 
+                         recode_age:recode_pid_3way)
+
+#double checking bc model matrix drops rows with NAs without warning
+mod <- model.matrix(C_model, data = stack_data_train)
+ncol(mod)
+nrow(mod) == nrow(stack_data_train)
+
+# ## Remove columns where Pew missing strata
+pew_cols <- apply(mod[stack_data_train$S == 1, ], 2, sum) != 0
+mod <- mod[, pew_cols ]
+## Remove columns where CCES missing Strata
+cces_cols <-  apply(mod[stack_data_train$S == 0, ], 2, sum) != 0
+mod <- mod[, cces_cols]
+#tuns out with this model we don't have to drop any:
+sum(!pew_cols)
+sum(!cces_cols)
+
+################ CCES Training Model ################
+#lambda from 10 fold default CV
+lasso_lambda <- cv.glmnet(x= mod[stack_data_train$S == 0,-1], 
+                          y = cces$recode_vote_2016[percent],
+                          alpha = 1,
+                          family = "multinomial",
+            weights = cces$commonweight_vv_post[percent],
+                          intercept = TRUE)
+
+lasso_cces <- glmnet(x= mod[stack_data_train$S == 0, -1], 
+        y = cces$recode_vote_2016[percent],
+                        alpha = 1,
+                        lambda = lasso_lambda$lambda.1se,
+                        family = "multinomial",
+        weights = cces$commonweight_vv_post[percent],
+                        intercept = TRUE)
+
+
+###### Eval Performance on Test Set ##############
+stack_data_test <- data.frame(bind_rows(pew, cces[-percent,]), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces[-percent,]))))
+
+mod_test <- model.matrix(C_model, data = stack_data_test)
+#remove same columns as above
+mod_test <- mod_test[, pew_cols]
+## Remove columns where CCES missing Strata
+mod_test <- mod_test[, cces_cols]
+ncol(mod_test)
+
+lasso_test = predict(lasso_cces,
+                      s = lasso_lambda$lambda.1se,
+                      type = "response",
+                      newx = mod_test[stack_data_test$S==0,-1])
+
+mod_test_plur <- apply(lasso_test,1, which.max)
+mod_test_out <- factor(case_when(mod_test_plur-1 == 2 ~ 
+                                                "Republican",
+                                  mod_test_plur-1 == 1 ~ "Other", 
+                                  mod_test_plur-1 == 0 ~ "Democrat"),
+                               levels = c("Democrat", "Other", "Republican"))
+outcome_test = cces$recode_vote_2016[-percent]
+#overall correct
+sum(mod_test_out == outcome_test)/length(outcome_test)
+conf_cces_test <- confusionMatrix(as.factor(mod_test_out),
+                                     as.factor(outcome_test))
+cat("Confusion Matrix: CCES on CCES (Testing Data)\n")
+print(t(t(conf_cces_test$table)/colSums(conf_cces_test$table)))
+
+############## Eval Performance w/in Training Set ###############
+lasso_train = predict(lasso_cces,
+                      s = lasso_lambda$lambda.1se,
+                      type = "response",
+                      newx = mod[stack_data_train$S==0,-1])
+
+mod_train_plur <- apply(lasso_train,1, which.max)
+mod_train_out <- factor(case_when(mod_train_plur-1 == 2 ~ 
+                                                "Republican",
+                                  mod_train_plur-1 == 1 ~ "Other", 
+                                  mod_train_plur-1 == 0 ~ "Democrat"),
+                               levels = c("Democrat", "Other", "Republican"))
+outcome_train = cces$recode_vote_2016[percent]
+#overall correct
+sum(mod_train_out == outcome_train)/length(outcome_train)
+conf_cces_train <- confusionMatrix(as.factor(mod_train_out),
+                                     as.factor(outcome_train))
+cat("Confusion Matrix: CCES on CCES (Training Data)\n")
+print(t(t(conf_cces_train$table)/colSums(conf_cces_train$table)))
+
+
+
+################### Model on Pew ############
+#this uses all the pew data (no training or testing division)
+lasso_lambda_pew <- cv.glmnet(x= mod[stack_data_train$S == 1,-1], 
+                          y = pew$recode_vote_2016,
+                          alpha = 1,
+                          family = "multinomial",
+                          intercept = TRUE)
+
+lasso_vote_pew <- glmnet(x= mod[stack_data_train$S == 1, -1], 
+                     y = pew$recode_vote_2016,
+                        alpha = 1,
+                        lambda = lasso_lambda_pew$lambda.1se,
+                        family = "multinomial",
+                        intercept = TRUE)
+
+```      
+
+Predicting these models on the data and saving new data files.
+
+```{r build_dat_lasso}
+######################## Predict on Data ##################
+stack_data_all <- data.frame(bind_rows(pew, cces), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
+
+mod_all <- model.matrix(C_model, data = stack_data_all)
+mod_all <- mod_all[, pew_cols ]
+mod_all <- mod_all[, cces_cols]
+
+################ Pred on Pew ##############
+lasso_cces_on_pew = predict(lasso_cces,
+          s = lasso_lambda$lambda.1se,
+          type = "response",
+          newx = mod_all[stack_data_all$S==1,-1])
+
+lasso_pew_on_pew = predict(lasso_vote_pew,
+          s = lasso_lambda_pew$lambda.1se,
+          type = "response",
+          newx = mod_all[stack_data_all$S==1,-1])
+
+#### 1. CCES on PEW
+mod_cces_on_pew_plur <- apply(lasso_cces_on_pew,1, which.max)
+pew_out_int=  as.integer(as.factor(pew$recode_vote_2016))
+#overall correct
+sum(mod_cces_on_pew_plur == pew_out_int)/length(pew_out_int)
+
+mod_cces_on_pew_out <- factor(case_when(mod_cces_on_pew_plur -1== 2 ~ 
+                                  "Republican",
+                         mod_cces_on_pew_plur-1 == 1 ~ "Other", 
+                         mod_cces_on_pew_plur-1 == 0 ~ "Democrat"), 
+                          levels = c("Democrat", "Other", "Republican"))
+sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+conf_pew <- confusionMatrix(as.factor(mod_cces_on_pew_out), 
+                            as.factor(pew$recode_vote_2016))
+cat("Confusion Matrix: CCES on Pew (All Data)\n")
+print(t(t(conf_pew$table)/colSums(conf_pew$table)))
+
+### 2. PEW ON PEW
+mod_pew_on_pew_plur <- apply(lasso_pew_on_pew,1, which.max)
+mod_pew_on_pew_out <- factor(case_when(mod_pew_on_pew_plur-1 == 2 ~
+                                           "Republican",
+                                   mod_pew_on_pew_plur-1 == 1 ~ "Other", 
+                                   mod_pew_on_pew_plur-1 == 0 ~ "Democrat"),
+                         levels = c("Democrat", "Other", "Republican"))
+
+sum(mod_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out, 
+                                as.factor(pew$recode_vote_2016))
+cat("Confusion Matrix: Pew on Pew (All Data)\n")
+print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
+
+
+
+########## PRED ON CCES #########
+lasso_cces_on_cces = predict(lasso_cces,
+          s = lasso_lambda$lambda.1se,
+          type = "response",
+          newx = mod_all[stack_data_all$S==0,-1])
+
+lasso_pew_on_cces = predict(lasso_vote_pew,
+          s = lasso_lambda_pew$lambda.1se,
+          type = "response",
+          newx = mod_all[stack_data_all$S==0,-1])
+
+### 3. PEW on CCES
+mod_pew_on_cces_plur <- apply(lasso_pew_on_cces,1, which.max)
+
+mod_pew_on_cces_out <- factor(case_when(mod_pew_on_cces_plur-1 == 2 ~
+                                         "Republican",
+                                 mod_pew_on_cces_plur-1 == 1 ~ "Other", 
+                                 mod_pew_on_cces_plur-1 == 0 ~ "Democrat"), 
+                                  levels = c("Democrat", "Other", "Republican"))
+
+outcome <- cces$recode_vote_2016
+sum(mod_pew_on_cces_out == outcome)/length(outcome)
+conf_pew_on_cces <- confusionMatrix(as.factor(mod_pew_on_cces_out),
+                                    as.factor(outcome))
+cat("Confusion Matrix: Pew on CCES (All Data)\n")
+print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
+
+#### 4. CCES ON CCES
+mod_cces_on_cces_plur <- apply(lasso_cces_on_cces,1, which.max)
+mod_cces_on_cces_out <- factor(case_when(mod_cces_on_cces_plur-1 == 2 ~ 
+                                                "Republican",
+                                  mod_cces_on_cces_plur-1 == 1 ~ "Other", 
+                                  mod_cces_on_cces_plur-1 == 0 ~ "Democrat"),
+                               levels = c("Democrat", "Other", "Republican"))
+sum(mod_cces_on_cces_out == outcome)/length(outcome)
+conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
+                                     as.factor(outcome))
+cat("Confusion Matrix: CCES on CCES (All Data)\n")
+print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
+
+```
+
+
+```{r save_dat_lasso}
+############# Add to data
+# ## Add simulated results to CCES data
+cces <- cces %>%
+  mutate(mod_cces_on_cces_pD = lasso_cces_on_cces[,"Democrat",], 
+         mod_cces_on_cces_pR = lasso_cces_on_cces[,"Republican",],
+         mod_cces_on_cces_pO = lasso_cces_on_cces[,"Other",],
+         mod_pew_on_cces_pD = lasso_pew_on_cces[,"Democrat",],
+         mod_pew_on_cces_pR = lasso_pew_on_cces[,"Republican",],
+         mod_pew_on_cces_pO = lasso_pew_on_cces[,"Other",]) %>% 
+    mutate(diff_cces_on_cces = mod_cces_on_cces_pD -
+               mod_cces_on_cces_pR, 
+           diff_pew_on_cces = mod_pew_on_cces_pD -
+               mod_pew_on_cces_pR, 
+           margin_cces_on_cces = (mod_cces_on_cces_pD -
+                                            mod_cces_on_cces_pR)/( 
+                                                mod_cces_on_cces_pD +
+                                                    mod_cces_on_cces_pR),
+           margin_pew_on_cces = (mod_pew_on_cces_pD -
+                                            mod_pew_on_cces_pR)/( 
+                                                mod_pew_on_cces_pD +
+                                                    mod_pew_on_cces_pR)
+           )
+pew <- pew %>%
+  mutate(mod_cces_on_pew_pD = lasso_cces_on_pew[,"Democrat",], 
+         mod_cces_on_pew_pR = lasso_cces_on_pew[,"Republican",], 
+         mod_cces_on_pew_pO = lasso_cces_on_pew[,"Other",], 
+         mod_pew_on_pew_pD = lasso_pew_on_pew[,"Democrat",],
+         mod_pew_on_pew_pR = lasso_pew_on_pew[,"Republican",],
+         mod_pew_on_pew_pO = lasso_pew_on_pew[,"Other",]) %>% 
+    mutate(diff_cces_on_pew = mod_cces_on_pew_pD -
+               mod_cces_on_pew_pR, 
+           diff_pew_on_pew = mod_pew_on_pew_pD -
+               mod_pew_on_pew_pR, 
+           margin_cces_on_pew = (mod_cces_on_pew_pD -
+                                            mod_cces_on_pew_pR)/( 
+                                                mod_cces_on_pew_pD +
+                                                    mod_cces_on_pew_pR),
+           margin_pew_on_pew = (mod_pew_on_pew_pD -
+                                            mod_pew_on_pew_pR)/( 
+                                                mod_pew_on_pew_pD +
+                                                    mod_pew_on_pew_pR)
+           )
+
+
+
+write.csv(cces, file = "cces_lasso.csv")
+write.csv(pew, file = "pew_lasso.csv")
+
+```
+
+
+
+
+
+
+
+## XGB CCES RUN - 3WAY for No Population Weights
+
+Alternatively, a former approach used an xgb to the unweighted cces. Note that previously we coded missing vote choice as other, but to be consistent, they are now dropped here as well. This shuold be run instead of the above lasso chunks (but not serially after it bc otherwise you bind columns with the same names together).
+
+```{r xgb_cces_3way, eval = F}
+outcome = cces$recode_vote_2016
+sum(is.na(cces$recode_vote_2016))
+#outcome[is.na(cces$recode_vote_2016)] = "Other"
+out_int <- as.integer(as.factor(outcome))-1
+
+
+#### 1: RUNNING XGB ON CCES 3WAY VOTE OUTCOME #####
+cces_matrix_sparse <- cces %>%
+    dplyr::select(recode_age,
+           recode_female,
+           recode_race,
+           recode_region,
+           recode_pid_3way,
+           recode_educ,
+           recode_income,
+           #recode_relig has 38 Nas so need to use buckets
+           recode_relig_6way,
+           recode_born,
+           #recode_attndch has some nas need to use buckegs
+           recode_attndch_4way,
+           recode_race_educ_reg) %>%
+    sparse.model.matrix(as.formula("~."), .)
+
+cces_matrix_sparse = cces_matrix_sparse[,-1]
+
+percent <- sample.int(n=nrow(cces), size = round((nrow(cces)/10)*8) )
+dat_xgb_train <- xgb.DMatrix(data = cces_matrix_sparse[percent,], 
+                             label = out_int[percent])
+dat_xgb_outofsamp <- xgb.DMatrix(data = cces_matrix_sparse[-percent,], 
+                                 label = out_int[-percent])
+
+
+#params (not cv'ed)
+params = list(
+    booster="gbtree",
+    eta=0.3,
+    max_depth=10,
+    min_child_weight = 4,
+    gamma=3,
+    subsample= 0.7,
+    colsample_bytree=1,
+    objective="multi:softprob",
+    num_class=3,
+    eval_metric = "merror"
+)
+
+xgbcv <- xgb.cv( params = params,
+                 data = dat_xgb_train,
+                 nrounds = 500,
+                 nfold = 5,
+                 early_stopping_rounds = 50,
+                 showsd = T,
+                 stratified = T,
+                 print_every_n = 10,
+                 early_stop_round = 20,
+                 maximize = F)
+
+low_test  = which(xgbcv$evaluation_log$test_merror_mean == min(xgbcv$evaluation_log$test_merror_mean))
+low_test
+xgbcv$best_iteration
+
+#run
+xgb_cces =xgb.train(params=params,
+                    data=dat_xgb_train,
+                    nrounds= xgbcv$best_iteration,
+                    watchlist = list(validation = dat_xgb_outofsamp),
+                    nthreads=2,
+                    print_every_n = 10)
+
+##### EVAL PERFORMANCE ####
+xgb_outcome = predict(xgb_cces, dat_xgb_train, reshape=T)
+xgb_outofsamp = predict(xgb_cces, dat_xgb_outofsamp, reshape =T)
+
+#convert to max prob outcome:
+xgb_plurality_train <- apply(xgb_outcome,1, which.max)
+xgb_plurality_test <- apply(xgb_outofsamp,1, which.max)
+
+sum(xgb_plurality_train -1 == out_int[percent])/length(out_int[percent])
+sum(xgb_plurality_test - 1 == out_int[-percent])/length(out_int[-percent])
+
+#rep = 2, dem = 0 other = 1
+xgb_train_char = case_when(xgb_plurality_train  == 1 ~ "Democrat",
+                           xgb_plurality_train  == 3 ~ "Republican",
+                           xgb_plurality_train  == 2 ~ "Other")
+
+xgb_test_char = case_when(xgb_plurality_test  == 1 ~ "Democrat",
+                          xgb_plurality_test  == 3 ~ "Republican",
+                          xgb_plurality_test  == 2 ~ "Other")
+#check
+sum(xgb_train_char == outcome[percent])/length(percent)
+sum(xgb_test_char == outcome[-percent])/length(outcome[-percent])
+
+
+#look at performance of plurality max:
+conf_train = confusionMatrix(as.factor(xgb_train_char), 
+                             as.factor(cces$recode_vote_2016)[percent])
+conf_test = confusionMatrix(as.factor(xgb_test_char), 
+                            as.factor(cces$recode_vote_2016)[-percent])
+
+#because dividing rowwise is annoying:
+print("Confusion Matrix: CCES 3way on CCES Training")
+t(t(conf_train$table)/colSums(conf_train$table))
+print("Confusion Matrix: CCES 3awayon CCES Testing")
+t(t(conf_test$table)/colSums(conf_test$table))
+
+
+############ Run on Pew
+pew_model_dat = pew
+classes = 3
+           
+pew_outcome = pew_model_dat$recode_vote_2016
+pew_out_int <- as.integer(as.factor(pew_outcome))-1
+
+pew_matrix_sparse <- pew_model_dat %>%
+    dplyr::select(recode_age,
+           recode_female,
+           recode_race,
+           recode_region,
+           recode_pid_3way,
+           recode_educ,
+           recode_income,
+           #recode_relig has 38 Nas so need to use buckets
+           recode_relig_6way,
+           recode_born,
+           #recode_attndch has some nas need to use buckegs
+           recode_attndch_4way,
+           recode_race_educ_reg) %>%
+    sparse.model.matrix(as.formula("~."), .)
+
+pew_matrix_sparse = pew_matrix_sparse[,-1]
+
+
+pew_percent <- sample.int(n = nrow(pew_model_dat),
+                          size = round((nrow(pew_model_dat)/10)*8) )
+pew_dat_xgb_train <- xgb.DMatrix(data = pew_matrix_sparse[pew_percent,], 
+                                 label = pew_out_int[pew_percent])
+pew_dat_xgb_outofsamp <- xgb.DMatrix(data =
+                                         pew_matrix_sparse[-pew_percent,], 
+                                     label = pew_out_int[-pew_percent])
+
+#using the same params as cces:
+params = list(
+    booster="gbtree",
+    eta=0.3,
+    max_depth=10,
+    min_child_weight = 4,
+    gamma=3,
+    subsample= 0.7,
+    colsample_bytree=1,
+    objective="multi:softprob",
+    num_class= classes,
+    eval_metric = "merror"
+    )
+pew_xgbcv <- xgb.cv( params = params,
+                     data = pew_dat_xgb_train, 
+                     nrounds = 500,
+                     nfold = 5, 
+                     early_stopping_rounds = 50,
+                     showsd = T, 
+                     stratified = T, 
+                     print_every_n = 10, 
+                     early_stop_round = 20, 
+                     maximize = F)
+
+low_test  = which(pew_xgbcv$evaluation_log$test_merror_mean ==
+                      min(pew_xgbcv$evaluation_log$test_merror_mean))
+low_test
+pew_xgbcv$best_iteration
+
+#run
+xgb_pew =xgb.train(params=params,
+                   data=pew_dat_xgb_train,
+                   nrounds= pew_xgbcv$best_iteration,
+                   watchlist = list(validation = pew_dat_xgb_outofsamp),
+                   nthreads=2,
+                   print_every_n = 10)
+
+
+pew_xgb_outcome = predict(xgb_pew, pew_dat_xgb_train, reshape=T)
+pew_xgb_outofsamp = predict(xgb_pew, pew_dat_xgb_outofsamp, reshape =T)
+
+#getting outcome with max prob
+pew_xgb_plurality_train <- apply(pew_xgb_outcome,1, which.max)
+pew_xgb_plurality_test <- apply(pew_xgb_outofsamp,1, which.max)
+
+sum(pew_xgb_plurality_train -1 == 
+        pew_out_int[pew_percent])/length(pew_out_int[pew_percent])
+sum(pew_xgb_plurality_test - 1 == 
+        pew_out_int[-pew_percent])/length(pew_out_int[-pew_percent])
+#rep = 2, dem = 0 other = 1
+
+pew_xgb_train_char = factor(case_when(pew_xgb_plurality_train == 1
+                                   ~ "Democrat",
+                              pew_xgb_plurality_train  == 3 
+                              ~ "Republican",
+                              pew_xgb_plurality_train  == 2 
+                              ~ "Other"),
+                    levels = c("Democrat", "Other", "Republican"))
+
+pew_xgb_test_char = factor(case_when(pew_xgb_plurality_test  == 1 
+                                  ~ "Democrat",
+                             pew_xgb_plurality_test  == 3 
+                             ~ "Republican",
+                             pew_xgb_plurality_test  == 2 
+                             ~ "Other"), 
+                   levels = c("Democrat", "Other", "Republican"))
+           
+           
+#check
+sum(pew_xgb_train_char == pew_outcome[pew_percent])/length(pew_percent)
+sum(pew_xgb_test_char == pew_outcome[-pew_percent])/length(pew_outcome[-pew_percent])
+
+pew_conf_train = confusionMatrix(as.factor(pew_xgb_train_char), 
+                    as.factor(pew_model_dat$recode_vote_2016)[pew_percent])
+
+pew_conf_test = confusionMatrix(pew_xgb_test_char, 
+                      as.factor(pew_model_dat$recode_vote_2016)[-pew_percent])
+cat("Confusion Matrix: Pew on Pew Training\n")
+print(t(t(pew_conf_train$table)/colSums(pew_conf_train$table)))
+cat("Confusion Matrix: Pew on Pew Testing\n")
+print(t(t(pew_conf_test$table)/colSums(pew_conf_test$table)))
+
+            
+########  PREDICTING XBG CCES OUTCOME ###############
+#need full pew in case this is two way
+pew_matrix_all <- pew %>%
+    dplyr::select(recode_age,
+           recode_female,
+           recode_race,
+           recode_region,
+           recode_pid_3way,
+           recode_educ,
+           recode_income,
+           #recode_relig has 38 Nas so need to use buckets
+           recode_relig_6way,
+           recode_born,
+           #recode_attndch has some nas need to use buckegs
+           recode_attndch_4way,
+           recode_race_educ_reg) %>%
+    sparse.model.matrix(as.formula("~."), .)
+    
+pew_matrix_all = pew_matrix_all[,-1]
+
+ #with cces data, predict cces modeled outcome; must use full cces data regardless 
+#of model
+cces_matrix_all <- cces %>%
+dplyr::select(recode_age,
+       recode_female,
+       recode_race,
+       recode_region,
+       recode_pid_3way,
+       recode_educ,
+       recode_income,
+       #recode_relig has 38 Nas so need to use buckets
+       recode_relig_6way,
+       recode_born,
+       #recode_attndch has some nas need to use buckegs
+       recode_attndch_4way,
+       recode_race_educ_reg) %>%
+sparse.model.matrix(as.formula("~."), .)
+
+cces_matrix_all = cces_matrix_all[,-1]
+
+            
+######## PRED ON PEW #######
+### 1. CCES ON PEW
+mod_cces_on_pew = predict(xgb_cces, pew_matrix_all, reshape=T)
+mod_cces_on_pew_plur <- apply(mod_cces_on_pew,1, which.max)
+sum(mod_cces_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
+#same thing just with characters to make confusion matrix easier to read
+mod_cces_on_pew_out <- case_when(mod_cces_on_pew_plur-1 == 2 ~ 
+                                  "Republican",
+                         mod_cces_on_pew_plur-1 == 1 ~ "Other", 
+                         mod_cces_on_pew_plur-1 == 0 ~ "Democrat")
+#includes predictions on others forced to be binary in two-way
+#if want only on modeled data use pew_model_dat (makes no difference for three way)
+sum(mod_cces_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+conf_pew <- confusionMatrix(as.factor(mod_cces_on_pew_out), 
+                            as.factor(pew$recode_vote_2016))
+cat("Confusion Matrix: CCES on Pew (All Data)\n")
+print(t(t(conf_pew$table)/colSums(conf_pew$table)))
+
+### 2. PEW ON PEW
+#with pew data, predict pew modeled outcome
+mod_pew_on_pew = predict(xgb_pew, pew_matrix_all, reshape=T)
+mod_pew_on_pew_plur <- apply(mod_pew_on_pew,1, which.max)
+#this only works for three waty for two way need to adjust length of mod_pew_on_pew
+#sum(mod_pew_on_pew_plur -1 == pew_out_int)/length(pew_out_int)
+
+         
+mod_pew_on_pew_out <- factor(case_when(mod_pew_on_pew_plur-1 == 2 ~
+                                           "Republican",
+                                   mod_pew_on_pew_plur-1 == 1 ~ "Other", 
+                                   mod_pew_on_pew_plur-1 == 0 ~ "Democrat"),
+                         levels = c("Democrat", "Other", "Republican"))
+
+#evaluating the performance on all pew data
+#for two way this means all those Other will be wrong automatically
+sum(mod_pew_on_pew_out == pew$recode_vote_2016)/nrow(pew)
+conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out, 
+                            as.factor(pew$recode_vote_2016))
+cat("Confusion Matrix: Pew on Pew (All Data)\n")
+print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
+
+####### PRED ON CCES ######
+### 3. PEW on CCES
+mod_pew_on_cces = predict(xgb_pew, cces_matrix_all, reshape=T)
+mod_pew_on_cces_plur <- apply(mod_pew_on_cces,1, which.max)
+#need to run xgb cces first for this to work (out_int definted)
+#sum(mod_pew_on_cces_plur -1 == out_int)/length(out_int)
+
+mod_pew_on_cces_out <- factor(case_when(mod_pew_on_cces_plur-1 == 2 ~
+                                     "Republican",
+                             mod_pew_on_cces_plur-1 == 1 ~ "Other", 
+                             mod_pew_on_cces_plur-1 == 0 ~ "Democrat"), 
+                              levels = c("Democrat", "Other", "Republican"))
+           
+#to get these perecents just use full otucome where NAs are cosidered other
+outcome <- cces$recode_vote_2016
+outcome[is.na(outcome)] <- "Other"
+sum(mod_pew_on_cces_out == outcome)/length(outcome)
+conf_pew_on_cces <- confusionMatrix(as.factor(mod_pew_on_cces_out),
+                                    as.factor(outcome))
+cat("Confusion Matrix: Pew on CCES (All Data)\n")
+print(t(t(conf_pew_on_cces$table)/colSums(conf_pew_on_cces$table)))
+
+
+#### 4. CCES ON CCES
+mod_cces_on_cces = predict(xgb_cces, cces_matrix_all, reshape=T)
+
+mod_cces_on_cces_plur <- apply(mod_cces_on_cces,1, which.max)
+# sum(mod_cces_on_cces_plur -1 == out_int)/length(out_int)
+            
+mod_cces_on_cces_out <- factor(case_when(mod_cces_on_cces_plur-1 == 2 ~ 
+                                            "Republican",
+                              mod_cces_on_cces_plur-1 == 1 ~ "Other", 
+                              mod_cces_on_cces_plur-1 == 0 ~ "Democrat"), 
+                              levels = c("Democrat", "Other", "Republican"))
+
+sum(mod_cces_on_cces_out == outcome)/length(outcome)
+conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
+                                 as.factor(outcome))
+cat("Confusion Matrix: CCES on CCES (All Data)\n")
+print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
+
+            
+################### POST PROCESS: Updating Data #######################
+#max prob is
+#xgb_cces_on_pew_plur <- apply(xgb_cces_on_pew,1, max)
+#mod_pew_on_pew_plur <- apply(mod_pew_on_pew,1, max)
+
+#prob rep
+mod_cces_on_pew_pR <- mod_cces_on_pew[,3]
+mod_pew_on_pew_pR <- mod_pew_on_pew[,3]
+
+#prob dem
+mod_cces_on_pew_pD <- mod_cces_on_pew[,1]
+mod_pew_on_pew_pD <-  mod_pew_on_pew[,1]
+
+#prob other
+mod_cces_on_pew_pO <- mod_cces_on_pew[,2]
+mod_pew_on_pew_pO <-  mod_pew_on_pew[,2]
+
+#individual level margins
+margin_cces_on_pew = (mod_cces_on_pew_pD - mod_cces_on_pew_pR)/ 
+    (mod_cces_on_pew_pR + mod_cces_on_pew_pD)
+margin_pew_on_pew = (mod_pew_on_pew_pD- mod_pew_on_pew_pR)/
+    (mod_pew_on_pew_pR + mod_pew_on_pew_pD)
+#indiv level diff
+diff_cces_on_pew = mod_cces_on_pew_pD - mod_cces_on_pew_pR
+diff_pew_on_pew = mod_pew_on_pew_pD- mod_pew_on_pew_pR
+
+pew <- cbind(pew, 
+                 mod_cces_on_pew_pR,
+                 mod_pew_on_pew_pR,
+                 mod_cces_on_pew_pD,
+                 mod_pew_on_pew_pD,
+                 margin_cces_on_pew,
+                 margin_pew_on_pew,
+                 diff_cces_on_pew,
+                 diff_pew_on_pew) 
+         
+pew_mod <- cbind(pew, 
+                 mod_cces_on_pew_pO, mod_pew_on_pew_pO)
+
+### CCES:
+
+#max prob is
+mod_cces_on_cces_plur <- apply(mod_cces_on_cces,1, max)
+mod_pew_on_cces_plur <- apply(mod_pew_on_cces,1, max)
+
+#prob rep
+mod_cces_on_cces_pR <- mod_cces_on_cces[,3]
+mod_pew_on_cces_pR <- mod_pew_on_cces[,3]
+
+#prob dem
+mod_cces_on_cces_pD <- mod_cces_on_cces[,1]
+mod_pew_on_cces_pD <-  mod_pew_on_cces[,1]
+
+#prob dem
+mod_cces_on_cces_pO <- mod_cces_on_cces[,2]
+mod_pew_on_cces_pO <-  mod_pew_on_cces[,2]
+           
+
+margin_cces_on_cces = (mod_cces_on_cces_pD - mod_cces_on_cces_pR)/ 
+    (mod_cces_on_cces_pR + mod_cces_on_cces_pD)
+margin_pew_on_cces = (mod_pew_on_cces_pD - mod_pew_on_cces_pR)/ 
+    (mod_pew_on_cces_pR + mod_pew_on_cces_pD)
+
+diff_cces_on_cces = mod_cces_on_cces_pD - mod_cces_on_cces_pR
+diff_pew_on_cces = mod_pew_on_cces_pD - mod_pew_on_cces_pR
+            
+cces <- cbind(cces, 
+                  mod_cces_on_cces_out,
+                  mod_pew_on_cces_out,
+                  mod_cces_on_cces_plur,
+                  mod_pew_on_cces_plur,
+                  mod_cces_on_cces_pD,
+                  mod_pew_on_cces_pD,
+                  mod_cces_on_cces_pO,
+                  mod_pew_on_cces_pO,
+                  mod_cces_on_cces_pR,
+                  mod_pew_on_cces_pR,
+                  margin_cces_on_cces,
+                  margin_pew_on_cces,
+                  diff_cces_on_cces,
+                  diff_pew_on_cces)
+
+write.csv(cces, file = "cces_xgb.csv")
+write.csv(pew, file = "pew_xgb.csv")
+
+```
+

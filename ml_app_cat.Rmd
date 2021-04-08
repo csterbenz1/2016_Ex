@@ -254,14 +254,20 @@ pew_out <- function(PRE = TRUE,
     missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in%
                                                 unique(pew$strata))]
     cat("% cces original strata missing from pew, ",
-         length(missing_strata)/ length(unique(cces$strata)))
+         length(missing_strata)/ length(unique(cces$strata)), 
+        "\nand", cces %>% filter(strata %in% missing_strata) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
+    cces %>% filter(strata %in% missing_strata) %>% summarise(n())
+  
     missing_strata_reduc <- unique(cces$strata_reduc)[!(unique(cces$strata_reduc) %in%
                                                 unique(pew$strata_reduc))]
     
-     cat("% cces reduc strata missing from pew, ",length(missing_strata_reduc)/ length( unique(cces$strata_reduc)))
+     cat("% cces reduc strata missing from pew, ",length(missing_strata_reduc)/ length( unique(cces$strata_reduc)), 
+        "\nand", cces %>% filter(strata_reduc %in% missing_strata_reduc) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
+     
     missing_strata_all <- unique(cces$strata_all)[!(unique(cces$strata_all) %in%
                                                 unique(pew$strata_all))]
-     cat("% cces all strata missing from pew, ",length(missing_strata_all)/ length( unique(cces$strata_all)))
+     cat("% cces all strata missing from pew, ",length(missing_strata_all)/ length( unique(cces$strata_all)),
+         "\nand", cces %>% filter(strata_all %in% missing_strata_all) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n")
     
     #we also have the reverse where pew may have strata we don't have in cces
     #this arises if we eliminate NAs in recode_vote for cces
@@ -3512,12 +3518,15 @@ allmargins <- function(pop_weights = FALSE,
         if(pop_weights & !NEWpopw & maxit == 500 & tolerance == 1e-06) {
             # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
             #load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18_OLD.Rdata")
-            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
-            cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18 \n")
+            # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/bmaxvar_cat_par_wTRUE_m500_t1e-06_2021-03-30.Rdata")
+            index = 1
+            cat("loading: bmaxvar_cat_par_wTRUE_m500_t1e-06_2021-03-30 \n")
             #load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-05.Rdata")
         } else if(pop_weights & maxit == 800 & tolerance == 1e-04) {
             
             load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+        
             cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23 \n")
             
         } else if(pop_weights & NEWpopw & maxit == 500 & tolerance == 1e-06) {
@@ -3527,8 +3536,12 @@ allmargins <- function(pop_weights = FALSE,
             
         } else if(!pop_weights & tolerance == 1e-06 & maxit == 500) {
             
-            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
-            cat("OLD MF loading:allB_cat_par_m500_t1e-06_2021-03-04 \n")
+            # load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_m500_t1e-06_2021-03-04.Rdata")
+            # cat("OLD MF loading:allB_cat_par_m500_t1e-06_2021-03-04 \n")
+            load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/bmaxvar_cat_par_wFALSE_m500_t1e-06_2021-03-30.Rdata")
+            index = 1
+            cat("loading: bmaxvar_cat_par_wFALSE_m500_t1e-06_2021-03-30 \n")
+            
             
         } else if(!pop_weights & tolerance == 1e-04 & maxit == 500) {
             
@@ -3539,11 +3552,12 @@ allmargins <- function(pop_weights = FALSE,
             cat("loading: allB_cat_par_wFALSE_m800_t1e-04_2021-03-23.Rdata")
         }
 
-        
+        #updated for the only bmaxvar 
         kpop_w <- weights_cat[[index]]$kpop_w
         kpop_conv_w <- weights_cat[[index]]$kpop_w_conv
         kpop_mf_w <- weights_cat[[index]]$kpop_mf_w
-        kpop_constr_w <- weights_cat[[index]]$kpop_contraint
+        kpop_constr_w <- weights_cat[[index]]$kpop_contraint_w
+        kpop_constr_wedu_w <- weights_cat[[index]]$kpop_contraint_weduc_w
         kpop_full_constr_w <- weights_cat[[index]]$kpop_full_constraint
         
         #colnames_bottom = c("No Wts", "No Wts", "(cat)", "(cat)", "(cat)","all", 
@@ -3553,9 +3567,12 @@ allmargins <- function(pop_weights = FALSE,
         #                      "all", "reduc",
         #                      "all", "retro")
         
-        colnames_bottom = c("Variable", "Orig", "", "+Conv", "(All)", "(Demos)", "(All)", "All", "Reduc", "All", "Retro")
+        # colnames_bottom = c("Variable", "Orig", "", "+Conv", "(All)", "(Demos)", "(All)", "All", "Reduc", "All", "Retro")
+        colnames_bottom = c("Variable", "Orig", "","(Demos)", "(Demos)",
+                            "(Demos+Edu)", "(Demos+Edu)", "(All)",  "(All)",
+                             "Retro", "Reduc")
         if(!full_constr) {
-            colnames_bottom = colnames_bottom[-7]
+            colnames_bottom = colnames_bottom[-5]
         }
         
     } else if(drop_ccesNAs) {
@@ -3725,6 +3742,8 @@ allmargins <- function(pop_weights = FALSE,
     if(cat_kernel) {
          kpop_constr <-  svydesign(~1, data = pew_xgb_dat,
                               weights = kpop_constr_w[kbal_data_sampled ==1])
+         kpop_constr_weud <-  svydesign(~1, data = pew_xgb_dat,
+                              weights = kpop_constr_wedu_w[kbal_data_sampled ==1])
          
          kpop_full_constr <-  svydesign(~1, data = pew_xgb_dat,
                               weights = kpop_full_constr_w[kbal_data_sampled ==1])
@@ -3798,20 +3817,23 @@ allmargins <- function(pop_weights = FALSE,
         cces_margins = svymean(margins_formula_cces, cces_svy, 
                                na.rm = ifelse(drop_ccesNAs, TRUE, FALSE)),
         kpop = svymean(margins_formula, kpop),
-        kpop_mf = svymean(margins_formula, kpop_mf),
-        kpop_conv = svymean(margins_formula, kpop_conv),
+        #kpop_mf = svymean(margins_formula, kpop_mf),
+        #kpop_conv = svymean(margins_formula, kpop_conv),
         kpop_constr = if(cat_kernel) {
             svymean(margins_formula, kpop_constr)
+            }else {NA},
+        kpop_constr_wedu = if(cat_kernel) {
+            svymean(margins_formula, kpop_constr_weud)
             }else {NA},
         kpop_full_constr = if(cat_kernel) {
             svymean(margins_formula, kpop_full_constr)
             }else {NA},
-        #rake_demos_noeduc = svymean(margins_formula, rake_demos_noeduc),
-        #rake_demos_weduc = svymean(margins_formula, rake_demos_weduc),
+        rake_demos_noeduc = svymean(margins_formula, rake_demos_noeduc),
+        rake_demos_weduc = svymean(margins_formula, rake_demos_weduc),
         rake_all_vars = svymean(margins_formula, rake_all_vars),
         #post_stratification = svymean(margins_formula, post_stratification),
         post_strat_reduc = svymean(margins_formula, post_strat_reduc),
-        post_strat_all = svymean(margins_formula, post_strat_all),
+        #post_strat_all = svymean(margins_formula, post_strat_all),
         rake_retrospective = svymean(margins_formula, rake_retrospective)) * 100, 5)
     #we multiplied the recode_age margins by 100 unnecc above bc it' just a straight mean
     #so let's undo that
@@ -3832,18 +3854,20 @@ allmargins <- function(pop_weights = FALSE,
     margins_diff <- as.data.frame(margins) %>% 
         mutate(pew = cces_margins - pew,
                kpop = cces_margins - kpop,
-               kpop_mf = cces_margins - kpop_mf,
-               kpop_conv = cces_margins - kpop_conv,
+               #kpop_mf = cces_margins - kpop_mf,
+               #kpop_conv = cces_margins - kpop_conv,
                kpop_constr = if(cat_kernel) {cces_margins - kpop_constr }
+               else {NA},
+              kpop_constr_wedu = if(cat_kernel) {cces_margins - kpop_constr_wedu }
                else {NA},
                kpop_full_constr = if(cat_kernel) {cces_margins - kpop_full_constr }
                else {NA},
-               #rake_demos_noeduc = cces_margins- rake_demos_noeduc,
-               #rake_demos_weduc = cces_margins- rake_demos_weduc,
+               rake_demos_noeduc = cces_margins- rake_demos_noeduc,
+               rake_demos_weduc = cces_margins- rake_demos_weduc,
                rake_all_vars = cces_margins - rake_all_vars,
                #post_stratification = cces_margins-  post_stratification,
                post_strat_reduc = cces_margins-  post_strat_reduc,
-               post_strat_all = cces_margins-  post_strat_all,
+               #post_strat_all = cces_margins-  post_strat_all,
                rake_retrospective = cces_margins- rake_retrospective)
     rownames(margins_diff) <- rownames(margins)
     
@@ -3887,18 +3911,20 @@ allmargins <- function(pop_weights = FALSE,
                         })) %>%
     group_by(var) %>% summarize(pew_unweighted = mean(abs(pew)), 
                                 kpop = mean(abs(kpop)),
-                                kpop_conv = mean(abs(kpop_conv)), 
-                                kpop_mf = mean(abs(kpop_mf)),
+                                #kpop_conv = mean(abs(kpop_conv)), 
+                                #kpop_mf = mean(abs(kpop_mf)),
                                 kpop_constr = mean(abs(kpop_constr)),
+                                rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
+                                kpop_constr_wedu = mean(abs(kpop_constr_wedu)),
+                                rake_demos_weduc = mean(abs(rake_demos_weduc)),
                                 kpop_full_constr = mean(abs(kpop_full_constr)),
-                                #rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
-                                #rake_demos_weduc = mean(abs(rake_demos_weduc)), 
                                 rake_all_vars = mean(abs(rake_all_vars)), 
+                                rake_retrospective = mean(abs(rake_retrospective)),
                                 #post_stratification =
                                 #    mean(abs(post_stratification)),
-                                post_strat_reduc = mean(abs(post_strat_reduc)),
-                                post_strat_all = mean(abs(post_strat_all)),
-                                rake_retrospective = mean(abs(rake_retrospective)))
+                                post_strat_reduc = mean(abs(post_strat_reduc))
+                                #post_strat_all = mean(abs(post_strat_all)),
+                                )
     #for kable aethetics later this helps
     wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
     
@@ -3924,14 +3950,14 @@ allmargins <- function(pop_weights = FALSE,
         popw_lab = "No pop Weights"
     }
     if(three_way) {
-        xgb_lab = " (3way xgb)"
+        xgb_lab = " (3way lasso)"
     } else {
-        xgb_lab = " (2way xgb)"
+        xgb_lab = " (2way lasso)"
     }
     if(drop_ccesNAs) {
         NAs_lab = " No CCES NAs "
     } else {
-        NAs_lab = " X CCES NAs "
+        NAs_lab = " XXX CCES NAs "
     }
     tol_label = paste0(" tol=",as.character(tolerance))
     maxit_label = paste0( " maxit=", as.character(maxit))
@@ -4012,39 +4038,55 @@ allmargins <- function(pop_weights = FALSE,
                       "region", "pid_3way","educ_6way", "income_5way",
                       "relig_6way","born","attndch_4way", 
                       if(age_buckets){ "age_buckets"})
+        formula_kpop_weduc <- c("female", "race",
+                      "region", "pid_3way","educ_6way", 
+                       "age_buckets")
+        
     } else {
         formula_kpop <- c("age_buckets", "female", "race",
                       "region", "pid_3way","educ_6way", "income_5way",
                       "relig_6way","born","attndch_4way")
+        formula_kpop_weduc <- c("female", "race",
+                      "region", "pid_3way","educ_6way", 
+                       "age_buckets")
+         formula_kpop_all <- c("female", "race",
+                      "region", "pid_3way","educ_6way", "age_buckets",
+                      "income_5way", "relig_6way","born","attndch_4way")
+        
+        
     }
     
     kpop_aes <- ifelse((wmabserr_nooutcomes$var %in% formula_kpop), "gray", "black")
     
     if(cat_kernel) { 
         kpop_constr_aes <- noedu_aes
-        kpop_full_constr_aes <- all_aes
+        kpop_constr_wedu_aes <- ifelse((wmabserr_nooutcomes$var %in% formula_kpop_weduc), "gray", "black")
+        kpop_full_constr_aes <- ifelse((wmabserr_nooutcomes$var %in% formula_kpop_all), "gray", "black")
         #wmabserr_nooutcomes[, -which(colnames(wmabserr_nooutcomes) == "kpop_full_constr")]
         if(full_constr) {
+            
              kable_err <- kable(wmabserr_nooutcomes,
                        format = "latex",
                        caption = caption_err,
                       col.names = colnames_bottom,
                        booktabs = T,
                        digits = 3) %>% kable_styling() %>%
-                column_spec(5,
-                        color =kpop_aes) %>%
-                column_spec(6,
+                column_spec(4,
                         color =kpop_constr_aes) %>%
+                 column_spec(5,
+                        color =noedu_aes) %>%
+                 column_spec(6,
+                        color =kpop_constr_wedu_aes) %>%
              column_spec(7,
-                        color =kpop_full_constr_aes) %>%
+                        color =wedu_aes) %>%
                 column_spec(8,
-                        color = all_aes) %>%
+                        color = kpop_full_constr_aes) %>%
                 column_spec(9,
-                        color =ps_reduc_aes) %>%
+                        color =all_aes) %>%
                 column_spec(10,
-                        color =ps_all_aes) %>%
+                        color =retro_aes) %>%
                 column_spec(11,
-                        color =retro_aes)
+                        color =ps_reduc_aes)
         } else {
              kable_err <- kable(wmabserr_nooutcomes[, -which(colnames(wmabserr_nooutcomes) == "kpop_full_constr")],
                            format = "latex",
@@ -4052,19 +4094,22 @@ allmargins <- function(pop_weights = FALSE,
                           col.names = colnames_bottom,
                            booktabs = T,
                            digits = 3) %>% kable_styling() %>%
-                    column_spec(5,
-                            color =kpop_aes) %>%
-                    column_spec(6,
-                            color =kpop_constr_aes) %>%
-                    column_spec(7,
-                            color = all_aes) %>%
-                    column_spec(8,
-                            color =ps_reduc_aes) %>%
-                    column_spec(9,
-                            color =ps_all_aes) %>%
-                    column_spec(10,
-                            color =retro_aes)
-
+                column_spec(4,
+                        color =kpop_constr_aes) %>%
+                 column_spec(5,
+                        color =noedu_aes) %>%
+                 # column_spec(5,
+                 #        color =kpop_constr_wedu_aes) %>%
+             column_spec(6,
+                        color =wedu_aes) %>%
+                column_spec(7,
+                        color = kpop_full_constr_aes) %>%
+                column_spec(8,
+                        color =all_aes) %>%
+                column_spec(9,
+                        color =retro_aes) %>%
+                column_spec(10,
+                        color =ps_reduc_aes)
         }
         
     } else {
@@ -4163,7 +4208,7 @@ load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/al
 
 b_run <- out_cat$b
 
-cat_margins_popw <- allmargins(pop_weights = FALSE, 
+cat_margins_popw <- allmargins(pop_weights = TRUE, 
                                NEWpopw = FALSE,
                              age_buckets = FALSE, 
                              three_way = TRUE, 
@@ -4174,7 +4219,7 @@ cat_margins_popw <- allmargins(pop_weights = FALSE,
                              tolerance = 1e-06,
                              maxit = 500,
                               cat_kernel = TRUE, 
-                             full_constr = FALSE)
+                             full_constr = TRUE)
 View(cat_margins_popw$wmabserr)
 cat_margins_popw$kable_err
 cat_margins_popw$kable_outmom

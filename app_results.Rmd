@@ -1,0 +1,1964 @@
+---
+title: "2016 Application"
+author: "Ciara Sterbenz"
+output:
+  pdf_document: default
+date: "4/7/2021"
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include = F}
+#rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(9345876)
+
+### Packages
+library(tidyverse)
+library(survey)
+library(kbal)
+library(knitr)
+library(kableExtra)
+```
+
+```{r load_dat}
+#loading the updated data:
+path_data= "/Users/Ciara/Dropbox/kpop/application/data/"
+path_weights = "/Users/Ciara/Dropbox/kpop/application/weights/"
+POPW = TRUE
+
+if(POPW) {
+    cces <- read.csv(paste0(path_data, "cces_lasso.csv"))
+    pew <- read.csv(paste0(path_data, "pew_lasso.csv"))
+} else {
+    cces <- read.csv(paste0(path_data, "cces_xgb.csv"))
+    pew <- read.csv(paste0(path_data, "pew_xgb.csv"))
+}
+
+
+#note that all the usual minor cleaning we would do has already been performed in the app_model_outcome.Rmd that built the above files
+```
+
+
+```{r setup_targets}
+formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + recode_race + 
+    recode_region + recode_pid_3way
+
+formula_rake_demos_weduc <- ~recode_age_bucket + recode_female + 
+    recode_race + recode_region + recode_educ_3way + recode_pid_3way
+
+formula_rake_all_vars <- ~recode_age_bucket + recode_female + 
+    recode_race + recode_region + recode_pid_3way + recode_educ +
+    recode_income_5way + recode_relig_6way + recode_born + recode_attndch_4way
+
+
+formula_ps <- ~recode_age_3way + recode_female + recode_race +
+    recode_region + recode_educ_wh_3way + recode_pid_3way
+
+formula_ps_reduc <- ~recode_age_3way + recode_female + 
+    recode_race + recode_region + recode_pid_3way  +
+    recode_income_3way + recode_born + recode_educ_wh_3way
+
+#let's coarsen income and religion and attend church:
+formula_ps_all <- ~recode_age_3way + recode_female + 
+    recode_race + recode_region + recode_pid_3way + recode_educ_3way +
+    recode_income_3way + recode_relig_6way + recode_born + recode_attndch_bin
+
+
+formula_retrospective <- ~recode_age_bucket:recode_pid_3way + 
+    recode_female:recode_pid_3way+ recode_race_educ_reg:recode_pid_3way
+
+### set up some functions for convenient estimates
+vote_contrast <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /
+                               (recode_vote_2016Democrat + recode_vote_2016Republican))
+
+vote_diff <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /(recode_vote_2016Democrat + recode_vote_2016Republican + recode_vote_2016Other)) 
+
+
+#### Build Strata For PS
+cces <- bind_cols(cces, cces %>% 
+                      unite("strata", all.vars(formula_ps), remove = FALSE) %>%
+                         unite("strata_reduc", all.vars(formula_ps_reduc), 
+                               remove = FALSE) %>%
+                         unite("strata_all", all.vars(formula_ps_all)) %>%
+                      dplyr::select(strata, strata_reduc, strata_all))
+
+pew <- bind_cols(pew, pew %>% 
+                     unite("strata", all.vars(formula_ps), remove = FALSE) %>%
+                     unite("strata_reduc", all.vars(formula_ps_reduc), 
+                           remove = FALSE) %>%
+                     unite("strata_all", all.vars(formula_ps_all)) %>%
+                     dplyr::select(strata, strata_reduc, strata_all))
+
+#make targets
+create_targets <- function (target_design, target_formula) {
+    target_mf <- model.frame(target_formula, model.frame(target_design))
+    target_mm <- model.matrix(target_formula, target_mf)
+    wts <- weights(target_design)
+    colSums(target_mm * wts) / sum(wts)
+}
+
+```
+
+
+# Margins Functions to produce latex tables
+
+As is only works for b = argmax V(K) because I have not rerun across other b's to be able to get margins for those choices of b.
+
+```{r margins_func}
+########## Margins Function #############
+allmargins <- function(pop_weights = TRUE,
+                       b = NULL,
+                       margins_formula = NULL, 
+                       order = NULL,
+                       tolerance = 1e-06,
+                       maxit = 500) {
+    
+    pew_nowt <- suppressWarnings(svydesign(ids = ~1, data = pew))
+    
+    missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in%
+                                                        unique(pew$strata))]
+    missing_strata_reduc <- unique(cces$strata_reduc)[!(unique(cces$strata_reduc) %in%
+                                                unique(pew$strata_reduc))]
+  
+    missing_strata_all <- unique(cces$strata_all)[!(unique(cces$strata_all) %in%
+                                                unique(pew$strata_all))]
+    
+    problem <- unique(pew$strata)[!(unique(pew$strata) %in%
+                                                   unique(cces$strata))]
+    problem_reduc <- unique(pew$strata_reduc)[!(unique(pew$strata_reduc)
+                                                         %in%
+                                                   unique(cces$strata_reduc))]
+    
+    problem_all <- unique(pew$strata_all)[!(unique(pew$strata_all) %in%
+                                                   unique(cces$strata_all))]
+    
+    kbal_data_sampled <- c(rep(1, nrow(pew)),
+                           rep(0, nrow(cces)))
+
+     
+    if(pop_weights & maxit == 500 & tolerance == 1e-06) {
+        load(paste0(path_weights,"bmaxvar_cat_par_wTRUE_m500_t1e-06_2021-03-30.Rdata"))
+        index = 1
+        b = out_cat$b
+        cat("loading: bmaxvar_cat_par_wTRUE_m500_t1e-06_2021-03-30 \n")
+        
+    } else if(pop_weights & maxit == 800 & tolerance == 1e-04) {
+        #load("./weights/allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+        #cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23 \n")
+        stop("Not supported currenty")
+        b_run <- out_cat$b
+        index = which(b_run == b)
+        if(length(index) == 0 ) {
+            stop("Must enter b in range of b_run")
+        }    
+    } else if(!pop_weights & tolerance == 1e-06 & maxit == 500) {
+        load(paste0(path_weights,"bmaxvar_cat_par_wFALSE_m500_t1e-06_2021-03-30.Rdata"))
+        index = 1
+         b = out_cat$b
+        cat("loading: bmaxvar_cat_par_wFALSE_m500_t1e-06_2021-03-30 \n")
+        
+    } else if(!pop_weights & tolerance == 1e-04 & maxit == 800) {
+        #load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wFALSE_m800_t1e-04_2021-03-23.Rdata")
+        #cat("loading: allB_cat_par_wFALSE_m800_t1e-04_2021-03-23.Rdata")
+        stop("Not supported currenty")
+        b_run <- out_cat$b
+        index = which(b_run == b)
+        if(length(index) == 0 ) {
+            stop("Must enter b in range of b_run")
+        }
+    }
+
+    #updated for the only bmaxvar 
+    kpop_w <- weights_cat[[index]]$kpop_w
+    kpop_conv_w <- weights_cat[[index]]$kpop_w_conv
+    kpop_mf_w <- weights_cat[[index]]$kpop_mf_w
+    #kpop_demos_w <- weights_cat[[index]]$kpop_demos_w
+    #kpop_demos_wedu_w <- weights_cat[[index]]$kpop_demos_weduc_w
+    #kpop_all_w <- weights_cat[[index]]$kpop_all_w
+    #temproray until rerun weights
+    kpop_demos_w <- weights_cat[[index]]$kpop_contraint_w
+    kpop_demos_wedu_w <- weights_cat[[index]]$kpop_contraint_weduc_w
+    kpop_all_w <- weights_cat[[index]]$kpop_full_constraint_w
+    
+
+    b_lab = paste0("b=", round(b, 2))
+
+    colnames_bottom = c("Variable", "Orig", "","(Demos)", "(Demos)",
+                        "(Demos+Edu)", "(Demos+Edu)", "(All)",  "(All)",
+                         "Retro", "Reduc")
+    
+    if(pop_weights) {
+        cces_svy <- svydesign(ids = ~1, weights = ~commonweight_vv_post,
+                          data = cces)
+    } else {
+        cces_svy <- svydesign(ids = ~1,
+                          data = cces)
+    }
+    
+     targets_rake_demos_noeduc <- create_targets(cces_svy,
+                                                    formula_rake_demos_noeduc)
+     targets_rake_demos_weduc <- create_targets(cces_svy, formula_rake_demos_weduc)
+     targets_rake_all_vars <- create_targets(cces_svy, 
+                                                       formula_rake_all_vars)
+     targets_retrospective <- create_targets(cces_svy, formula_retrospective)
+     targets_ps <- svytable(formula = ~strata,
+                               design = subset(cces_svy, !(strata %in%
+                                                                missing_strata)))
+     targets_ps_reduc <- svytable(formula = ~strata_reduc,
+                               design = subset(cces_svy, !(strata_reduc %in%
+                                                                missing_strata_reduc)))
+     targets_ps_all <- svytable(formula = ~strata_all,
+                               design = subset(cces_svy, !(strata_all %in%
+                                                                missing_strata_all)))
+     
+     rake_demos_noeduc <- calibrate(design = pew_nowt,
+                                   formula = formula_rake_demos_noeduc,
+                                   population = targets_rake_demos_noeduc,
+                                   calfun = "raking")
+     rake_demos_noeduc <- svydesign(~1, data = pew, 
+                                   weights = weights(rake_demos_noeduc))
+    
+     rake_demos_weduc <- calibrate(design = pew_nowt,
+                                  formula = formula_rake_demos_weduc,
+                                  population = targets_rake_demos_weduc,
+                                  calfun = "raking")
+     rake_demos_weduc <- svydesign(~1, data = pew, 
+                                  weights = weights(rake_demos_weduc))
+    
+     rake_all_vars <- calibrate(design = pew_nowt,
+                                  formula = formula_rake_all_vars,
+                                  population = targets_rake_all_vars,
+                                  calfun = "raking")
+     rake_all_vars <- svydesign(~1, data = pew, 
+                                  weights = weights(rake_all_vars))
+    
+    #post stratification
+    pew_ps <- svydesign(ids = ~1, 
+                            data = pew %>% filter(!(strata %in% problem)))
+    post_stratification <- postStratify(design = pew_ps,
+                                        strata = ~strata,
+                                        population = targets_ps)
+    post_stratification <- svydesign(~1, data = pew %>% 
+                                         filter(!(strata %in% problem)),
+                                     weights = weights(post_stratification))
+    #reduced
+    pew_ps_reduc_xgb <- svydesign(ids = ~1, data = pew %>% 
+                                      filter(!(strata_reduc %in% problem_reduc)))
+    post_strat_reduc <- postStratify(design = pew_ps_reduc_xgb,
+                                        strata = ~strata_reduc,
+                                        population = targets_ps_reduc)
+    post_strat_reduc <- svydesign(~1, data = pew %>%
+                                      filter(!(strata_reduc %in% problem_reduc)),
+                                     weights = weights(post_strat_reduc))
+    
+    pew_ps_all_xgb <- svydesign(ids = ~1,  data = pew %>%  
+                                    filter(!(strata_all %in% problem_all)))
+    post_strat_all <- postStratify(design = pew_ps_all_xgb,
+                                        strata = ~strata_all,
+                                        population = targets_ps_all)
+    post_strat_all <- svydesign(~1, data = pew %>% 
+                                    filter(!(strata_all %in% problem_all)),
+                                weights = weights(post_strat_all))
+    
+    rake_retrospective <- calibrate(design = pew_nowt,
+                                    formula = formula_retrospective,
+                                    population = targets_retrospective,
+                                    calfun = "raking",
+                                    force = TRUE)
+    rake_retrospective <- svydesign(~1,
+                                    data = pew,
+                                    weights = weights(rake_retrospective))
+    
+    # kpop
+    kpop <- svydesign(~1, data = pew,
+                weights = kpop_w[kbal_data_sampled ==1])
+
+    kpop_conv <- svydesign(~1, data = pew,
+                               weights = kpop_conv_w[kbal_data_sampled ==1])
+    
+    kpop_mf <-  svydesign(~1, data = pew,
+                              weights = kpop_mf_w[kbal_data_sampled ==1])
+
+     kpop_demos <-  svydesign(~1, data = pew,
+                          weights = kpop_demos_w[kbal_data_sampled ==1])
+     kpop_demos_wedu <-  svydesign(~1, data = pew,
+                          weights = kpop_demos_wedu_w[kbal_data_sampled ==1])
+     
+     kpop_all <-  svydesign(~1, data = pew,
+                          weights = kpop_all_w[kbal_data_sampled ==1])
+     
+
+    
+    if(is.null(margins_formula)) {
+            margins_formula <- ~recode_vote_2016 +
+                mod_cces_on_pew_pD + mod_cces_on_pew_pR + mod_cces_on_pew_pO +
+                mod_pew_on_pew_pD + mod_pew_on_pew_pR + mod_pew_on_pew_pO + 
+                recode_pid_3way + 
+                recode_female + recode_race +recode_region + recode_educ +recode_relig_6way+
+                recode_born + recode_attndch_4way + recode_income_5way +
+                recode_age_bucket+recode_age+recode_agesq+recode_agecubed+recode_age_factor+
+                recode_race_educ_reg + recode_educ_wh_3way + 
+                recode_educ_pid_race +
+                recode_pid_race + 
+                recode_educ_pid +
+                recode_midwest_edu_race +
+                recode_midwest_wh_edu
+
+          margins_formula_cces <- ~recode_vote_2016 +
+            mod_cces_on_cces_pD + mod_cces_on_cces_pR + mod_cces_on_cces_pO +
+            mod_pew_on_cces_pD + mod_pew_on_cces_pR + mod_pew_on_cces_pO + 
+            recode_pid_3way + 
+            recode_female + recode_race +recode_region + recode_educ + recode_relig_6way + 
+            recode_born + recode_attndch_4way + recode_income_5way +
+            recode_age_bucket + recode_age +recode_agesq+recode_agecubed+recode_age_factor +
+            recode_race_educ_reg + recode_educ_wh_3way + 
+            recode_educ_pid_race +
+            recode_pid_race + 
+            recode_educ_pid +
+            recode_midwest_edu_race +
+            recode_midwest_wh_edu
+    }
+    
+    margins <- round(cbind(
+        pew = svymean(margins_formula, pew_nowt),
+        cces_margins = svymean(margins_formula_cces, cces_svy, 
+                               na.rm =  TRUE),
+        kpop = svymean(margins_formula, kpop),
+        kpop_mf = svymean(margins_formula, kpop_mf),
+        kpop_conv = svymean(margins_formula, kpop_conv),
+        kpop_demos = svymean(margins_formula, kpop_demos),
+        kpop_demos_wedu = svymean(margins_formula, kpop_demos_wedu),
+        kpop_all = svymean(margins_formula, kpop_all),
+        rake_demos_noeduc = svymean(margins_formula, rake_demos_noeduc),
+        rake_demos_weduc = svymean(margins_formula, rake_demos_weduc),
+        rake_all_vars = svymean(margins_formula, rake_all_vars),
+        post_stratification = svymean(margins_formula, post_stratification),
+        post_strat_reduc = svymean(margins_formula, post_strat_reduc),
+        post_strat_all = svymean(margins_formula, post_strat_all),
+        rake_retrospective = svymean(margins_formula, rake_retrospective)) * 100, 5)
+    
+    rownames(margins) <- sapply(rownames(margins), 
+                                       function(x) (
+                                           if(grepl("recode", x)) {
+                                               substr(x, 8,nchar(x) )
+                                           } else {
+                                               x
+                                           }
+                                       ) )
+    #we multiplied the recode_age margins by 100 unnecc above bc it' just a straight mean
+    #so let's undo that
+    margins["age",] <- margins["age",]/100 
+    margins["agesq",] <- margins["agesq",]/100
+    margins["agecubed",] <- margins["agecubed",]/100
+
+
+    margins_diff <- as.data.frame(margins) %>% 
+        mutate(pew = cces_margins - pew,
+               kpop = cces_margins - kpop,
+               kpop_mf = cces_margins - kpop_mf,
+               kpop_conv = cces_margins - kpop_conv,
+               kpop_demos = cces_margins - kpop_demos,
+              kpop_demos_wedu =cces_margins - kpop_demos_wedu,
+               kpop_all = cces_margins - kpop_all,
+               rake_demos_noeduc = cces_margins- rake_demos_noeduc,
+               rake_demos_weduc = cces_margins- rake_demos_weduc,
+               rake_all_vars = cces_margins - rake_all_vars,
+               post_stratification = cces_margins-  post_stratification,
+               post_strat_reduc = cces_margins-  post_strat_reduc,
+               post_strat_all = cces_margins-  post_strat_all,
+               rake_retrospective = cces_margins- rake_retrospective)
+    rownames(margins_diff) <- rownames(margins)
+    
+    #get cces proportions: for weighted L1 dist on age 
+    margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
+      (margins_diff[(grep("age_factor", 
+                          rownames(margins_diff))),
+                    ])* (margins[grep("age_factor", rownames(margins)), "cces_margins"]/100)*length(levels(cces$recode_age_factor))
+    
+    #HAHAHHAHAHAHA this is horrific I should switch to str_extract now that i belatedly discovered it
+    wmabserr <- margins_diff %>% 
+    mutate(var = sapply(rownames(margins_diff), 
+                        function(y) {
+                            substr(y, 1, 
+                                   sapply(rownames(margins_diff), 
+                                          function(x) {
+                                              if(grepl("income",x)) {
+                                                  11 #income_5way
+                                             #this is so ridiculous WHY (sunk cost ugh)
+                                              } else if(grepl("xgb",x) |grepl("mod",x) |
+                                                        (grepl("age",x) & 
+                                                         !grepl("bucket",x) &
+                                                         !grepl("factor",x)) ){
+                                                  nchar(x) #keep all xgb stuff
+                                                  #THIS IS SO STUPID
+                                              } else if(grepl("factor",x)) {
+                                                  10 #age_factor
+                                              } else {
+                                               (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
+                                              }
+                                          })[y])
+                        })) %>%
+    group_by(var) %>% summarize(pew_unweighted = mean(abs(pew)), 
+                                kpop = mean(abs(kpop)),
+                                #kpop_conv = mean(abs(kpop_conv)), 
+                                #kpop_mf = mean(abs(kpop_mf)),
+                                kpop_demos = mean(abs(kpop_demos)),
+                                rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
+                                kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
+                                rake_demos_weduc = mean(abs(rake_demos_weduc)),
+                                kpop_all = mean(abs(kpop_all)),
+                                rake_all_vars = mean(abs(rake_all_vars)), 
+                                rake_retrospective = mean(abs(rake_retrospective)),
+                                #post_stratification =
+                                #    mean(abs(post_stratification)),
+                                post_strat_reduc = mean(abs(post_strat_reduc))
+                                #post_strat_all = mean(abs(post_strat_all)),
+                                )
+   
+    
+    #labels
+    if(pop_weights) {
+        popw_lab = "w/ Pop Weights"
+    } else {
+        popw_lab = "No pop Weights"
+    }
+    tol_label = paste0(" tol=",as.character(tolerance))
+    maxit_label = paste0( " maxit=", as.character(maxit))
+    
+    
+    caption_m = paste0("Margins (Difference): Unscaled K ", "b=", round(b, 2),
+                       popw_lab, " Age Buckets Only (no dnk) ",
+                       tol_label, maxit_label)
+    caption_o = paste0("Absolute Error on Margins of Outcomes: Unscaled K ","b=", 
+                       round(b, 2),
+                       popw_lab, " Age Buckets Only (no dnk) ",
+                       tol_label, maxit_label)
+    
+    caption_err = paste0("Weighted Mean Abs Error: Unscaled K ","b=", 
+                         round(b, 2), popw_lab,
+                              " Age Buckets Only (no dnk) ", tol_label, maxit_label)
+    
+    wmabserr_nooutcomes <- wmabserr %>% 
+        filter(!(var %in% c("agecubed") |grepl("xgb", var) | grepl("vote", var))) %>%
+        arrange(nchar(var))
+    if(is.null(order)) {
+        order = c("female", "pid_3way", "race", "region", "educ", "income_5way", 
+                  "relig_6way", 
+                  "pid_race", "educ_pid",
+                  "educ_pid_race", "race_educ_reg", "educ_wh_3way", "midwest_wh_edu",
+                  "midwest_edu_race",
+                  "agesq", "age_factor")
+    }
+    
+    wmabserr_nooutcomes <- wmabserr_nooutcomes[as.numeric(sapply(order, function(x) which(wmabserr_nooutcomes$var == x))),]
+    
+    
+    noedu_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_rake_demos_noeduc)[2]),
+                   "gray", "black") })
+    wedu_aes <-  sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_rake_demos_weduc)[2]), "gray", "black")
+        })
+    all_aes <-  sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_rake_all_vars)[2]) | x == "educ_6way", "gray", "black")
+        })
+    
+    ps_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_ps)[2]), "gray", "black") })
+    ps_reduc_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_ps_reduc)[2]), "gray", "black") })
+    ps_all_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_ps_all)[2]), "gray", "black") })
+    
+    retro_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+            ifelse(grepl(x, as.character(formula_retrospective)[2]), "gray", "black") })
+    
+    
+    
+    kpop_demos_aes <- noedu_aes
+    kpop_demos_wedu_aes <- wedu_aes
+    kpop_all_aes <- all_aes
+    
+    
+    #change name so its clear that recode_educ is 6 way and fixing some labels that are slighly off bc i apparently could not count when i named them/less cleaning in latex names
+    wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+    wmabserr$var[wmabserr$var == "income_5way"]<- "income_6way"
+    wmabserr$var[wmabserr$var == "relig_6way"]<- "relig_5way"
+    wmabserr$var[wmabserr$var == "educ_wh_3way"]<- "educ_3way_wh"
+
+
+    kable_err <- kable(wmabserr_nooutcomes,
+                               format = "latex",
+                               caption = caption_err,
+                               booktabs = T,
+                               digits = 2) %>% kable_styling() %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "kpop_demos"),
+                                color =kpop_demos_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) ==
+                                              "rake_demos_noeduc"),
+                                color = noedu_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) ==
+                                              "kpop_demos_wedu"),
+                                color = kpop_demos_wedu_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "rake_all"),
+                                color =all_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "kpop_all"),
+                                color =kpop_all_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "rake_retro"),
+                                color =retro_aes) %>% 
+                        column_spec(which(colnames(wmabserr_nooutcomes) ==
+                                              "post_strat_reduc"),
+                                                  color =ps_reduc_aes)
+
+     kable_om <- kable(wmabserr %>% 
+                           filter( grepl("mod", var) | grepl("vote", var)) %>%
+                           arrange(nchar(var)),
+                           format = "latex",
+                           caption = caption_o,
+                           booktabs = T,
+                           digits = 3)
+        
+            
+    margins_out <- margins_diff[-c(1:9),]
+    margins_out <- margins_out[!grepl("age_factor", rownames(margins_out)), ] 
+    # margins_out <- margins_out %>% rbind(colMeans(margins_out))
+    # rownames(margins_out)[nrow(margins_out)] <- "Column Average"
+    
+    out <- list(margins = margins,
+                margins_diff = margins_diff,
+                wmabserr = wmabserr,
+                wmabserr_nooutcomes = wmabserr_nooutcomes,
+                kable_err = kable_err,
+                kable_outmom = kable_om)
+    return(out)
+}
+
+```
+
+
+
+# Run Margins
+
+```{r margins_run}
+#defaults are set to be what we usually want to look at
+cat_margins_popw <- allmargins()
+View(cat_margins_popw$wmabserr)
+cat_margins_popw$kable_err
+cat_margins_popw$kable_outmom
+cat_margins_popw$kable_margins
+
+```
+
+## Plots over Range of b
+
+This formula produces the monster plots across a range of choices of b for pR, pD, vote difference, and vote margin.
+
+```{r plot_funct}
+pew_out <- function(popw = TRUE,
+                    best_b_plot = FALSE, 
+                    bigB = TRUE, 
+                    smallB = TRUE,
+                    display_pew_mod = FALSE, 
+                    tolerance = 1e-06, 
+                    maxit = 500) {
+   
+    
+    #this subsets cces strata to only those in pew
+    missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in%
+                                                unique(pew$strata))]
+    cat(length(missing_strata)/ length(unique(cces$strata)), 
+        "% cces original strata missing from pew, ",
+        "\nand", cces %>% filter(strata %in% missing_strata) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
+    cces %>% filter(strata %in% missing_strata) %>% summarise(n())
+  
+    missing_strata_reduc <- unique(cces$strata_reduc)[!(unique(cces$strata_reduc) %in%
+                                                unique(pew$strata_reduc))]
+    
+     cat(length(missing_strata_reduc)/ length( unique(cces$strata_reduc)), 
+         "% cces reduc strata missing from pew, ",
+        "\nand", cces %>% filter(strata_reduc %in% missing_strata_reduc) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
+     
+    missing_strata_all <- unique(cces$strata_all)[!(unique(cces$strata_all) %in%
+                                                unique(pew$strata_all))]
+     cat(length(missing_strata_all)/ length( unique(cces$strata_all)),
+         "% cces all strata missing from pew, ",
+         "\nand", cces %>% filter(strata_all %in% missing_strata_all) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n")
+    
+    #we also have the reverse where pew may have strata we don't have in cces
+    #this arises if we eliminate NAs in recode_vote for cces
+    #this ofc would never happen if cces was a true full pop but it's actually just
+    #a much bigger sample so it can happen
+     problem <- unique(pew$strata)[!(unique(pew$strata) %in%
+                                                   unique(cces$strata))]
+     problem_reduc <- unique(pew$strata_reduc)[!(unique(pew$strata_reduc) %in%
+                                                   unique(cces$strata_reduc))]
+     length(problem_reduc)
+     problem_all <- unique(pew$strata_all)[!(unique(pew$strata_all) %in%
+                                                   unique(cces$strata_all))]
+     length(problem_all)
+     if(length(problem) != 0) {
+     warning(paste("NB: strata present in pew not in cces (3way)will be dropped in ps:\n",
+                   problem, 
+                   "\nrepresenting", nrow(pew %>% filter(strata %in% problem)),
+                   "/", nrow(pew), "\n"), immediate. = F)
+     }
+     if(length(problem_reduc) != 0) {
+     warning(paste("NB: strata reduc present in pew not in cces (3way)will be dropped in ps:\n",
+                   "\nrepresenting", nrow(pew %>% filter(strata_reduc %in%
+                                                             problem_reduc)),
+                   "/", nrow(pew), "\n"), immediate. = F)
+     }
+     if(length(problem_all) != 0) {
+     warning(paste("NB: strata all present in pew not in cces (3way)will be dropped in ps:\n",
+                   "\nrepresenting", nrow(pew %>% filter(strata_all %in% problem_all)),
+                   "/", nrow(pew), "\n"), immediate. = F)
+     }
+    
+
+   
+    pew_srs <- svydesign(ids = ~1, data = pew)
+    pew_w_srs <-  svydesign(ids = ~1, weights = ~weight, data = pew)
+
+    if(popw) {
+        
+       if(tolerance == 1e-06 & maxit == 500) { 
+           
+            load(paste0(path_weights, "/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata"))
+            cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+                clean <- out_cat
+                weights <- weights_cat[3:13]
+                weights_alt <- weights_cat[1:2]
+       }
+      if(maxit == 800 & tolerance == 1e-04) {
+            load(paste0(path_weights,"allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata"))
+            cat("loading: allB_cat_par_wTRUE_m800_t1e-04_2021-03-23.Rdata")
+            clean <- out_cat
+            weights <- weights_cat[3:13]
+            weights_alt <- weights_cat[1:2]
+        }
+        
+        
+    } else { #no pop weights
+    
+        if(maxit == 500 & tolerance == 1e-06) {
+            load(paste0(path_weights, "weights/allB_cat_par_m500_t1e-06_2021-03-04.Rdata"))
+            cat("OLD MF loading: allB_cat_par_m500_t1e-06_2021-03-18.Rdata")
+            warning("OLD MF RESULTS")
+        }
+       
+            weights <- weights_cat[3:13]
+            weights_alt <- weights_cat[1:2]
+            clean <- out_cat
+    }  
+    
+    ############## PREP FOR PLOT
+    ###### Kbal
+    kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
+    
+
+     kpop_bmean <- svydesign(~1, data = pew, 
+                                  weights =
+                                 weights_alt[[1]]$kpop_w[kbal_data_sampled==1])
+     kpop_bmean_conv <- svydesign(~1, data = pew, 
+                               weights = 
+                                   weights_alt[[1]]$kpop_w_conv[kbal_data_sampled==1])
+     kpop_mf_bmean <- svydesign(~1, data = pew, 
+                             weights =
+                                 weights_alt[[1]]$kpop_mf_w[kbal_data_sampled==1])
+    
+     kpop_bmaxvar <- svydesign(~1, data = pew, 
+                                  weights =
+                                 weights_alt[[2]]$kpop_w[kbal_data_sampled==1])
+     kpop_bmaxvar_conv <- svydesign(~1, data = pew, 
+                               weights = 
+                                   weights_alt[[2]]$kpop_w_conv[kbal_data_sampled==1])
+     kpop_mf_bmaxvar <- svydesign(~1, data = pew, 
+                             weights =
+                                 weights_alt[[2]]$kpop_mf_w[kbal_data_sampled==1])
+         
+        
+    if(bigB) {
+            
+            kpop_b128 <- svydesign(~1, data = pew, 
+                                      weights = weights[[7]]$kpop_w[kbal_data_sampled==1])
+            kpop_b128_conv <- svydesign(~1, data = pew, 
+                                   weights = 
+                                       weights[[7]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b128 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[7]]$kpop_mf_w[kbal_data_sampled==1])
+            
+            kpop_b256 <- svydesign(~1, data = pew, 
+                              weights = weights[[8]]$kpop_w[kbal_data_sampled==1])
+            kpop_b256_conv <- svydesign(~1, data = pew, 
+                                   weights = 
+                                       weights[[8]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b256 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[8]]$kpop_mf_w[kbal_data_sampled==1])
+            
+            kpop_b512 <- svydesign(~1, data = pew, 
+                              weights = weights[[9]]$kpop_w[kbal_data_sampled==1])
+            kpop_b512_conv <- svydesign(~1, data = pew, 
+                                   weights =
+                                weights[[9]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b512 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[9]]$kpop_mf_w[kbal_data_sampled==1])
+            
+            kpop_b1024 <- svydesign(~1, data = pew, 
+                              weights = weights[[10]]$kpop_w[kbal_data_sampled==1])
+            kpop_b1024_conv <- svydesign(~1, data = pew, 
+                        weights = weights[[10]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b1024 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[10]]$kpop_mf_w[kbal_data_sampled==1])
+            
+            kpop_b2048 <- svydesign(~1, data = pew, 
+                              weights = weights[[11]]$kpop_w[kbal_data_sampled==1])
+            kpop_b2048_conv <- svydesign(~1, data = pew, 
+                                   weights = 
+                            weights[[11]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b2048 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[11]]$kpop_mf_w[kbal_data_sampled==1])
+            
+                    
+          
+        }
+     
+    if(smallB) {
+             kpop_b64 <- svydesign(~1, data = pew, 
+                              weights = weights[[6]]$kpop_w[kbal_data_sampled==1])
+            kpop_b64_conv <- svydesign(~1, data = pew, 
+                                   weights = 
+                                       weights[[6]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_mf_b64 <- svydesign(~1, data = pew, 
+                                 weights =
+                                     weights[[6]]$kpop_mf_w[kbal_data_sampled==1])
+            
+             kpop_b32 <- svydesign(~1, data = pew, 
+                                  weights = weights[[5]]$kpop_w[kbal_data_sampled==1])
+            kpop_b16 <- svydesign(~1, data = pew, 
+                                  weights = weights[[4]]$kpop_w[kbal_data_sampled==1])
+            kpop_b8 <- svydesign(~1, data = pew, 
+                                 weights = weights[[3]]$kpop_w[kbal_data_sampled==1])
+            kpop_b4 <- svydesign(~1, data = pew, 
+                                 weights = weights[[2]]$kpop_w[kbal_data_sampled==1])
+            kpop_b2 <- svydesign(~1, data = pew, 
+                                 weights = weights[[1]]$kpop_w[kbal_data_sampled==1])
+            
+            kpop_b32_conv <- svydesign(~1, data = pew, 
+                                       weights = 
+                                           weights[[5]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_b16_conv <- svydesign(~1, data = pew, 
+                                       weights =
+                                          weights[[4]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_b8_conv <- svydesign(~1, data = pew, 
+                                      weights =
+                                          weights[[3]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_b4_conv <- svydesign(~1, data = pew, 
+                                      weights =
+                                          weights[[2]]$kpop_w_conv[kbal_data_sampled==1])
+            kpop_b2_conv <- svydesign(~1, data = pew, 
+                                      weights =
+                                          weights[[1]]$kpop_w_conv[kbal_data_sampled==1])
+            
+            kpop_mf_b32 <- svydesign(~1, data = pew, 
+                                     weights =
+                                         weights[[5]]$kpop_mf_w[kbal_data_sampled==1])
+            kpop_mf_b16 <- svydesign(~1, data = pew, 
+                                     weights =
+                                         weights[[4]]$kpop_mf_w[kbal_data_sampled==1])
+            kpop_mf_b8 <- svydesign(~1, data = pew, 
+                                    weights =
+                                        weights[[3]]$kpop_mf_w[kbal_data_sampled==1])
+            kpop_mf_b4 <- svydesign(~1, data = pew, 
+                                    weights =
+                                        weights[[2]]$kpop_mf_w[kbal_data_sampled==1])
+            kpop_mf_b2 <- svydesign(~1, data = pew, 
+                                    weights =
+                                        weights[[1]]$kpop_mf_w[kbal_data_sampled==1])
+        }
+       
+
+     if(popw) {
+        cces_svy = svydesign(ids = ~1, weights = ~commonweight_vv_post, data = cces)
+    } else {
+        cces_svy = suppressWarnings(svydesign(ids = ~1,  data = cces))
+    }
+    
+    targets_rake_demos_noeduc <- create_targets(cces_svy, 
+                                                    formula_rake_demos_noeduc)
+    targets_rake_demos_weduc <- create_targets(cces_svy, 
+                                               formula_rake_demos_weduc)
+    targets_rake_all_vars <- create_targets(cces_svy, 
+                                               formula_rake_all_vars)
+    targets_retrospective <- create_targets(cces_svy,
+                                            formula_retrospective)
+    targets_ps <- svytable(formula = ~strata,
+                           design = subset(cces_svy,
+                                           !(strata %in% missing_strata)))
+    targets_ps_reduc <- svytable(formula = ~strata_reduc,
+                       design = subset(cces_svy, !(strata_reduc %in%
+                                                        missing_strata_reduc)))
+    targets_ps_all <- svytable(formula = ~strata_all,
+                       design = subset(cces_svy, !(strata_all %in%
+                                                        missing_strata_all)))
+     
+     
+    rake_demos_noeduc <- calibrate(design = pew_srs,
+                                   formula = formula_rake_demos_noeduc,
+                                   population = targets_rake_demos_noeduc,
+                                   calfun = "raking")
+    
+    rake_demos_noeduc <- svydesign(~1, data = pew,
+                                   weights = weights(rake_demos_noeduc))
+    
+    ## Raking on demographics, including education
+    rake_demos_weduc <- calibrate(design = pew_srs,
+                                  formula = formula_rake_demos_weduc,
+                                  population = targets_rake_demos_weduc,
+                                  calfun = "raking")
+    
+    rake_demos_weduc <- svydesign(~1, data = pew, weights =
+                                      weights(rake_demos_weduc))
+    #rake all
+    rake_all_vars <- calibrate(design = pew_srs,
+                                  formula = formula_rake_all_vars,
+                                  population = targets_rake_all_vars,
+                                  calfun = "raking")
+    
+    rake_all_vars <- svydesign(~1, data = pew, weights =
+                                      weights(rake_all_vars))
+    
+    ## Post-stratification
+    pew_ps <- suppressWarnings(svydesign(ids = ~1, data = pew %>% filter(!(strata %in% problem))))
+    post_stratification <- postStratify(design = pew_ps,
+                                        strata = ~strata,
+                                        population = targets_ps)
+    post_stratification <- svydesign(~1, 
+                                     data = pew %>% filter(!(strata %in% problem)),
+                                     weights = weights(post_stratification))
+    #reduced
+    pew_ps_reduc_xgb <- suppressWarnings(svydesign(ids = ~1, data = pew %>% 
+                                      filter(!(strata_reduc %in% problem_reduc))))
+    post_strat_reduc <- postStratify(design = pew_ps_reduc_xgb,
+                                        strata = ~strata_reduc,
+                                        population = targets_ps_reduc)
+    post_strat_reduc <- svydesign(~1, 
+                                  data = pew %>%filter(!(strata_reduc %in%
+                                                                 problem_reduc)),
+                                     weights = weights(post_strat_reduc))
+    
+    pew_ps_all_xgb <- suppressWarnings(svydesign(ids = ~1, 
+                                data = pew %>% filter(!(strata_all %in% problem_all))))
+    post_strat_all <- postStratify(design = pew_ps_all_xgb,
+                                        strata = ~strata_all,
+                                        population = targets_ps_all)
+    post_strat_all <- svydesign(~1,
+                                data = pew %>% filter(!(strata_all %in% problem_all)),
+                                weights = weights(post_strat_all))
+    
+    
+    rake_retrospective <- calibrate(design = pew_srs,
+                                    formula = formula_retrospective,
+                                    population = targets_retrospective,
+                                    calfun = "raking",
+                                    force = TRUE)
+    rake_retrospective <- svydesign(~1, data = pew,
+                                    weights = weights(rake_retrospective))
+        
+    
+    ########### Get Estimates #########
+    df_build <- function(var_orig, var_cces, var_pew, vote_form = vote_diff,
+                         real = FALSE, bigB, smallB) {
+        if(!real) {
+          df <- data.frame(
+            cces_orig = svycontrast(svymean(as.formula(paste0("~", var_orig)), 
+                                            cces_svy, na.rm = TRUE),
+                                    vote_form),
+            #this is cces modeled outcome on cces
+            cces_mod = svymean(as.formula(paste0("~", var_cces)), cces_svy, na.rm = TRUE),
+            
+            #outcome = modeled cces predicted with pew (cces on pew)
+            unweighted = svymean(as.formula(paste0("~", var_pew)), pew_srs,
+                                 na.rm = TRUE),
+            pew_weighted = svymean(as.formula(paste0("~", var_pew)), pew_w_srs, 
+                                   na.rm = TRUE),
+            rake_demos_noeduc = svymean(as.formula(paste0("~", var_pew)), 
+                                        rake_demos_noeduc, na.rm = TRUE),
+            rake_demos_weduc = svymean(as.formula(paste0("~", var_pew)), 
+                                       rake_demos_weduc, na.rm = TRUE),
+            rake_all_vars = svymean(as.formula(paste0("~", var_pew)), 
+                                       rake_all_vars, na.rm = TRUE),
+            post_stratification = svymean(as.formula(paste0("~", var_pew)), 
+                                          post_stratification,
+                                          na.rm = TRUE),
+            post_strat_reduc = svymean(as.formula(paste0("~", var_pew)), 
+                                          post_strat_reduc,
+                                          na.rm = TRUE),
+            post_strat_all = svymean(as.formula(paste0("~", var_pew)), 
+                                          post_strat_all,
+                                          na.rm = TRUE),
+            rake_retrospective = svymean(as.formula(paste0("~", var_pew)),
+                                         rake_retrospective, 
+                                         na.rm = TRUE),
+            kpop_bmean = svymean(as.formula(paste0("~", var_pew)), kpop_bmean, 
+                                 na.rm = TRUE),
+            kpop_bmean_conv = svymean(as.formula(paste0("~", var_pew)), kpop_bmean_conv,
+                                      na.rm = TRUE),
+            kpop_mf_bmean = svymean(as.formula(paste0("~", var_pew)), kpop_mf_bmean, 
+                                    na.rm = TRUE),
+            
+            kpop_bmaxvar =svymean(as.formula(paste0("~", var_pew)), kpop_bmaxvar,
+                                  na.rm = TRUE),
+            kpop_bmaxvar_conv =svymean(as.formula(paste0("~", var_pew)), 
+                                       kpop_bmaxvar_conv, na.rm = TRUE),
+            kpop_mf_bmaxvar = svymean(as.formula(paste0("~", var_pew)), 
+                                      kpop_mf_bmaxvar, na.rm = TRUE),
+            kpop_b2048 = if( bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b2048,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b1024 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b1024,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b512 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b512,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b256 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b256, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b128 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b128, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b64 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b64, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b32 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b32, 
+                        na.rm = TRUE)  } else {
+                    NA},
+            kpop_b16 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b16, 
+                        na.rm = TRUE)  } else {
+                    NA},
+            kpop_b8 = 
+                if(smallB) { 
+                 svymean(as.formula(paste0("~", var_pew)), kpop_b8, 
+                         na.rm = TRUE) } else {
+                    NA},
+            kpop_b4 = 
+                if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b4, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b2 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b2,
+                        na.rm = TRUE)} else { NA},
+            
+            kpop_b2048_conv = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b2048_conv,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b1024_conv = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b1024_conv,
+                        na.rm = TRUE) } else {
+                    NA},
+            
+            kpop_b512_conv = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b512_conv,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b256_conv = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b256_conv, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b128_conv = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b128_conv, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_b64_conv = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), 
+                        kpop_b64_conv, na.rm = TRUE) } else {  NA},
+            kpop_b32_conv = if(smallB) { 
+               svymean(as.formula(paste0("~", var_pew)), kpop_b32_conv,
+                                    na.rm = TRUE) } else {
+                    NA},
+            kpop_b16_conv = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b16_conv, 
+                                    na.rm = TRUE) } else {
+                    NA},
+            kpop_b8_conv = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b8_conv,
+                                   na.rm = TRUE) } else {
+                    NA},
+            kpop_b4_conv = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b4_conv, 
+                                   na.rm = TRUE) } else {
+                    NA},
+            kpop_b2_conv = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_b2_conv, 
+                                   na.rm = TRUE) } else {
+                    NA},
+            
+            kpop_mf_b2048 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b2048,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_mf_b1024 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b1024,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_mf_b512 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b512,
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_mf_b256 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b256, 
+                        na.rm = TRUE) } else {
+                    NA},
+            kpop_mf_b128 = if(bigB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b128, 
+                        na.rm = TRUE) } else {
+                            NA},
+            
+            kpop_mf_b64 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b64,
+                        na.rm = TRUE) }  else { NA},
+            kpop_mf_b32 = if(smallB) { 
+               svymean(as.formula(paste0("~", var_pew)), kpop_mf_b32,
+                                  na.rm = TRUE) } else { NA},
+            kpop_mf_b16 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b16, 
+                                  na.rm = TRUE) } else { NA},
+            kpop_mf_b8 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b8, 
+                                 na.rm = TRUE) }  else { NA},
+            kpop_mf_b4 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b4, 
+                                 na.rm = TRUE) }  else { NA},
+            kpop_mf_b2 = if(smallB) { 
+                svymean(as.formula(paste0("~", var_pew)), kpop_mf_b2,
+                                 na.rm = TRUE) }  else { NA}) %>%
+    pivot_longer(cols = everything(),
+                         names_to = c("source", ".value"), 
+                         names_pattern = "(.*)\\.(.*)") 
+          
+            df$SE <- coalesce(df[[var_cces]], df[[var_pew]], df$SE)
+            df <- df %>% mutate(est = coalesce(nlcon, mean))
+        } else {
+            df <- data.frame(
+                cces_orig = svycontrast(svymean(~recode_vote_2016, 
+                                                cces_svy, na.rm = TRUE),
+                                        vote_form),
+                #outcome = modeled cces predicted with pew (cces on pew)
+                unweighted = svycontrast(svymean(~recode_vote_2016, 
+                                                 pew_srs, na.rm = TRUE),
+                                         vote_form),
+                pew_weighted = svycontrast(svymean(~recode_vote_2016, 
+                                                   pew_w_srs, na.rm = TRUE),
+                                           vote_form),
+                
+                rake_demos_noeduc = svycontrast(svymean(~recode_vote_2016, 
+                                                        rake_demos_noeduc, na.rm = TRUE),
+                                                vote_form),
+                rake_demos_weduc = svycontrast(svymean(~recode_vote_2016, 
+                                                       rake_demos_weduc, na.rm = TRUE),
+                                               vote_form),
+                rake_all_vars = svycontrast(svymean(~recode_vote_2016, 
+                                                       rake_all_vars, na.rm = TRUE),
+                                               vote_form),
+                post_stratification = svycontrast(svymean(~recode_vote_2016, 
+                                                          post_stratification,
+                                                          na.rm = TRUE),
+                                                  vote_form),
+                post_strat_reduc = svycontrast(svymean(~recode_vote_2016, 
+                                                          post_strat_reduc,
+                                                          na.rm = TRUE),
+                                                  vote_form),
+                post_strat_all = svycontrast(svymean(~recode_vote_2016, 
+                                                          post_strat_all,
+                                                          na.rm = TRUE),
+                                                  vote_form),
+                rake_retrospective = svycontrast(svymean(~recode_vote_2016, 
+                                                         rake_retrospective,
+                                                         na.rm = TRUE),
+                                                 vote_form),
+            
+                kpop_bmean = svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_bmean, na.rm = TRUE), vote_form),
+                kpop_bmean_conv =svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_bmean_conv, na.rm = TRUE), vote_form),
+                kpop_mf_bmean = svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_bmean, na.rm = TRUE), vote_form),
+                
+                kpop_bmaxvar = svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_bmaxvar, na.rm = TRUE), vote_form),
+                kpop_bmaxvar_conv = svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_bmaxvar_conv, na.rm = TRUE), vote_form),
+                kpop_mf_bmaxvar = svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_bmaxvar, na.rm = TRUE), vote_form),
+        
+                kpop_b2048 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b2048, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_b1024 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b1024, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_b512 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b512, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b256 = if(bigB) { 
+                   svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b256, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b128 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b128, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b64 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b64, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b32 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                               kpop_b32, na.rm = TRUE),
+                                       vote_form) } else {
+                        NA},
+                kpop_b16 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                               kpop_b16, na.rm = TRUE),
+                                       vote_form) } else {
+                        NA},
+                kpop_b8 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                              kpop_b8, na.rm = TRUE),
+                                      vote_form) } else {
+                        NA},
+                kpop_b4 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                              kpop_b4, na.rm = TRUE),
+                                      vote_form) } else {
+                        NA},
+                kpop_b2 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                              kpop_b2, na.rm = TRUE),
+                                      vote_form)} else {
+                        NA},
+                
+                
+                kpop_b2048_conv = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b2048_conv, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_b1024_conv = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b1024_conv, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_b512_conv = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b512_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b256_conv = if(bigB) { 
+                   svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b256_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b128_conv = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b128_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b64_conv = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b64_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b32_conv = if(smallB) { 
+                          svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b32_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b16_conv = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b16_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b8_conv = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b8_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b4_conv = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b4_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_b2_conv = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_b2_conv, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                
+                kpop_mf_b2048 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b2048, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_mf_b1024 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b1024, na.rm = TRUE),
+                                          vote_form)  } else {
+                        NA},
+                kpop_mf_b512 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b512, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b256 = if(bigB) { 
+                   svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b256, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b128 = if(bigB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b128, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                
+                kpop_mf_b64 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b64, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b32 =  if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b32, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b16 = if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b16, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b8 =  if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b8, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b4 =  if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b4, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA},
+                kpop_mf_b2 =  if(smallB) { 
+                    svycontrast(svymean(~recode_vote_2016,
+                                                  kpop_mf_b2, na.rm = TRUE),
+                                          vote_form) } else {
+                        NA}
+            ) %>%
+                pivot_longer(cols = everything(),
+                             names_to = c("source", ".value"), 
+                             names_pattern = "(.*)\\.(.*)") 
+            
+            df <- df %>% rename(est = nlcon)
+            
+        }
+        df <- df %>% filter(!is.na(source))
+        #if(!bigB) {df <- df %>% filter(!is.na(source))}
+        #some manual fixing of names 
+        df <- df %>% 
+            dplyr::select(source, est, SE) %>%
+            mutate(est = est * 100,
+                   SE = SE * 100,
+                   #err_target = est - target_diff * 100,
+                   source = str_replace(source, "_", " "))
+        
+        
+        b_num = c(rep(out_cat$b[1], 3), rep(out_cat$b[2], 3) ) 
+        rep <- NULL
+        if(bigB) {
+            rep <- c(2048,1024,512,256,128)
+        }
+        if(smallB) {
+            rep = c(rep, c(64,32,16,8,4,2)) 
+        }
+        b_num <- c(b_num, rep(rep, 3))
+        
+        df$b <- NA
+        df$b[grep("b", df$source) ]<- b_num
+        df$MF <- "NA"
+        df$MF[grep("mf", df$source)] <- "MF"
+        df$MF[!grepl("mf", df$source) & grepl("kpop", df$source)]<- "No MF"
+        df$Conv <- "NA"
+        df$Conv[!grepl("conv", df$source) & 
+                              grepl("kpop", df$source)]<- "Conv Not Required"
+        df$Conv[c(grep("conv", df$source),
+                            grep("mf", df$source))] <- "Conv Required"
+        df <- df %>% arrange(!is.na(b), b)
+        df <- df %>% 
+            mutate(source_name = factor(source, 
+                                        levels = as.character(df$source) ,
+                                        labels = c("CCES Orig",
+                                                   if(!real){"CCES Modeled"},
+                                                   "Pew Unweighted", 
+                                                   "Pew Weights",
+                                                   "Raking Demos NO Education", 
+                                                   "Raking Demos W Education", 
+                                                   "Raking All Vars",
+                                                   "Post-Strat (former)", 
+                                                   "Post-Strat (reduced)",
+                                                   "Post-Strat (all)",
+                                                   "Raking Retrospective", 
+                                                   
+                                                   if(smallB) {"Kpop b=2x"},
+                                                   if(smallB) {"Kpop MF b=2x"},
+                                                   if(smallB) {"Kpop Conv b=2x"},
+                                                   
+                                                   if(smallB) {"Kpop b=4x"},
+                                                   if(smallB) {"Kpop Conv b=4x"},
+                                                   if(smallB) {"Kpop MF b=4x"},
+                                                   
+                                                   "Kpop b=mean",
+                                                   "Kpop Conv b=mean",
+                                                   "Kpop MF b=mean",
+                                                   
+                                                    if(smallB) {"Kpop b=8x"},
+                                                    if(smallB) {"Kpop Conv b=8x"},
+                                                    if(smallB) {"Kpop MF b=8x"},
+                                                   
+                                                    "Kpop b=argmax var K*2",
+                                                    "Kpop Conv b=argmax var(K)*2",
+                                                    "Kpop MF b=argmax var(K)*2",
+                                                
+                                                    if(smallB) {"Kpop b=16x"},
+                                                    if(smallB) {"Kpop MF b=16x"},
+                                                    if(smallB) {"Kpop Conv b=16x"},
+                                            
+                                            
+                                                    if(smallB) {"Kpop b=32x"},
+                                                    if(smallB) {"Kpop Conv b=32x"},
+                                                    if(smallB) {"Kpop MF b=32x"},
+                                            
+                                                    if(smallB) {"Kpop b=64x"},
+                                                    if(smallB) {"Kpop Conv b=64x"},
+                                                    if(smallB) {"Kpop MF b=64x"},
+                                            
+                                                    if(bigB) {"Kpop b=128x"},
+                                                    if(bigB) {"Kpop Conv b=128x"},
+                                                    if(bigB) {"Kpop MF b=128x"},
+                                            
+                                                    if(bigB) {"Kpop b=256x"},
+                                                    if(bigB) {"Kpop Conv b=256x"},
+                                                    if(bigB) {"Kpop MF b=256x"},
+                                            
+                                                    if(bigB) {"Kpop b=512x"},
+                                                    if(bigB) {"Kpop Conv b=512x"},
+                                                    if(bigB) {"Kpop MF b=512x"},
+                                            
+                                                    if(bigB) {"Kpop b=1024x"},
+                                                    if(bigB) {"Kpop Conv b=1024x"},
+                                                    if(bigB) {"Kpop MF b=1024x"},
+                                            
+                                                    if(bigB) {"Kpop b=2048x"},
+                                                    if(bigB) {"Kpop Conv b=2048x"},
+                                                    if(bigB) {"Kpop MF b=2048x"}
+                                            
+                                            )))
+        df <- df %>% filter(!is.na(est))
+        
+        return(df)
+    }
+    
+    comp_df_diff <- df_build("recode_vote_2016", "diff_cces_on_cces", "diff_cces_on_pew",
+                             bigB = bigB, smallB = smallB)
+    
+    comp_df_diff_pewoutcome <- df_build("recode_vote_2016", 
+                                        "diff_pew_on_cces",
+                                        "diff_pew_on_pew",
+                                        bigB = bigB, smallB = smallB) 
+    
+    comp_df_margin <- df_build("recode_vote_2016", 
+                                        "margin_cces_on_cces",
+                                        "margin_cces_on_pew",
+                               bigB = bigB,  smallB = smallB)  
+  
+    
+    comp_df_margin_pewoutcome <- df_build("recode_vote_2016", 
+                                          "margin_pew_on_cces",
+                                          "margin_pew_on_pew",
+                                          bigB = bigB,
+                                           smallB = smallB)  
+    
+    
+    comp_df_pR <- df_build("recode_vote_2016", 
+                           "mod_cces_on_cces_pR",
+                           "mod_cces_on_pew_pR",
+                           bigB = bigB,
+                            smallB = smallB,
+                            vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 ))  
+    
+    comp_df_pR_pewoutcome <- df_build("recode_vote_2016", 
+                           "mod_pew_on_cces_pR",
+                           "mod_pew_on_pew_pR",
+                           bigB = bigB,
+                            smallB = smallB,
+                           vote_form = quote((recode_vote_2016Republican  +recode_vote_2016Republican)/2 )) 
+   
+    
+    comp_df_pD <- df_build("recode_vote_2016", 
+                           "mod_cces_on_cces_pD",
+                           "mod_cces_on_pew_pD",
+                           bigB = bigB, smallB = smallB,
+                           vote_form = quote((recode_vote_2016Democrat +recode_vote_2016Democrat)/2 )) 
+   
+        
+    comp_df_pD_pewoutcome <- df_build("recode_vote_2016", 
+                           "mod_pew_on_cces_pD",
+                           "mod_pew_on_pew_pD",
+                           bigB = bigB, smallB = smallB)  
+    
+    
+    comp_df_real <- df_build("recode_vote_2016", 
+                           "recode_vote_2016",
+                           "recode_vote_2016",
+                           real = TRUE, 
+                           vote_form = vote_contrast,
+                           bigB = bigB,
+                            smallB = smallB)
+    
+    
+    comp_df_real_diff <-  df_build("recode_vote_2016", 
+                           "recode_vote_2016",
+                           "recode_vote_2016",
+                           real = TRUE, bigB = bigB, 
+                            smallB = smallB) 
+    
+    
+    ######## PLOT ESTIMATES: Pre-wave Indiv Average Margin ########
+    pew_ver = "Pre-Wave"
+ 
+    if(popw) {
+        popw_lab = "w/Pop W."
+        mod_lab = "Lasso (lambda 1se) Modeled"
+    } else {
+        popw_lab = "No Pop W."
+        mod_lab = "XGB Modeled"
+    }
+    tol_label = paste0(" tol=",as.character(tolerance))
+    maxit_label = paste0( "maxit=", as.character(maxit))
+    
+    
+    pres <- readRDS(paste0(path_data, "election.rds"))
+    
+    natl_margin <- pres %>%
+        summarise(margin = (sum(demtotal) - sum(reptotal)) /
+                      (sum(demtotal) + sum(reptotal))) %>%
+        as.numeric()
+    
+    natl_diff <- pres %>%
+        summarise(margin = (sum(demtotal) - sum(reptotal)) /
+                      (sum(totalvotes))) %>%
+        as.numeric()
+
+    natl_Rep <- pres %>%
+        summarise(pR =  sum(reptotal) /
+                      sum(totalvotes)) %>%
+        as.numeric()
+    natl_Dem <- pres %>%
+        summarise(pR =  sum(demtotal) /
+                      sum(totalvotes)) %>%
+        as.numeric()
+    
+
+    ###################
+     #### merge together for aethetics on ggplot
+    comp_df_margin_merge <- rbind(comp_df_margin, comp_df_margin_pewoutcome) %>% 
+        mutate(model = c(rep("Modeled CCES",nrow(comp_df_margin)), 
+                      rep(paste("Modeled", pew_ver, "Pew"),
+                          nrow(comp_df_margin_pewoutcome)) ) )
+    
+    comp_df_diff_merge <- rbind(comp_df_diff, comp_df_diff_pewoutcome) %>% 
+        mutate(model = c(rep("Modeled CCES",nrow(comp_df_margin)), 
+                      rep(paste("Modeled", pew_ver, "Pew"),
+                          nrow(comp_df_margin_pewoutcome)) ) )
+    
+    comp_df_pD_merge <- rbind(comp_df_pD, comp_df_pD_pewoutcome) %>% 
+        mutate(model = c(rep("Modeled CCES",nrow(comp_df_margin)), 
+                      rep(paste("Modeled", pew_ver, "Pew"),
+                          nrow(comp_df_margin_pewoutcome)) ) )
+    
+    comp_df_pR_merge <- rbind(comp_df_pR, comp_df_pR_pewoutcome) %>% 
+        mutate(model = c(rep("Modeled CCES",nrow(comp_df_margin)), 
+                      rep(paste("Modeled", pew_ver, "Pew"),
+                          nrow(comp_df_margin_pewoutcome)) ) )
+    
+    
+    #droping wegithed pew estimates if dn ask for popw
+    if(!popw) {
+        comp_df_diff_merge <- comp_df_diff_merge[-which(comp_df_diff_merge$source == "pew weighted"), ]
+        
+        comp_df_margin_merge <- comp_df_margin_merge[-which(comp_df_margin_merge$source == "pew weighted"), ]
+       
+        comp_df_pR_merge <- comp_df_pR_merge[-which(comp_df_pR_merge$source == "pew weighted"), ]
+        
+        comp_df_pD_merge <- comp_df_pD_merge[-which(comp_df_pD_merge$source == "pew weighted"), ]
+        
+        comp_df_real <- comp_df_real[-which(comp_df_real$source == "pew weighted"), ]
+        comp_df_real_diff <- comp_df_real_diff[-which(comp_df_real_diff$source == "pew weighted"), ]
+    }
+    
+    ############plots
+    b_default <- clean %>% filter(max(bbr) == bbr) %>% dplyr::select(b) %>% pull()
+    b_conv <- clean %>% filter(max(bbr_conv) == bbr_conv) %>% 
+        dplyr::select(b) %>% pull()
+    b_mf <- clean %>% filter(max(bbr_mf) == bbr_mf) %>% 
+        dplyr::select(b)%>% pull()
+    best_b <- c(as.character((comp_df_diff %>% filter(b == b_default) %>%
+                 dplyr::select(source_name))[1,] %>% pull()),
+                as.character((comp_df_diff %>% filter(b == b_conv) %>%
+                     dplyr::select(source_name))[2,] %>% pull()),
+                as.character((comp_df_diff %>% filter(b == b_mf) %>%
+                     dplyr::select(source_name))[3,] %>% pull()))
+    best_b
+    if(!best_b_plot) {
+        best_b <- c("Kpop b=argmax var",
+                    "Kpop Conv b=argmax var",
+                    "Kpop MF b=argmax var")
+    }
+    
+    comp_df_plot_real_margin <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF)) +
+        
+        geom_hline(yintercept = c(0, if(popw) {natl_margin*100},
+                                  comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]),
+                   linetype = c("solid", if(popw) {"dashed"}, "longdash"),
+                   color = c("black", if(popw){"gray60"}, "black")) +
+        geom_pointrange(data = comp_df_real) +
+        scale_y_continuous(breaks = c(natl_margin, seq(-5, 10, 5)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Vote Margin (95% CI)") +
+        ggtitle(paste(pew_ver, " Pew on TRUE CCES Vote Margin\n", popw_lab, tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=ifelse(comp_df_real$source_name %in% 
+                                                        best_b,
+                                                    "bold","plain")
+                                        )) +
+        annotate(geom = "text", x = nrow(comp_df_real)+1.35,
+                 y = if(popw){natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"] },
+                 label = if(popw) {" True\n National\n Margin"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text", x = nrow(comp_df_real)+1,
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"],
+                 label = if(popw)" Weighted\n CCES\n Target" else {" Unweighted\n CCES\n Target"},
+                 hjust = 0, angle = 90, size = 3) +
+        #for spacing
+         annotate(geom = "text", x = nrow(comp_df_real)+2.65,
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"],
+                 label = " ",
+                 hjust = 0, angle = 90, size = 3) +
+        theme(legend.title = element_blank())
+    
+    
+    comp_df_plot_real_diff <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF))  + 
+        
+        geom_hline(yintercept = c(0, if(popw){natl_diff*100},
+                                  comp_df_real_diff$est[comp_df_real_diff$source_name
+                                                        =="CCES Orig"]),
+                   linetype = c("solid", if(popw){"dashed"}, "longdash"),
+                   color = c("black", if(popw) {"gray60"}, "black")) +
+        geom_pointrange(data = comp_df_real_diff) +
+        scale_y_continuous(breaks = c(natl_diff*100, seq(-5, 10, 5)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Vote Difference (95% CI)") +
+        ggtitle(paste(pew_ver, " Pew on TRUE CCES Vote Difference\n",  
+                      popw_lab,   tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=ifelse(comp_df_real_diff$source_name
+                                                    %in% 
+                                                       best_b,
+                                                    "bold","plain")
+                                         )) +
+        annotate(geom = "text", 
+                 x = nrow(comp_df_real_diff) +1.35,
+                 y = if(popw) {natl_diff * 100} else {comp_df_real_diff$est[comp_df_real_diff$source_name == 
+                                               "CCES\ Orig"]},
+                 label = if(popw){" True\n National\n Diff"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text", x = nrow(comp_df_real_diff) +1,
+                 y = comp_df_real_diff$est[comp_df_real_diff$source_name == 
+                                               "CCES\ Orig"],
+                 label = if(popw)" Weighted\n CCES\n Target" else {" Unweighted\n CCES\n Target"},
+                 hjust = 0, angle = 90, size = 3) +
+        #for spacing
+         annotate(geom = "text", x = nrow(comp_df_real_diff) +2.75,
+                 y = comp_df_real_diff$est[comp_df_real_diff$source_name == 
+                                               "CCES Orig"],
+                 label = " ",
+                 hjust = 0, angle = 90, size = 3) +
+        theme(legend.title = element_blank())
+    
+    
+    
+    comp_df_plot_diff <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF), 
+            alpha = if(display_pew_mod) {as.factor(model)
+                } else {
+                first <-  rep("", nrow(comp_df_diff))
+                first[grep("Kpop", comp_df_diff$source_name)] <- "Alt B"
+                first[grep(paste(best_b, collapse = "|"),
+                           comp_df_diff$source_name)] <- ""
+                first
+            } 
+        ) +
+        geom_hline(yintercept = c(0, 
+                                  if(popw) {natl_diff*100},
+                                 if(popw) {comp_df_diff$est[comp_df_diff$source_name == "CCES Orig"]},
+                                  comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]),
+                   linetype = c("solid", 
+                                if(popw) {"dashed"}, if(popw) {"longdash"},
+                                "dashed"),
+                   color = c("black", 
+                             if(popw) {"gray60"}, if(popw) {"black"},
+                             "purple")) +
+        
+        geom_pointrange(data = if(display_pew_mod) {comp_df_diff_merge} else {comp_df_diff}) +
+        scale_y_continuous(breaks = c(natl_diff*100, seq(-5, 10, 5)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Modeled Vote Difference (95% CI)") +
+        ggtitle(paste(pew_ver, "Pew on CCES",mod_lab,"Mean Indiv Vote Diff p(D) - p(R)",
+                      "modeled\n",  popw_lab,   tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=if(smallB) {
+                                             ifelse(comp_df_diff$source_name %in% 
+                                                        best_b,
+                                                    "bold","plain")
+                                         } else {
+                                                 rep("plain", nrow(comp_df_diff))
+                                         })) +
+        annotate(geom = "text", 
+                 x =if(display_pew_mod) {nrow(comp_df_pR_merge)+0.55} else{nrow(comp_df_pR)+.55}, 
+                 y = if(popw) {natl_diff * 100} else {comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
+                 label = if(popw) {" True\n National\n Diff"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.55} else{nrow(comp_df_pR)+.55},
+                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
+                 color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)-2.1} else{nrow(comp_df_pR)-2.1}, 
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else { comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
+                 label = if(popw){" Weighted\n CCES\n Target"} else {""},
+                 color = "black",
+                 hjust = 0, angle = -90, size = 3) +
+        #for spacing
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+2.55} else{nrow(comp_df_pR)+2.55},
+                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
+                 label = "",
+                 color = "purple",
+                 hjust = 0, angle = -90, size = 3) +
+        scale_alpha_discrete(range=c(1, .4)) +
+        theme(legend.title = element_blank())
+    
+
+    
+    
+    comp_df_plot_margin <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF), 
+            alpha = if(display_pew_mod) {as.factor(model)
+                } else {
+                first <-  rep("", nrow(comp_df_margin))
+                first[grep("Kpop", comp_df_margin$source_name)] <- "Alt B"
+                first[grep(paste(best_b, collapse = "|"),
+                           comp_df_margin$source_name)] <- ""
+                first
+            } 
+        ) +
+        geom_hline(yintercept = c(0, 
+                                  if(popw) {natl_margin*100},
+                                 if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]},
+                                  comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]),
+                   linetype = c("solid", 
+                                if(popw) {"dashed"}, if(popw) {"longdash"},
+                                "dashed"),
+                   color = c("black", 
+                             if(popw) {"gray60"}, if(popw){"black"},
+                             "purple")) +
+        geom_pointrange(data = if(display_pew_mod) {comp_df_margin_merge} else {comp_df_margin}) +
+        #geom_pointrange(data = comp_df_margin_pewoutcome, alpha = 0.4) +
+        scale_y_continuous(breaks = c(natl_margin, seq(-5, 10, 5)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Modeled Vote Margin (95% CI)") +
+        ggtitle(paste(pew_ver, "Pew on CCES", mod_lab, "Mean Indiv Vote Margin",
+                       "modeled\n", popw_lab,   tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=if(smallB) {
+                                             ifelse(comp_df_margin$source_name %in% 
+                                                        best_b,
+                                                    "bold","plain")
+                                         } else {
+                                                 rep("plain", nrow(comp_df_margin))
+                                         })) +
+         annotate(geom = "text", 
+                  x = if(display_pew_mod){nrow(comp_df_margin_merge)+0.55} else {nrow(comp_df_margin)+0.55}, 
+                 y = if(popw) {natl_margin * 100} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]},
+                 label = if(popw) {" True\n National\n Margin"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){ nrow(comp_df_pR_merge)+.55}else{ nrow(comp_df_pR)+.55},
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
+                 color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){ nrow(comp_df_pR_merge)-2.2} else { nrow(comp_df_pR)-2.2},
+                 y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else {comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"]}, 
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 color = "black",
+                 hjust = 0, angle = -90, size = 3) +
+        #for spacing
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+1.75} else {nrow(comp_df_pR)+1.75},
+                 y = comp_df_margin$est[comp_df_margin$source_name == "CCES Modeled"],
+                 label = "",
+                 color = "purple",
+                 hjust = 0, angle = -90, size = 3) +
+        scale_alpha_discrete(range=c(1, .4)) +
+        theme(legend.title = element_blank())
+    
+    
+    ####### p(R) plot
+    
+    comp_df_plot_both_pR <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF), 
+            alpha = if(display_pew_mod) {as.factor(model)
+                } else {
+                first <-  rep("", nrow(comp_df_pR))
+                first[grep("Kpop", comp_df_pR$source_name)] <- "Alt B"
+                first[grep(paste(best_b, collapse = "|"),
+                           comp_df_pR$source_name)] <- ""
+                first
+            } 
+        ) +
+        
+        geom_hline(yintercept = c(if(popw) {natl_Rep*100},
+                                  if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]},
+                                  comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]),
+                   linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
+                                 "dashed"),
+                   color = c(if(popw) {"gray60"},if(popw) {"black"},
+                             "purple")) +
+        geom_pointrange(data = if(display_pew_mod) {comp_df_pR_merge} else {comp_df_pR}) +
+       # geom_pointrange(data = comp_df_pR_pewoutcome, alpha = 0.4) +
+        scale_y_continuous(breaks = c(natl_Rep, seq(40, 48, 2)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
+        ggtitle(paste(pew_ver,"Pew on CCES", mod_lab,  "p(R) modeled\n",
+                      popw_lab,   tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=if(smallB) {
+                                             ifelse(comp_df_pR$source_name %in% 
+                                                       best_b,
+                                                    "bold","plain")
+                                         } else {
+                                                 rep("plain", nrow(comp_df_pR))
+                                         })) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.35} else {nrow(comp_df_pR)+.35}, 
+                 y = if(popw) {natl_Rep * 100} else {comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]},
+                 label = if(popw) {" True\n National\n % Rep"} else {""},
+                 hjust = 0, angle = +90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+1} else {nrow(comp_df_pR)+1},
+                 y = if(popw) {comp_df_pR$est[comp_df_pR$source_name == "CCES Orig"]} else {comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"]},
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 hjust = 0, angle = -90, size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.55} else {nrow(comp_df_pR)+.55},
+                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
+                 color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        #for spacing
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.85} else {nrow(comp_df_pR)+1.75},
+                 y = comp_df_pR$est[comp_df_pR$source_name == "CCES Modeled"],
+                 label = "",
+                 color = "purple",
+                 hjust = 0, angle = -90, size = 3) +
+        
+        scale_alpha_discrete(range=c(1, .4)) +
+        theme(legend.title = element_blank())
+    
+    
+    
+    ###### p(D) plot
+    
+    comp_df_plot_both_pD <-
+        ggplot() +
+        aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE,
+            color = as.factor(Conv), shape=as.factor(MF), 
+            alpha = if(display_pew_mod) {as.factor(model)
+                } else {
+                first <-  rep("", nrow(comp_df_pD))
+                
+                first[grep("Kpop", comp_df_pD$source_name)] <- "Alt B"
+                first[grep(paste(best_b, collapse = "|"),
+                           comp_df_pD$source_name)] <- ""
+                first
+            } 
+        ) +
+        
+        geom_hline(yintercept = c(if(popw) {natl_Dem*100},
+                                  if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]},
+                                  comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"]),
+                   linetype = c( if(popw) {"dashed"}, if(popw){"longdash"}, 
+                                 "dashed"),
+                   color = c(if(popw) {"gray60"},if(popw) {"black"},
+                             "purple")) +
+        geom_pointrange(data = if(display_pew_mod) {comp_df_pD_merge} else {comp_df_pD}) +
+        #geom_pointrange(data = comp_df_pD_pewoutcome, alpha = 0.4) +
+        scale_y_continuous(breaks = c(natl_Dem*100, seq(40, 56, 4)),
+                           minor_breaks = NULL,
+                           labels = scales::percent_format(scale=1, accuracy = 0.1)) +
+        theme_bw() +
+        theme(plot.title = element_text(hjust = 0.5)) +
+        
+        labs(x = NULL, y = "Estimated Modeled Vote p(R) (95% CI)") +
+        ggtitle(paste(pew_ver, "Pew on CCES", mod_lab, "p(D) modeled\n",
+                      popw_lab,   tol_label, maxit_label)) +
+        theme(axis.text.x = element_text(angle = 70, hjust = 1,
+                                         face=if(smallB) {
+                                             ifelse(comp_df_pD$source_name %in% 
+                                                        best_b,
+                                                    "bold","plain")
+                                         } else {
+                                                 rep("plain", nrow(comp_df_pD))
+                                         } )) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod){nrow(comp_df_pR_merge)+.35} else {nrow(comp_df_pR)+.35},
+                 y = if(popw) {natl_Dem * 100} else {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]},
+                 label = if(popw){" True\n National\n % Rep"} else {""},
+                 hjust = 0, angle = -90,
+                 color = "gray60", size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1}else {nrow(comp_df_pR)+1},
+                 y = if(popw) {comp_df_pD$est[comp_df_pD$source_name == "CCES Orig"]} else { comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"]},
+                 label = if(popw) {" Weighted\n CCES\n Target"} else {""},
+                 hjust = 0, angle = 90, size = 3) +
+        annotate(geom = "text", 
+                 x = if(display_pew_mod)  {nrow(comp_df_pR_merge)+.55}else {nrow(comp_df_pR)+.55},
+                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"],
+                 label = " CCES\n Modeled Target",
+                 color = "purple",
+                 hjust = 0, angle = -90, size = 3) +
+        annotate(geom = "text",
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+1.65} else {nrow(comp_df_pR)+1.65},
+                 y = comp_df_pD$est[comp_df_pD$source_name == "CCES Modeled"],
+                 label = "",
+                 color = "purple",
+                 hjust = 0, angle = 90, size = 3) +
+        scale_alpha_discrete(range=c(1, .4)) +
+        theme(legend.title = element_blank() )
+    
+
+    
+    ### output
+    out <- list(orig_estimates = clean, 
+                plot_diff = comp_df_plot_diff,
+                plot_margin = comp_df_plot_margin,
+                plot_pR = comp_df_plot_both_pR,
+                plot_pD = comp_df_plot_both_pD,
+                plot_real_margin = comp_df_plot_real_margin,
+                plot_real_diff = comp_df_plot_real_diff,
+                problem = problem,
+                problem_reduc = problem_reduc,
+                problem_all = problem_all,
+                comp_df_diff = comp_df_diff_merge,
+                comp_df_margin = comp_df_margin_merge,
+                comp_df_pR = comp_df_pR_merge,
+                comp_df_pD = comp_df_pD_merge, 
+                comp_df_real_margin = comp_df_real,
+                comp_df_real_diff = comp_df_real_diff)
+    return(out)
+}
+
+```
+
+
+```{r run_plot}
+cat_kernel_popw <- pew_out(popw = TRUE,
+                           bigB = TRUE, 
+                           smallB = TRUE,
+                      display_pew_mod = FALSE)
+
+cat_kernel_popw$plot_real_diff
+cat_kernel_popw$plot_diff
+cat_kernel_popw$plot_real_margin
+cat_kernel_popw$plot_margin
+cat_kernel_popw$plot_pR
+cat_kernel_popw$plot_pD
+
+
+
+```

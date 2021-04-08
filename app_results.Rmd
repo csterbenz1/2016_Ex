@@ -46,12 +46,11 @@ formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + recode_race +
     recode_region + recode_pid_3way
 
 formula_rake_demos_weduc <- ~recode_age_bucket + recode_female + 
-    recode_race + recode_region + recode_educ_3way + recode_pid_3way
+    recode_race + recode_region + recode_educ + recode_pid_3way
 
 formula_rake_all_vars <- ~recode_age_bucket + recode_female + 
     recode_race + recode_region + recode_pid_3way + recode_educ +
     recode_income_5way + recode_relig_6way + recode_born + recode_attndch_4way
-
 
 formula_ps <- ~recode_age_3way + recode_female + recode_race +
     recode_region + recode_educ_wh_3way + recode_pid_3way
@@ -235,8 +234,8 @@ allmargins <- function(pop_weights = TRUE,
                                   weights = weights(rake_all_vars))
     
     #post stratification
-    pew_ps <- svydesign(ids = ~1, 
-                            data = pew %>% filter(!(strata %in% problem)))
+    pew_ps <- suppressWarnings(svydesign(ids = ~1, 
+                            data = pew %>% filter(!(strata %in% problem))))
     post_stratification <- postStratify(design = pew_ps,
                                         strata = ~strata,
                                         population = targets_ps)
@@ -416,7 +415,7 @@ allmargins <- function(pop_weights = TRUE,
                                 post_strat_reduc = mean(abs(post_strat_reduc))
                                 #post_strat_all = mean(abs(post_strat_all)),
                                 )
-   
+   wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
     
     #labels
     if(pop_weights) {
@@ -444,11 +443,12 @@ allmargins <- function(pop_weights = TRUE,
         filter(!(var %in% c("agecubed") |grepl("xgb", var) | grepl("vote", var))) %>%
         arrange(nchar(var))
     if(is.null(order)) {
-        order = c("female", "pid_3way", "race", "region", "educ", "income_5way", 
+        order = c("female", "pid_3way", "age_bucket","race",  "region", "educ_6way", "income_5way", 
                   "relig_6way", 
                   "pid_race", "educ_pid",
                   "educ_pid_race", "race_educ_reg", "educ_wh_3way", "midwest_wh_edu",
                   "midwest_edu_race",
+                  
                   "agesq", "age_factor")
     }
     
@@ -459,7 +459,7 @@ allmargins <- function(pop_weights = TRUE,
             ifelse(grepl(x, as.character(formula_rake_demos_noeduc)[2]),
                    "gray", "black") })
     wedu_aes <-  sapply(wmabserr_nooutcomes$var, function(x) {
-            ifelse(grepl(x, as.character(formula_rake_demos_weduc)[2]), "gray", "black")
+            ifelse(grepl(x, as.character(formula_rake_demos_weduc)[2]) | x == "educ_6way", "gray", "black")
         })
     all_aes <-  sapply(wmabserr_nooutcomes$var, function(x) {
             ifelse(grepl(x, as.character(formula_rake_all_vars)[2]) | x == "educ_6way", "gray", "black")
@@ -471,10 +471,9 @@ allmargins <- function(pop_weights = TRUE,
             ifelse(grepl(x, as.character(formula_ps_reduc)[2]), "gray", "black") })
     ps_all_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
             ifelse(grepl(x, as.character(formula_ps_all)[2]), "gray", "black") })
-    
+    #interaction picks up race alone so back and fix bc does not include
     retro_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
-            ifelse(grepl(x, as.character(formula_retrospective)[2]), "gray", "black") })
-    
+            ifelse(grepl(x, as.character(formula_retrospective)[2]) & x != "race", "gray", "black") })
     
     
     kpop_demos_aes <- noedu_aes
@@ -483,11 +482,13 @@ allmargins <- function(pop_weights = TRUE,
     
     
     #change name so its clear that recode_educ is 6 way and fixing some labels that are slighly off bc i apparently could not count when i named them/less cleaning in latex names
-    wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+    
     wmabserr$var[wmabserr$var == "income_5way"]<- "income_6way"
     wmabserr$var[wmabserr$var == "relig_6way"]<- "relig_5way"
     wmabserr$var[wmabserr$var == "educ_wh_3way"]<- "educ_3way_wh"
-
+    wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "income_5way"]<- "income_6way"
+    wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "relig_6way"]<- "relig_5way"
+    wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "educ_wh_3way"]<- "educ_3way_wh"
 
     kable_err <- kable(wmabserr_nooutcomes,
                                format = "latex",
@@ -502,11 +503,15 @@ allmargins <- function(pop_weights = TRUE,
                         column_spec(which(colnames(wmabserr_nooutcomes) ==
                                               "kpop_demos_wedu"),
                                 color = kpop_demos_wedu_aes) %>%
-                        column_spec(which(colnames(wmabserr_nooutcomes) == "rake_all"),
-                                color =all_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) ==
+                                              "rake_demos_weduc"),
+                                color = wedu_aes) %>%
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "rake_all_vars"),
+                                color = all_aes) %>%
                         column_spec(which(colnames(wmabserr_nooutcomes) == "kpop_all"),
                                 color =kpop_all_aes) %>%
-                        column_spec(which(colnames(wmabserr_nooutcomes) == "rake_retro"),
+                        column_spec(which(colnames(wmabserr_nooutcomes) ==
+                                              "rake_retrospective"),
                                 color =retro_aes) %>% 
                         column_spec(which(colnames(wmabserr_nooutcomes) ==
                                               "post_strat_reduc"),
@@ -518,7 +523,7 @@ allmargins <- function(pop_weights = TRUE,
                            format = "latex",
                            caption = caption_o,
                            booktabs = T,
-                           digits = 3)
+                           digits = 2)
         
             
     margins_out <- margins_diff[-c(1:9),]
@@ -547,7 +552,7 @@ cat_margins_popw <- allmargins()
 View(cat_margins_popw$wmabserr)
 cat_margins_popw$kable_err
 cat_margins_popw$kable_outmom
-cat_margins_popw$kable_margins
+
 
 ```
 
@@ -556,6 +561,11 @@ cat_margins_popw$kable_margins
 This formula produces the monster plots across a range of choices of b for pR, pD, vote difference, and vote margin.
 
 ```{r plot_funct}
+#bigB = T means plot b's in range 128-2048
+#smallB = T means plot b's in range 2-64
+#display_pew_mod = T will plot the the same results for the modeled pew outcomes additionally to compare and observe bias in response
+#maxit and toelrance should remain at defaults for now
+
 pew_out <- function(popw = TRUE,
                     best_b_plot = FALSE, 
                     bigB = TRUE, 

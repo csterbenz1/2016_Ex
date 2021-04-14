@@ -112,6 +112,7 @@ allmargins <- function(pop_weights = TRUE,
                        margins_formula = NULL, 
                        order = NULL,
                        tolerance = 1e-06,
+                       pop_weighted_avg = TRUE,
                        maxit = 500) {
     
     pew_nowt <- suppressWarnings(svydesign(ids = ~1, data = pew))
@@ -192,8 +193,8 @@ allmargins <- function(pop_weights = TRUE,
         cces_svy <- svydesign(ids = ~1, weights = ~commonweight_vv_post,
                           data = cces)
     } else {
-        cces_svy <- svydesign(ids = ~1,
-                          data = cces)
+        cces_svy <- suppressWarnings(svydesign(ids = ~1,
+                          data = cces))
     }
     
      targets_rake_demos_noeduc <- create_targets(cces_svy,
@@ -243,8 +244,8 @@ allmargins <- function(pop_weights = TRUE,
                                          filter(!(strata %in% problem)),
                                      weights = weights(post_stratification))
     #reduced
-    pew_ps_reduc_xgb <- svydesign(ids = ~1, data = pew %>% 
-                                      filter(!(strata_reduc %in% problem_reduc)))
+    pew_ps_reduc_xgb <- suppressWarnings(svydesign(ids = ~1, data = pew %>% 
+                                      filter(!(strata_reduc %in% problem_reduc))))
     post_strat_reduc <- postStratify(design = pew_ps_reduc_xgb,
                                         strata = ~strata_reduc,
                                         population = targets_ps_reduc)
@@ -252,8 +253,8 @@ allmargins <- function(pop_weights = TRUE,
                                       filter(!(strata_reduc %in% problem_reduc)),
                                      weights = weights(post_strat_reduc))
     
-    pew_ps_all_xgb <- svydesign(ids = ~1,  data = pew %>%  
-                                    filter(!(strata_all %in% problem_all)))
+    pew_ps_all_xgb <- suppressWarnings(svydesign(ids = ~1,  data = pew %>%  
+                                    filter(!(strata_all %in% problem_all))))
     post_strat_all <- postStratify(design = pew_ps_all_xgb,
                                         strata = ~strata_all,
                                         population = targets_ps_all)
@@ -370,52 +371,111 @@ allmargins <- function(pop_weights = TRUE,
                rake_retrospective = cces_margins- rake_retrospective)
     rownames(margins_diff) <- rownames(margins)
     
-    #get cces proportions: for weighted L1 dist on age 
-    margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
-      (margins_diff[(grep("age_factor", 
-                          rownames(margins_diff))),
-                    ])* (margins[grep("age_factor", rownames(margins)), "cces_margins"]/100)*length(levels(cces$recode_age_factor))
     
-    #HAHAHHAHAHAHA this is horrific I should switch to str_extract now that i belatedly discovered it
-    wmabserr <- margins_diff %>% 
-    mutate(var = sapply(rownames(margins_diff), 
-                        function(y) {
-                            substr(y, 1, 
-                                   sapply(rownames(margins_diff), 
-                                          function(x) {
-                                              if(grepl("income",x)) {
-                                                  11 #income_5way
-                                             #this is so ridiculous WHY (sunk cost ugh)
-                                              } else if(grepl("xgb",x) |grepl("mod",x) |
-                                                        (grepl("age",x) & 
-                                                         !grepl("bucket",x) &
-                                                         !grepl("factor",x)) ){
-                                                  nchar(x) #keep all xgb stuff
-                                                  #THIS IS SO STUPID
-                                              } else if(grepl("factor",x)) {
-                                                  10 #age_factor
-                                              } else {
-                                               (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
-                                              }
-                                          })[y])
-                        })) %>%
-    group_by(var) %>% summarize(pew_unweighted = mean(abs(pew)), 
-                                kpop = mean(abs(kpop)),
-                                #kpop_conv = mean(abs(kpop_conv)), 
-                                #kpop_mf = mean(abs(kpop_mf)),
-                                kpop_demos = mean(abs(kpop_demos)),
-                                rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
-                                kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
-                                rake_demos_weduc = mean(abs(rake_demos_weduc)),
-                                kpop_all = mean(abs(kpop_all)),
-                                rake_all_vars = mean(abs(rake_all_vars)), 
-                                rake_retrospective = mean(abs(rake_retrospective)),
-                                #post_stratification =
-                                #    mean(abs(post_stratification)),
-                                post_strat_reduc = mean(abs(post_strat_reduc))
-                                #post_strat_all = mean(abs(post_strat_all)),
-                                )
-   wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+    if(pop_weighted_avg) {
+        #weighting the difference by the proportion in that bin in cces
+        #margins_diff is in percents, so it's the percent difference btwn the sample and the pop on each margin, we want tottake the averge abs value of this differnce, but we dont' just want the straight average, we want it weighted by the percent in that margin in the cces
+        #so that means if we just multiply the idfference by the cces margin/100 we only need to sum them in wmabserr
+        w_margins_diff <- margins_diff*(margins[, "cces_margins"]/100)
+        #dont's square cces:
+        w_margins_diff[, "cces_margins"] <- margins_diff[, "cces_margins"]
+        #manugally fix the one level margins: then we'll just report the abs diff on these
+        w_margins_diff["age",] <- margins_diff["age",]
+        w_margins_diff["agesq",] <- margins_diff["agesq",]
+        w_margins_diff["agecubed",] <- margins_diff["agecubed",]
+
+    
+        wmabserr <- w_margins_diff %>% 
+            mutate(var = sapply(rownames(margins_diff), 
+                                function(y) {
+                                    substr(y, 1, 
+                                           sapply(rownames(margins_diff), 
+                                                  function(x) {
+                                                      if(grepl("income",x)) {
+                                                          11 #income_5way
+                                                     #this is so ridiculous WHY (sunk cost ugh)
+                                                      } else if(grepl("xgb",x) |grepl("mod",x) |
+                                                                (grepl("age",x) & 
+                                                                 !grepl("bucket",x) &
+                                                                 !grepl("factor",x)) ){
+                                                          nchar(x) #keep all xgb stuff
+                                                          #THIS IS SO STUPID
+                                                      } else if(grepl("factor",x)) {
+                                                          10 #age_factor
+                                                      } else {
+                                                       (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
+                                                      }
+                                                  })[y])
+                                })) %>%
+            group_by(var) %>% summarize(pew_unweighted = sum(abs(pew)), 
+                                        kpop = sum(abs(kpop)),
+                                        #kpop_conv = sum(abs(kpop_conv)), 
+                                        #kpop_mf = sum(abs(kpop_mf)),
+                                        kpop_demos = sum(abs(kpop_demos)),
+                                        rake_demos_noeduc = sum(abs(rake_demos_noeduc)),
+                                        kpop_demos_wedu = sum(abs(kpop_demos_wedu)),
+                                        rake_demos_weduc = sum(abs(rake_demos_weduc)),
+                                        kpop_all = sum(abs(kpop_all)),
+                                        rake_all_vars = sum(abs(rake_all_vars)), 
+                                        rake_retrospective = sum(abs(rake_retrospective)),
+                                        #post_stratification =
+                                        #    sum(abs(post_stratification)),
+                                        post_strat_reduc = sum(abs(post_strat_reduc))
+                                        #post_strat_all = sum(abs(post_strat_all)),
+                                        )
+           wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+    
+    } else {
+        #get cces proportions: for weighted L1 dist on age 
+        margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
+          (margins_diff[(grep("age_factor", 
+                              rownames(margins_diff))),
+                        ])* (margins[grep("age_factor", rownames(margins)), "cces_margins"]/100)*length(levels(cces$recode_age_factor))
+        
+        #HAHAHHAHAHAHA this is horrific I should switch to str_extract now that i belatedly discovered it
+        wmabserr <- margins_diff %>% 
+        mutate(var = sapply(rownames(margins_diff), 
+                            function(y) {
+                                substr(y, 1, 
+                                       sapply(rownames(margins_diff), 
+                                              function(x) {
+                                                  if(grepl("income",x)) {
+                                                      11 #income_5way
+                                                 #this is so ridiculous WHY (sunk cost ugh)
+                                                  } else if(grepl("xgb",x) |grepl("mod",x) |
+                                                            (grepl("age",x) & 
+                                                             !grepl("bucket",x) &
+                                                             !grepl("factor",x)) ){
+                                                      nchar(x) #keep all xgb stuff
+                                                      #THIS IS SO STUPID
+                                                  } else if(grepl("factor",x)) {
+                                                      10 #age_factor
+                                                  } else {
+                                                   (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
+                                                  }
+                                              })[y])
+                            })) %>%
+        group_by(var) %>% summarize(pew_unweighted = mean(abs(pew)), 
+                                    kpop = mean(abs(kpop)),
+                                    #kpop_conv = mean(abs(kpop_conv)), 
+                                    #kpop_mf = mean(abs(kpop_mf)),
+                                    kpop_demos = mean(abs(kpop_demos)),
+                                    rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
+                                    kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
+                                    rake_demos_weduc = mean(abs(rake_demos_weduc)),
+                                    kpop_all = mean(abs(kpop_all)),
+                                    rake_all_vars = mean(abs(rake_all_vars)), 
+                                    rake_retrospective = mean(abs(rake_retrospective)),
+                                    #post_stratification =
+                                    #    mean(abs(post_stratification)),
+                                    post_strat_reduc = mean(abs(post_strat_reduc))
+                                    #post_strat_all = mean(abs(post_strat_all)),
+                                    )
+       wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+            }
+    
+    
+    
     
     #labels
     if(pop_weights) {
@@ -426,30 +486,45 @@ allmargins <- function(pop_weights = TRUE,
     tol_label = paste0(" tol=",as.character(tolerance))
     maxit_label = paste0( " maxit=", as.character(maxit))
     
-    
-    caption_m = paste0("Margins (Difference): Unscaled K ", "b=", round(b, 2),
+    if(pop_weighted_avg) {
+        caption_m = paste0("W. Margins (Difference): Unscaled K ", "b=", round(b, 2),
                        popw_lab, " Age Buckets Only (no dnk) ",
                        tol_label, maxit_label)
-    caption_o = paste0("Absolute Error on Margins of Outcomes: Unscaled K ","b=", 
-                       round(b, 2),
+        caption_o = paste0("Absolute Error on Weighted Margins of Outcomes: Unscaled K ","b=", 
+                           round(b, 2),
+                           popw_lab, " Age Buckets Only (no dnk) ",
+                           tol_label, maxit_label)
+        
+        caption_err = paste0("Weighted Mean Abs Error: Unscaled K ","b=", 
+                             round(b, 2), popw_lab,
+                                  " Age Buckets Only (no dnk) ", tol_label, maxit_label)   
+        
+    } else {
+        caption_m = paste0("Margins (Difference): Unscaled K ", "b=", round(b, 2),
                        popw_lab, " Age Buckets Only (no dnk) ",
                        tol_label, maxit_label)
-    
-    caption_err = paste0("Weighted Mean Abs Error: Unscaled K ","b=", 
-                         round(b, 2), popw_lab,
-                              " Age Buckets Only (no dnk) ", tol_label, maxit_label)
-    
+        caption_o = paste0("Absolute Error on Margins of Outcomes: Unscaled K ","b=", 
+                           round(b, 2),
+                           popw_lab, " Age Buckets Only (no dnk) ",
+                           tol_label, maxit_label)
+        
+        caption_err = paste0("Mean Abs Error: Unscaled K ","b=", 
+                             round(b, 2), popw_lab,
+                                  " Age Buckets Only (no dnk) ", tol_label, maxit_label)   
+    }
+    #var %in% c("agecubed") |
     wmabserr_nooutcomes <- wmabserr %>% 
-        filter(!(var %in% c("agecubed") |grepl("xgb", var) | grepl("vote", var))) %>%
+        filter(!(grepl("xgb", var) | grepl("vote", var))) %>%
         arrange(nchar(var))
     if(is.null(order)) {
-        order = c("female", "pid_3way", "age_bucket","race",  "region", "educ_6way", "income_5way", 
+        order = c("female", "pid_3way", "age_bucket","race",  "region", "educ_6way",
+                  "income_5way", "born",
                   "relig_6way", 
                   "pid_race", "educ_pid",
                   "educ_pid_race", "race_educ_reg", "educ_wh_3way", "midwest_wh_edu",
                   "midwest_edu_race",
                   
-                  "agesq", "age_factor")
+                  "agesq", "agecubed", "age_factor")
     }
     
     wmabserr_nooutcomes <- wmabserr_nooutcomes[as.numeric(sapply(order, function(x) which(wmabserr_nooutcomes$var == x))),]
@@ -532,6 +607,7 @@ allmargins <- function(pop_weights = TRUE,
     # rownames(margins_out)[nrow(margins_out)] <- "Column Average"
     
     out <- list(margins = margins,
+                w_margins_diff = w_margins_diff,
                 margins_diff = margins_diff,
                 wmabserr = wmabserr,
                 wmabserr_nooutcomes = wmabserr_nooutcomes,
@@ -628,7 +704,7 @@ pew_out <- function(popw = TRUE,
     
 
    
-    pew_srs <- svydesign(ids = ~1, data = pew)
+    pew_srs <- suppressWarnings(svydesign(ids = ~1, data = pew))
     pew_w_srs <-  svydesign(ids = ~1, weights = ~weight, data = pew)
 
     if(popw) {

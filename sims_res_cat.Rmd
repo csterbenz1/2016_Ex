@@ -999,7 +999,8 @@ save(sims,tolerance, maxit, increment, min_num_dims,
 ## Analyze Results
 
 ```{r cleaning_sims}
-load("./cat_sims_wFALSE_m500_t1e-04_inc5mindims1402021-04-07_nsims500.RData")
+load("/Users/Ciara/Dropbox/kpop/Updated/sims/cat_sims_wFALSE_m500_t1e-04_inc5mindims1402021-04-07_nsims500RData.RData")
+
 good = which(lapply(sims, function (x) return(class(x))) == "list")
 length(good)
 bad = which(!(c(1:500) %in% good))
@@ -1038,6 +1039,7 @@ var(plot$b.i.)
 ### Margins
 ```{r summarize_margins, echo = FALSE}
 test <- as.data.frame(margins) 
+pop_weighted_avg = TRUE
 
 #other methods margins
 #cols are nsim results, rows are each individual level of each variable
@@ -1111,68 +1113,122 @@ margins_diff <- margins_total %>% mutate(
     rake_truth = cces - rake_truth)
 rownames(margins_diff) <- rownames(margins_total)
 
-#combining the factored age bins into a weighted L1 distance
-#weighting the difference by the proportion in that bin in cces
-#then we throw in n (number of bins) so that when i take the mean later we get the correct normalization
-margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
-      (margins_diff[(grep("age_factor", 
-                          rownames(margins_diff))),
-                    ])* (margins_total[grep("age_factor", rownames(margins_total)), "cces"]/100)*length(levels(cces$recode_age_factor))
+
+if(pop_weighted_avg) {
+    w_margins_diff <- margins_diff*(margins_total[, "cces"]/100)
+    #dont's square cces:
+    w_margins_diff[, "cces"] <- margins_diff[, "cces"]
+    #manugally fix the one level margins: then we'll just report the abs diff on these
+    w_margins_diff["age",] <- margins_diff["age",]
+    w_margins_diff["agesq",] <- margins_diff["agesq",]
+    w_margins_diff["agecubed",] <- margins_diff["agecubed",]
+    w_margins_diff["vote_2016_sim",] <- margins_diff["vote_2016_sim",]
 
 
-wmabserr <- margins_diff %>% 
-    mutate(var = sapply(rownames(margins_diff), 
-                        function(y) {
-                            substr(y, 1, 
-                                   sapply(rownames(margins_diff), 
-                                          function(x) {
-                                              if(grepl("income",x)) {
-                                                  11 #income_5way
-                                             #this is so ridiculous WHY (sunk cost ugh)
-                                                #keeping all of the outcomes and age margins
-                                                #that are not buckets or factored
-                                              } else if(grepl("mod", x) | grepl("sim", x) |
-                                                        (grepl("age",x) & 
-                                                         !grepl("bucket",x) &
-                                                         !grepl("factor",x)) ){
-                                                  nchar(x) 
-                                                  #THIS IS SO STUPID
-                                              } else if(grepl("factor",x)) {
-                                                  10 #age_factor
-                                              } else {
-                                               (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
-                                              }
-                                          })[y])
-                        })) %>% 
-        group_by(var)  %>% 
-    summarize(sample = mean(abs(sample)), 
-              kpop = mean(abs(kpop)),
-              #kpop_conv = mean(abs(kpop_conv)),
-              #kpop_mf = mean(abs(kpop_mf)),
-              kpop_demos = mean(abs(kpop_demos)),
-              rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
-              kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
-              rake_demos_weduc = mean(abs(rake_demos_weduc)), 
-              kpop_all = mean(abs(kpop_all)),
-              rake_all = mean(abs(rake_all)), 
-              #post_stratification =mean(abs(post_stratification)),
-              post_strat_reduc =mean(abs(post_strat_reduc)),
-              #post_strat_all =mean(abs(post_strat_all)),
-              rake_truth = mean(abs(rake_truth)))
+    wmabserr <- w_margins_diff %>% 
+        mutate(var = sapply(rownames(margins_diff), 
+                            function(y) {
+                                substr(y, 1, 
+                                       sapply(rownames(margins_diff), 
+                                              function(x) {
+                                                  if(grepl("income",x)) {
+                                                      11 #income_5way
+                                                 #this is so ridiculous WHY (sunk cost ugh)
+                                                  } else if(grepl("mod", x) |grepl("sim", x) |
+                                                          (grepl("age",x) & 
+                                                           !grepl("bucket",x) &
+                                                           !grepl("factor",x)) ){
+                                                    nchar(x) 
+                                                    #THIS IS SO STUPID
+                                                } else if(grepl("factor",x)) {
+                                                      10 #age_factor
+                                                  } else {
+                                                   (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
+                                                  }
+                                              })[y])
+                            })) %>%
+        group_by(var) %>% summarize(sample = mean(abs(sample)), 
+                kpop = mean(abs(kpop)),
+                #kpop_conv = mean(abs(kpop_conv)),
+                #kpop_mf = mean(abs(kpop_mf)),
+                kpop_demos = mean(abs(kpop_demos)),
+                rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
+                kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
+                rake_demos_weduc = mean(abs(rake_demos_weduc)), 
+                kpop_all = mean(abs(kpop_all)),
+                rake_all = mean(abs(rake_all)), 
+                #post_stratification =mean(abs(post_stratification)),
+                post_strat_reduc =mean(abs(post_strat_reduc)),
+                #post_strat_all =mean(abs(post_strat_all)),
+                rake_truth = mean(abs(rake_truth)))
+       wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+  
 
-wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
+} else {
+  #combining the factored age bins into a weighted L1 distance
+  #weighting the difference by the proportion in that bin in cces
+  #then we throw in n (number of bins) so that when i take the mean later we get the correct normalization
+  margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
+        (margins_diff[(grep("age_factor", 
+                            rownames(margins_diff))),
+                      ])* (margins_total[grep("age_factor", rownames(margins_total)), "cces"]/100)*length(levels(cces$recode_age_factor))
+  
+  
+  wmabserr <- margins_diff %>% 
+      mutate(var = sapply(rownames(margins_diff), 
+                          function(y) {
+                              substr(y, 1, 
+                                     sapply(rownames(margins_diff), 
+                                            function(x) {
+                                                if(grepl("income",x)) {
+                                                    11 #income_5way
+                                               #this is so ridiculous WHY (sunk cost ugh)
+                                                  #keeping all of the outcomes and age margins
+                                                  #that are not buckets or factored
+                                                } else if(grepl("mod", x) | grepl("sim", x) |
+                                                          (grepl("age",x) & 
+                                                           !grepl("bucket",x) &
+                                                           !grepl("factor",x)) ){
+                                                    nchar(x) 
+                                                    #THIS IS SO STUPID
+                                                } else if(grepl("factor",x)) {
+                                                    10 #age_factor
+                                                } else {
+                                                 (gregexpr("[A-Z]|[1-9][1-9] |[1-9][1-9]\\+|[1-9]\\-", x)[[1]][1]-1)
+                                                }
+                                            })[y])
+                          })) %>% 
+          group_by(var)  %>% 
+      summarize(sample = mean(abs(sample)), 
+                kpop = mean(abs(kpop)),
+                #kpop_conv = mean(abs(kpop_conv)),
+                #kpop_mf = mean(abs(kpop_mf)),
+                kpop_demos = mean(abs(kpop_demos)),
+                rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
+                kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
+                rake_demos_weduc = mean(abs(rake_demos_weduc)), 
+                kpop_all = mean(abs(kpop_all)),
+                rake_all = mean(abs(rake_all)), 
+                #post_stratification =mean(abs(post_stratification)),
+                post_strat_reduc =mean(abs(post_strat_reduc)),
+                #post_strat_all =mean(abs(post_strat_all)),
+                rake_truth = mean(abs(rake_truth)))
+  
+  wmabserr$var[wmabserr$var == "educ"]<- "educ_6way"
 
+}
 #drop some of the unnecc margins
+#var %in% c("agecubed") |
 wmabserr_nooutcomes <- wmabserr %>%
-        filter(!(var %in% c("agecubed") |grepl("xgb", var) | grepl("vote", var))) %>%
+        filter(!(grepl("mod", var) | grepl("vote", var))) %>%
         arrange(nchar(var))
 #reorder
 order = c("female", "pid_3way","age_bucket", "race", "region", "educ_6way", "income_5way",
-                  "relig_6way",
+          "born", "relig_6way", 
                   "pid_race", "educ_pid",
                   "educ_pid_race", "race_educ_reg", "educ_wh_3way", "midwest_wh_edu",
                   "midwest_edu_race", 
-                  "agesq", "age_factor")
+                  "agesq", "agecubed", "age_factor")
 wmabserr_nooutcomes <- wmabserr_nooutcomes[as.numeric(sapply(order, function(x) which(wmabserr_nooutcomes$var == x))),]
      
 #kable aethetetics:
@@ -1238,7 +1294,7 @@ kable_err <- kable(wmabserr_nooutcomes,
 
 
 #other margins/outcomes
- kable_om <- kable(wmabserr %>% 
+kable_om <- kable(wmabserr %>% 
                           filter( #(var %in% c("age", "agesq", "agecubed") |
                                       grepl("mod", var) | grepl("xgb", var)|
                                       grepl("vote", var)) %>% arrange(nchar(var)),

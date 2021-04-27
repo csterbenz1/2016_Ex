@@ -308,7 +308,8 @@ conf_pew_pew <- confusionMatrix(mod_pew_on_pew_out,
                                 as.factor(pew$recode_vote_2016))
 cat("Confusion Matrix: Pew on Pew (All Data)\n")
 print(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table)))
-
+kable(t(t(conf_pew_pew$table)/colSums(conf_pew_pew$table))*100, 
+      format = "latex", booktabs = T, digits = 3, caption = "Confusion Matrix: Pew on Pew (All Data)\n")
 
 
 ########## PRED ON CCES #########
@@ -350,7 +351,8 @@ conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
                                      as.factor(outcome))
 cat("Confusion Matrix: CCES on CCES (All Data)\n")
 print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
-
+kable(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table))*100, 
+      format = "latex", booktabs = T, digits = 3, caption = "Confusion Matrix: CCES on CCES (All Data)\n")
 ```
 
 

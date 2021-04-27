@@ -1008,7 +1008,7 @@ bad = which(!(c(1:500) %in% good))
 
 plot <- lapply(sims, `[[`, 1)
 #some of them failed it looks like 
-plot <- plot[good] %>% bind_rows()
+#plot <- plot[good] %>% bind_rows()
 
 unlist(lapply(plot, function (x) return(class(x$mfnumdims))) )
 bad = which(unlist(lapply(plot, function (x) return(class(x$mfnumdims))) )  == "character")
@@ -1332,32 +1332,32 @@ plot_lasso_margin <- plot %>%
   mutate(margin = (0.5 - margin) * 2 * 100,
          estimator_name = factor(case_when(estimator == "kpop" ~ "KPop",
                        estimator == "kpop_mf" ~ "Kpop aMF (All)",
-                       estimator == "kpop_conv" ~ "Kpop Converged",
-                       estimator == "kpop_demos" ~ "Kpop MF (Demos)",
-                       estimator == "kpop_demos_wedu" ~ "Kpop MF (Demos+Edu)",
-                       estimator == "kpop_all" ~ "Kpop MF (All)",
-                       estimator == "rake_demos_noeduc" ~ "Raking\nDemos (No Educ)",
-                       estimator == "rake_demos_weduc" ~ "Raking\nDemos (w/ Educ)",
-                       estimator == "rake_all" ~ "Raking\n All",
-                       estimator == "rake_truth" ~ "Raking\nTrue Selection\nModel",
-                       estimator == "post_stratification" ~ "Post-Strat Prev",
-                       estimator == "post_strat_reduc" ~ "Post-Strat Reduc",
-                       estimator == "post_strat_all" ~ "Post-Strat All",
+                      # estimator == "kpop_conv" ~ "Kpop Converged",
+                       estimator == "kpop_demos" ~ "Kpop+MF:\n (Demos)",
+                       estimator == "kpop_demos_wedu" ~ "Kpop+MF:\n (Demos+Edu)",
+                       estimator == "kpop_all" ~ "Kpop+MF:\n (All)",
+                       estimator == "rake_demos_noeduc" ~ "Mean Calibration:\n (Demos)",
+                       estimator == "rake_demos_weduc" ~  "Mean Calibration:\n (Demos+Edu)",
+                       estimator == "rake_all" ~ "Mean Calibration:\n (All)",
+                       estimator == "rake_truth" ~ "Mean Calibration:\n True Selection\nModel",
+                       #estimator == "post_stratification" ~ "Post-Strat Prev",
+                       estimator == "post_strat_reduc" ~ "Post-Stratification:\n (Reduc)",
+                       #estimator == "post_strat_all" ~ "Post-Strat All",
                        estimator == "unweighted" ~ "Unweighted"),
                     levels = c("Unweighted", 
-                               "Raking\nDemos (No Educ)",
-                               "Raking\nDemos (w/ Educ)",
-                               "Raking\n All",
-                               "Post-Strat Prev", 
-                               "Post-Strat Reduc", 
-                               "Post-Strat All",
+                               "Mean Calibration:\n (Demos)",
+                               "Mean Calibration:\n (Demos+Edu)",
+                               "Mean Calibration:\n (All)",
+                             #  "Post-Strat Prev", 
+                               "Post-Stratification:\n (Reduc)", 
+                              # "Post-Strat All",
                                "KPop",
-                               "Kpop Converged",
-                               "Kpop aMF (All)",
-                               "Kpop MF (Demos)",
-                               "Kpop MF (Demos+Edu)",
-                               "Kpop MF (All)",
-                               "Raking\nTrue Selection\nModel"
+                              # "Kpop Converged",
+                               #"Kpop aMF (All)",
+                               "Kpop+MF:\n (Demos)",
+                               "Kpop+MF:\n (Demos+Edu)",
+                               "Kpop+MF:\n (All)",
+                               "Mean Calibration:\n True Selection\nModel"
                                )))
 View(plot_lasso_margin)
 
@@ -1370,17 +1370,17 @@ ggplot(data = plot_lasso_margin,
   geom_boxplot(alpha = 0.2) +
   geom_hline(yintercept = margin_sim) +
   theme_bw() +
-  ggtitle(paste0("Sim Results: lasso(lambda 1se)\n",
-                 " ", "pop weights: ", POPW, "\n",length(good), " sims, b=maxvar")) +
-  xlab("Estimator") +
-  ylab("Lasso Simulated Vote Margin") +
-  annotate(geom = "text", x = 0.5, y = margin_sim,
-           label = "True\nTarget\nPopulation\nMargin", hjust = 0) +
+  # ggtitle(paste0("Simu Results: lasso ",
+  #                " ", "pop weights: ", POPW, "\n",length(good), " sims, b=maxvar")) +
+  xlab("") +
+  ylab("Simulated Vote Margin") +
+  annotate(geom = "text", x = 0.85, y = margin_sim+0.25, size = 2.7, angle = 90,
+           label = "True Target\nPopulation\nMargin", hjust = 0) +
   theme(panel.grid.major.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-ggsave(file = paste0("./cat_sims_b_maxvar_4-07_dat_slim.pdf"), height = 4, width = 6)
+ggsave(file = paste0("/Users/Ciara/Dropbox/kpop/Updated/application/plots/cat_sims_b_maxvar_4-07_dat_slim.pdf"), height = 4, width = 6)
 
 
 
@@ -1394,18 +1394,21 @@ kable(
   plot_lasso_margin %>% 
     mutate(estimator_name = gsub("\n", " ", estimator_name)) %>%
     group_by(estimator_name) %>%
-  summarize(truth = margin_sim,
-            mest = mean(margin),
-            mse = mean((margin - margin_sim)^2),
-            bias = mean(margin - margin_sim),
-            se = sd(margin),
-            mae = mean(abs(margin - margin_sim))) %>%
-  mutate(mse_ratio = mse / mse[estimator_name == "Unweighted"],
-         bias_reduc = 1- bias / bias[estimator_name == "Unweighted"],
-         se_ratio = se / se[estimator_name == "Unweighted"],
-         mae_ratio = mae / mae[estimator_name == "Unweighted"]) %>%
-  arrange(mse), caption = "Simulation Results (numeric)",
-   format = "latex", digits = 4)
+  summarize(#truth = margin_sim,
+            #mest = mean(margin),
+            Bias = mean(margin - margin_sim),
+            SE = sd(margin),
+            MSE = mean((margin - margin_sim)^2),
+            #mae = mean(abs(margin - margin_sim))
+            ) %>%
+  mutate(#mse_ratio = mse / mse[estimator_name == "Unweighted"],
+         Bias_Reduc = 1- Bias / Bias[estimator_name == "Unweighted"]
+         #se_ratio = se / se[estimator_name == "Unweighted"],
+         #mae_ratio = mae / mae[estimator_name == "Unweighted"]
+         ) %>%
+  arrange(MSE), caption = "Simulation Results (numeric)",
+  booktabs = T,
+   format = "latex", digits = 2)
 
 
 ```

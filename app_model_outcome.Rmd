@@ -77,6 +77,11 @@ cces <- cces %>% mutate(
 cces <- cces %>% mutate(recode_attndch_bin = 
                             factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
 
+#fixing these names
+cces <- cces %>% rename(recode_race_reg_wh_educ = recode_race_educ_reg) %>% 
+  mutate(recode_race_educ_reg = as.factor(paste(recode_race, recode_region, 
+                                                recode_educ_3way , sep = ", ")))
+
 
 ###### SURVEY DATA (PEW) ####
 pew <- readRDS(paste0(path_data, "pew_new.rds"))
@@ -116,6 +121,10 @@ pew <- pew %>% mutate(
 pew <- pew %>% mutate(recode_attndch_bin = 
                         factor(ifelse(recode_attndch_4way== "Never", "No", "Yes")))
 
+#fixing these names
+pew <- pew %>% rename(recode_race_reg_wh_educ = recode_race_educ_reg) %>% 
+    mutate(recode_race_educ_reg = as.factor(paste(recode_race, recode_region, 
+                                                  recode_educ_3way, sep = ", ")))
 
 
 #to save memory also to prevent model.matrix from dropping rows unncess bc other cols have missing vals
@@ -400,9 +409,13 @@ pew <- pew %>%
                                                     mod_pew_on_pew_pR)
            )
 
+
+saveRDS(cces, file = "cces_lasso_061021.rds")
+saveRDS(pew, file = "pew_lasso_061021.rds")
+
 #class(cces$recode_educ)
-saveRDS(cces, "cces_lasso.rds")
-saveRDS(pew, "pew_lasso.rds")
+#saveRDS(cces, "cces_lasso.rds")
+#saveRDS(pew, "pew_lasso.rds")
 # write.csv(cces, file = "cces_lasso.csv")
 # write.csv(pew, file = "pew_lasso.csv")
 

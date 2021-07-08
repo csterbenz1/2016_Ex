@@ -1025,7 +1025,7 @@ pew_out <- function(PRE = TRUE,
             } else if(cat_kernel) {
                 
                 if(tolerance == 1e-06 & maxit == 500) { 
-                         load("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
+                         load("/Users/Ciara/Dropbox/kpop/Updated/application/weights/allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
                     cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata")
                         clean <- out_cat
                         weights <- weights_cat[3:13]
@@ -2581,14 +2581,17 @@ pew_out <- function(PRE = TRUE,
         ) +
         geom_hline(yintercept = c(0, 
                                   if(popw) {natl_diff*100},
-                                 if(popw) {comp_df_diff$est[comp_df_diff$source_name == "CCES Orig"]},
-                                  comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]),
+                                 if(popw) {comp_df_diff$est[comp_df_diff$source_name == "CCES Orig"]}#,
+                                #  comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]
+                   ),
                    linetype = c("solid", 
-                                if(popw) {"dashed"}, if(popw) {"longdash"},
-                                "dashed"),
+                                if(popw) {"dashed"}, if(popw) {"longdash"}#,
+                                #"dashed"
+                                ),
                    color = c("black", 
-                             if(popw) {"gray60"}, if(popw) {"black"},
-                             "purple")) +
+                             if(popw) {"gray60"}, if(popw) {"black"}#,
+                             #"purple"
+                             )) +
         
         geom_pointrange(data = if(display_pew_mod) {comp_df_diff_merge} else {comp_df_diff}) +
         scale_y_continuous(breaks = c(natl_diff*100, seq(-5, 10, 5)),
@@ -2597,9 +2600,9 @@ pew_out <- function(PRE = TRUE,
         theme_bw() +
         theme(plot.title = element_text(hjust = 0.5)) +
         
-        labs(x = NULL, y = "Estimated Modeled Vote Difference (95% CI)") +
-        ggtitle(paste(pew_ver, "Pew on CCES",mod_lab,"Mean Indiv Vote Diff p(D) - p(R)",
-                      out_lab,"modeled\n", NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
+        labs(x = NULL, y = "Reweighted Estimate of Predicted Retrospective Vote Difference (95% CI)") +
+        # ggtitle(paste(pew_ver, "Pew on CCES",mod_lab,"Mean Indiv Vote Diff p(D) - p(R)",
+        #               out_lab,"modeled\n", NAs_lab, popw_lab, ageb, dnk, tol_label, maxit_label)) +
         theme(axis.text.x = element_text(angle = 70, hjust = 1,
                                          face=if(PRE& smallB) {
                                              ifelse(comp_df_diff$source_name %in% 
@@ -2613,32 +2616,32 @@ pew_out <- function(PRE = TRUE,
                                                     "bold","plain")
                                          })) +
         annotate(geom = "text", 
-                 x =if(display_pew_mod) {nrow(comp_df_pR_merge)+0.55} else{nrow(comp_df_pR)+.55}, 
+                 x =if(display_pew_mod) {nrow(comp_df_pR_merge)+0.85} else{nrow(comp_df_pR)+.85}, 
                  y = if(popw) {natl_diff * 100} else {comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
                  label = if(popw) {" True\n National\n Diff"} else {""},
                  hjust = 0, angle = -90,
                  color = "gray60", size = 3) +
-        annotate(geom = "text",
-                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.55} else{nrow(comp_df_pR)+.55},
-                 y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
-                 label = " CCES\n Modeled Target",
-                 color = "purple",
-                 hjust = 0, angle = 90, size = 3) +
+        # annotate(geom = "text",
+        #          x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.55} else{nrow(comp_df_pR)+.55},
+        #          y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
+        #          label = " CCES\n Modeled Target",
+        #          color = "purple",
+        #          hjust = 0, angle = 90, size = 3) +
         annotate(geom = "text", 
-                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)-2.1} else{nrow(comp_df_pR)-2.1}, 
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+.85} else{nrow(comp_df_pR)+.85}, 
                  y = if(popw) {comp_df_margin$est[comp_df_margin$source_name == "CCES Orig"]} else { comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"]},
                  label = if(popw){" Weighted\n CCES\n Target"} else {""},
                  color = "black",
-                 hjust = 0, angle = -90, size = 3) +
+                 hjust = 0, angle = 90, size = 3) +
         #for spacing
         annotate(geom = "text", 
-                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+2.55} else{nrow(comp_df_pR)+2.55},
+                 x = if(display_pew_mod) {nrow(comp_df_pR_merge)+2.85} else{nrow(comp_df_pR)+2.85},
                  y = comp_df_diff$est[comp_df_diff$source_name == "CCES Modeled"],
                  label = "",
                  color = "purple",
                  hjust = 0, angle = -90, size = 3) +
         scale_alpha_discrete(range=c(1, .4)) +
-        theme(legend.title = element_blank())
+        theme(legend.title = element_blank(), legend.position = "bottom")
     
 
     
@@ -3387,7 +3390,7 @@ cat_kernel_popw_lasso <- pew_out(PRE = TRUE,
 
 
 cat_kernel_popw_lasso$plot_diff
-ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/lasso_popw_votediff_t1e-06_m500_allb.pdf", width = 11, height = 8.5)
+ggsave("/Users/Ciara/Documents/Cloud Documents/Hazlett:Hartman RA/Working/current plots/lasso_popw_votediff_t1e-06_m500_allb_8x5.pdf", width = 8, height = 5)
 cat_kernel_popw_lasso$plot_pR
 cat_kernel_popw_lasso$plot_pD
 View(cat_kernel_popw_lasso$comp_df_diff)

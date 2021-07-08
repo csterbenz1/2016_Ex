@@ -360,12 +360,18 @@ conf_cces_on_cces <- confusionMatrix(as.factor(mod_cces_on_cces_out),
                                      as.factor(outcome))
 cat("Confusion Matrix: CCES on CCES (All Data)\n")
 print(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table)))
-kable(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table))*100, 
-      format = "latex", booktabs = T, digits = 3, caption = "Confusion Matrix: CCES on CCES (All Data)\n")
+# kable(t(t(conf_cces_on_cces$table)/colSums(conf_cces_on_cces$table))*100, 
+#       format = "latex", booktabs = T, digits = 3, caption = "Confusion Matrix: CCES on CCES (All Data)\n")
+
+
+#THIS IS THE KABLE IN TEH APPENDIX!
+kable(t(t(conf_cces_test$table)/colSums(conf_cces_test$table))*100, 
+      format = "latex", booktabs = T, digits = 3, caption = "Confusion Matrix: CCES on CCES (Testing Data)\n")
+
 ```
 
 
-```{r save_dat_lasso}
+```{r save_dat_lasso, eval = F}
 ############# Add to data
 # ## Add simulated results to CCES data
 cces <- cces %>%

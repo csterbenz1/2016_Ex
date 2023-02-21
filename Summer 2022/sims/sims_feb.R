@@ -12,7 +12,6 @@ library(tictoc)
 ###### SET PARAMS  ###############
 set.seed(9345876)
 
-
 if(detectCores() > 10) {
   path_data = "/home/csterbenz/Data/"
   cores_saved = 10
@@ -24,26 +23,44 @@ if(detectCores() > 10) {
     cores_saved = 2
 }
 options(dplyr.print_max = 1e9)
+#fit kpop and others to cces with populations weights?
 POPW = FALSE
-bern = FALSE
-coverage_eval = TRUE
-linear_model = FALSE
-noise = 1
-TEST = FALSE # to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
+# to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
+TEST = FALSE 
+#ebal tolerance and max iterations for kpop
 tolerance = 1e-4
 maxit = 500
-#both for runtime
+#adjust these both for runtime
 increment = 5
 min_num_dims = NULL
 max_num_dims = NULL
-SAVE = TRUE
-manual_lambda = FALSE
-lambda_min = FALSE
-##### Central Params to adjust
-n_sample = 500
-simple_selection_model = TRUE
+SAVE = TRUE #save .Rdata results?
+#Need to adjust accordingly to machine for adequate number of sims
 nsims = (detectCores()-cores_saved)*13
 nsims
+
+##### Central Params to adjust
+#T=selection and outcome model are identical and directly specified w OLS with noise added after the fact;F= legacy; selection model is specified and regularized w/ lasso; outcome is previously run lasso model of cces three way vote choice fitted values = p(D) - p(R) 
+coverage_eval = TRUE 
+#if coverage_eval=T: use linear or nonlinear model  
+linear_model = FALSE 
+#if coverage_eval=T: add bernoulli noise by drawing binary from p(S=1)?
+bern = FALSE 
+#if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
+noise = 1 
+#use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
+manual_lambda = FALSE 
+#T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
+lambda_min = FALSE 
+
+
+
+#if coverage_eval=F: Legacy arg for coverage_eval = F that adj sample size as p(S)*(n_sample/sum(p(S)) + intercept_shift
+n_sample = 500 
+#if coverage_eval=F: Legacy arg for coverage_eval = F that flips selection model
+simple_selection_model = TRUE 
+
+
 ###################### Formulas ################
 formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + recode_race +
   recode_region + recode_pid_3way
@@ -232,8 +249,8 @@ if(!coverage_eval) {
 
     if(simple_selection_model) {
         #first attempt to make this worse
-        selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) +
-                                         recode_female:recode_pid_3way)
+        # selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) +
+        #                                  recode_female:recode_pid_3way)
         #first attempt to make this worse
         #center age then square
         pew = pew %>% mutate(centered_age = scale(recode_age, scale = F))

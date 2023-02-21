@@ -21,7 +21,7 @@ if(detectCores() > 10) {
 }
 
 POPW = FALSE
-eval_kpop = TRUE
+eval_kpop = FALSE
 TEST = FALSE # to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
 tolerance = 1e-4
 maxit = 500
@@ -32,7 +32,7 @@ increment = 5
 # max_num_dims = 500 
 min_num_dims = NULL
 max_num_dims = NULL 
-
+SAVE = FALSE
 ##### Central Params to adjust
 n_sample = 500
 simple_selection_model = TRUE
@@ -139,15 +139,21 @@ pew <- bind_cols(pew, pew %>%
 
 
 ##################### LASSO: Selection #############################
-# Stack data with S = 1 indicating Pew
-stack_data <- data.frame(bind_rows(pew, cces), 
-                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
 
 
 #income, religion, pid x race
 if(simple_selection_model) {
+    #first attempt to make this worse
     selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) + 
                                      recode_female:recode_pid_3way)
+    #first attempt to make this worse
+    #center age then square
+    pew = pew %>% mutate(centered_age = scale(recode_age, scale = F))
+    cces = cces %>% mutate(centered_age = scale(recode_age, scale = F))
+    selection_model = as.formula(~poly(centered_age, 2, raw = F) + 
+                                     recode_pid_3way:poly(centered_age, 2, raw = F) + 
+                                     recode_female:recode_pid_3way)
+    
 } else {
     selection_model = as.formula(~recode_female:recode_pid_3way + 
                                      recode_age:recode_pid_3way +
@@ -158,6 +164,9 @@ if(simple_selection_model) {
                                      poly(recode_age, 3))
 }
 
+# Stack data with S = 1 indicating Pew
+stack_data <- data.frame(bind_rows(pew, cces), 
+                         S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
 
 
 mod <- model.matrix(selection_model, data = stack_data)
@@ -214,7 +223,9 @@ cor(cces$mod_cces_on_cces_pR, p_include)
 cor(cces$diff_cces_on_cces, p_include)
 
 cor(cces$diff_cces_on_cces, cces$recode_age)
-
+cor(cces$diff_cces_on_cces, cces$recode_age*cces$recode_age)
+cor(cces$diff_cces_on_cces, cces$centered_age*cces$centered_age)
+cor(cces$diff_cces_on_cces, cces$centered_age)
 
 #################### Targets ###################
 if(POPW) {
@@ -285,8 +296,8 @@ est_mean <- function(outcome, design) {
 ## Variance functions
 var_fixed <- function(Y, weights, pop_size) {
     ## note: needs weights that sum to population total
-    #if(sum(weights) != pop_size) { weights = weights*pop_size/sum(weights)}
-    return(Hmisc::wtd.var(Y, weights * pop_size))
+    if(sum(weights) != pop_size) { weights = weights*pop_size/sum(weights)}
+    return(Hmisc::wtd.var(Y, weights))
 }
 
 ## kott (14) (under poisson)
@@ -306,13 +317,19 @@ var_chad <- function(weights, residuals) {
 
 ## calculate all variances
 calc_SEs <- function(Y, residuals, pop_size, weights) {
+    #rescale weights to sum to 1 (rake does this automatically, kpop they sum to n_samp)
+    #in var_fixed we rescale to n_pop (but it doesnt actually matter as long as it's not 1 bc its just a bessesl corr denom -1 issue)
+    if(round(sum(weights)) != 1 ) {
+        weights = weights/sum(weights)
+    }
     return(data.frame(SE_fixed = sqrt(var_fixed(Y, weights, pop_size) / length(Y)),
                       SE_quasi = sqrt(var_quasi(weights, residuals, pop_size)),
                       SE_linear = sqrt(var_linear(weights, residuals, pop_size)),
                       SE_chad = sqrt(var_chad(weights, residuals))))
 }
 
-
+nsims = 200
+cores_saved = 3
 system.time({
   sims <- mclapply(1:nsims, function(nsim) {
     #
@@ -1078,34 +1095,6 @@ system.time({
         return(out)
       })
       
-    } else { # XXXX THIS HAS NOT BEEN UPDATED AND WILL BREAK IF eval_kpop = F
-      kpop <- NA
-      kpop_mf<- NA
-      kpop_conv<- NA
-      kpop_demos <- NA
-      kpop_demos_wedu <- NA
-      kpop_all <- NA
-      
-      numdims = NA
-      mfnumdims = NA
-      mf_appended_dims = NA
-      numdims_conv = NA
-      numdims_demos = NA
-      numdims_demos_wedu = NA
-      numdims_all = NA
-      biasbound_r = NA
-      biasbound = NA
-      bb_conv = NA
-      bbr_conv = NA
-      bb_mf = NA
-      bbr_mf = NA
-      bb_demos = NA
-      bbr_demos = NA
-      bb_demos_wedu = NA
-      bbr_demos_wedu = NA
-      bb_all = NA
-      bbr_all = NA
-      
     }
     
     ############################################ OUTPUT
@@ -1163,6 +1152,8 @@ system.time({
                                                                                              paste0("kpop_demos_wedu_b", round(x,3)) ,
                                                                                              paste0("kpop_all_b", round(x,3)) ) ))
     } else {
+     ##### NO KPOP EVAL
+        
       margin <- round(cbind(sample = svymean(margins_formula, survey_design),
                             cces =  svymean(margins_formula, cces_svy),
                             rake_demos_noeduc = svymean(margins_formula,
@@ -1196,7 +1187,16 @@ system.time({
                             rake_truth,
                             ht_truth, 
                             hayek_truth)
-    }
+      
+      out$SEs = data.frame(rake_demos_noeduc_se,
+                           rake_demos_weduc_se,
+                           rake_all_se,
+                           post_stratification_se,
+                           post_strat_reduc_se,
+                           post_strat_all_se,
+                           rake_truth_se)
+      
+    } 
     
     out$margins = margin
     
@@ -1208,7 +1208,8 @@ system.time({
 good = which(lapply(sims, function (x) return(class(x))) == "list")
 length(good)
 
-save(sims, tolerance, maxit, increment, min_num_dims,
+if(SAVE) {
+    save(sims, tolerance, maxit, increment, min_num_dims,
      file = paste0("./cat_sims_lump_modeled_outcome_nodiag_",POPW, "_m",maxit, "_t",tolerance, "_inc",
                    increment, "mindims", min_num_dims,
                    Sys.Date(),
@@ -1218,17 +1219,198 @@ save(sims, tolerance, maxit, increment, min_num_dims,
                    #         start = 1, end = -3),
                    "_nsims", length(good),
                    ".RData"))
+}
 
 est <- lapply(sims, `[[`, 1) %>% bind_rows()
 SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
 
 #combines all weights across rows but can group by b to get them per iteration
-weights <- lapply(sims, `[[`, 3) %>% bind_rows()
-margins <- lapply(sims, `[[`, 4) 
+if(eval_kpop) { 
+    weights <- lapply(sims, `[[`, 3) %>% bind_rows() 
+    margins <- lapply(sims, `[[`, 4) 
+} else { 
+    weights = NULL
+    margins = lapply(sims, `[[`, 3) 
+}
 
-save(est, SEs, weights, margins, tolerance, maxit, increment, min_num_dims,
-     file = paste0("./cat_sims_modeled_outcome_nodiag_",POPW, "_m",maxit, "_t",tolerance, "_inc",
-                   increment, "mindims", min_num_dims,
-                   Sys.Date(),
-                   "_nsims", length(good),
-                   ".RData"))
+if(SAVE) {
+    save(est, SEs, weights, margins, tolerance, maxit, increment, min_num_dims,
+         file = paste0("./cat_sims_modeled_outcome_nodiag_",POPW, "_m",maxit, "_t",tolerance, "_inc",
+                       increment, "mindims", min_num_dims,
+                       Sys.Date(),
+                       "_nsims", length(good),
+                       ".RData")) 
+}
+
+
+
+################################################## 
+########## RES ################
+plot = est
+nrow(est)
+#estimates
+colMeans(est)
+
+####### Complex DGPP + no POPW + n= 500
+
+
+
+
+################## results plots
+#### ported over from tex
+if(eval_kpop) {
+    plot_lasso_margin <- plot %>% 
+        dplyr::select(unweighted, 
+                      rake_demos_noeduc,
+                      rake_demos_weduc,
+                      rake_all,
+                      #post_stratification,
+                      post_strat_reduc,
+                      #post_strat_all,
+                      rake_truth,
+                      kpop, 
+                      #kpop_conv,
+                      #kpop_mf, 
+                      kpop_demos,
+                      kpop_demos_wedu,
+                      kpop_all) %>% 
+        pivot_longer(everything(),
+                     names_to = "estimator", 
+                     values_to = "margin") %>%
+        mutate(margin = margin * 100,
+               estimator_name = factor(case_when(estimator == "kpop" ~ "kpop",
+                                                 estimator == "kpop_mf" ~ "kpop aMF (All)",
+                                                 # estimator == "kpop_conv" ~ "kpop Converged",
+                                                 estimator == "kpop_demos" ~ "kpop+MF:\n (Demos)",
+                                                 estimator == "kpop_demos_wedu" ~ "kpop+MF:\n (Demos+Edu)",
+                                                 estimator == "kpop_all" ~ "kpop+MF:\n (All)",
+                                                 estimator == "rake_demos_noeduc" ~ "Mean Calibration:\n (Demos)",
+                                                 estimator == "rake_demos_weduc" ~  "Mean Calibration:\n (Demos+Edu)",
+                                                 estimator == "rake_all" ~ "Mean Calibration:\n (All)",
+                                                 estimator == "rake_truth" ~ "Mean Calibration:\n True Selection\nModel",
+                                                 estimator == "post_stratification" ~ "Post-Strat Prev",
+                                                 estimator == "post_strat_reduc" ~ "Post-Stratification:\n (Reduc)",
+                                                 estimator == "post_strat_all" ~ "Post-Strat All",
+                                                 estimator == "unweighted" ~ "Unweighted"),
+                                                 estimator == "ht_truth" ~ "Horvitz-Thompson",
+                                                 estimator == "hayek_truth" ~ "Hayek"),
+                                       levels = c("Unweighted", 
+                                                  "Mean Calibration:\n (Demos)",
+                                                  "Mean Calibration:\n (Demos+Edu)",
+                                                  "Mean Calibration:\n (All)",
+                                                  #"Post-Strat Prev", 
+                                                  "Post-Stratification:\n (Reduc)", 
+                                                  "Post-Strat All",
+                                                  "kpop",
+                                                  # "kpop Converged",
+                                                  #"kpop aMF (All)",
+                                                  "kpop+MF:\n (Demos)",
+                                                  "kpop+MF:\n (Demos+Edu)",
+                                                  "kpop+MF:\n (All)",
+                                                  "Mean Calibration:\n True Selection\nModel",
+                                                  "Horvitz-Thompson",
+                                                  "Hayek"
+                                       )))
+    
+} else {
+    plot_lasso_margin <- plot %>% 
+        dplyr::select(unweighted, 
+                      rake_demos_noeduc,
+                      rake_demos_weduc,
+                      rake_all,
+                      post_stratification,
+                      post_strat_reduc,
+                      post_strat_all,
+                      rake_truth, 
+                      ht_truth, 
+                      hayek_truth) %>% 
+        pivot_longer(everything(),
+                     names_to = "estimator", 
+                     values_to = "margin") %>%
+        mutate(margin = margin * 100,
+               estimator_name = factor(case_when(estimator == "kpop" ~ "kpop",
+                                                 estimator == "kpop_mf" ~ "kpop aMF (All)",
+                                                 # estimator == "kpop_conv" ~ "kpop Converged",
+                                                 estimator == "kpop_demos" ~ "kpop+MF:\n (Demos)",
+                                                 estimator == "kpop_demos_wedu" ~ "kpop+MF:\n (Demos+Edu)",
+                                                 estimator == "kpop_all" ~ "kpop+MF:\n (All)",
+                                                 estimator == "rake_demos_noeduc" ~ "Mean Calibration:\n (Demos)",
+                                                 estimator == "rake_demos_weduc" ~  "Mean Calibration:\n (Demos+Edu)",
+                                                 estimator == "rake_all" ~ "Mean Calibration:\n (All)",
+                                                 estimator == "rake_truth" ~ "Mean Calibration:\n True Selection\nModel",
+                                                 estimator == "post_stratification" ~ "Post-Strat Prev",
+                                                 estimator == "post_strat_reduc" ~ "Post-Stratification:\n (Reduc)",
+                                                 estimator == "post_strat_all" ~ "Post-Strat All",
+                                                 estimator == "unweighted" ~ "Unweighted",
+                                                 
+                                                 estimator == "ht_truth" ~ "Horvitz-Thompson",
+                                                 estimator == "hayek_truth" ~ "Hayek"),
+                                       levels = c("Unweighted", 
+                                                  "Mean Calibration:\n (Demos)",
+                                                  "Mean Calibration:\n (Demos+Edu)",
+                                                  "Mean Calibration:\n (All)",
+                                                   "Post-Strat Prev", 
+                                                  "Post-Stratification:\n (Reduc)", 
+                                                  "Post-Strat All",
+                                                  "kpop",
+                                                  #"kpop Converged",
+                                                  #"kpop aMF (All)",
+                                                  "kpop+MF:\n (Demos)",
+                                                  "kpop+MF:\n (Demos+Edu)",
+                                                  "kpop+MF:\n (All)",
+                                                  "Mean Calibration:\n True Selection\nModel",
+                                                  "Horvitz-Thompson",
+                                                  "Hayek"
+                                       )))
+    
+}
+
+#target:
+margin_sim = svymean(~diff_cces_on_cces, cces_svy)[1]* 100
+#### Box Plot
+ggplot(data = plot_lasso_margin,
+       aes(x = estimator_name, y = margin)) +
+    geom_boxplot(alpha = 0.2) +
+    geom_hline(yintercept = margin_sim) +
+    theme_bw() +
+    # ggtitle(paste0("Simulation Results: lasso ",
+    #                " ", "pop weights: ", POPW, "\n",length(good), " sims, b=maxvar")) +
+    xlab("") +
+    ylab("Modeled Vote Margin") +
+    annotate(geom = "text", x = 0.85, y = margin_sim+0.25, size = 2.7, angle = 90,
+             label = "True Target\nPopulation\nMargin", hjust = 0) +
+    ggtitle("n_samp = 500 + simple DGP") +
+    theme(panel.grid.major.x = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+### table
+plot_lasso_margin %>% 
+    mutate(estimator_name = gsub("\n", " ", estimator_name)) %>%
+    group_by(estimator_name) %>%
+    summarize(
+        Bias = mean(margin - margin_sim),
+        SE = sd(margin),
+        MSE = mean((margin - margin_sim)^2)
+    ) %>%
+    mutate(
+        Bias_Reduc = 1- Bias / Bias[estimator_name == "Unweighted"]
+    ) %>%
+    arrange(MSE)
+
+### kable
+knitr::kable(
+    plot_lasso_margin %>% 
+        mutate(estimator_name = gsub("\n", " ", estimator_name)) %>%
+        group_by(estimator_name) %>%
+        summarize(
+            Bias = mean(margin - margin_sim),
+            SE = sd(margin),
+            MSE = mean((margin - margin_sim)^2)
+        ) %>%
+        mutate(
+            Bias_Reduc = 1- Bias / Bias[estimator_name == "Unweighted"]
+        ) %>%
+        arrange(MSE), caption = "Simulation Results (numeric)",
+    booktabs = T,
+    format = "latex", digits = 2)

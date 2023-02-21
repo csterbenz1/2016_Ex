@@ -54,7 +54,7 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
 ################# Load results
 setwd('/Users/Ciara_1/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims')
 ####### SIMPLE DGP + no POPW + n= 500
-load("./cat_sims_modeled_outcome_nodiag_FALSE_m500_t1e-04_inc5mindims2022-08-30_nsims510.RData")
+load("./cat_sims_modeled_outcome_nodiag_FALSE_m500_t1e-04_inc5mindims2022-09-13_nsims494.RData")
 plot = est
 nrow(est)
 #estimates
@@ -81,13 +81,14 @@ plot_lasso_margin <- plot %>%
                   #post_stratification,
                   post_strat_reduc,
                   #post_strat_all,
-                  rake_truth,
-                  kpop, 
+                  rake_truth#,
+                  #kpop, 
                   #kpop_conv,
                   #kpop_mf, 
-                  kpop_demos,
-                  kpop_demos_wedu,
-                  kpop_all) %>% 
+                  #kpop_demos,
+                  #kpop_demos_wedu,
+                  #kpop_all
+                  ) %>% 
     pivot_longer(everything(),
                  names_to = "estimator", 
                  values_to = "margin") %>%
@@ -136,7 +137,7 @@ ggplot(data = plot_lasso_margin,
     ylab("Modeled Vote Margin") +
     annotate(geom = "text", x = 0.85, y = margin_sim+0.25, size = 2.7, angle = 90,
              label = "True Target\nPopulation\nMargin", hjust = 0) +
-    ggtitle("n_samp = 500 + simple DGP") +
+    ggtitle(paste0("n_samp =", round(mean(est$n)), " simple DGP ", simple_selection_model)) +
     theme(panel.grid.major.x = element_blank(),
           axis.text.x = element_text(angle = 45, hjust = 1))
 

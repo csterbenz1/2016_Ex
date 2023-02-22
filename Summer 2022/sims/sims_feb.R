@@ -48,6 +48,8 @@ linear_model = FALSE
 bern = FALSE 
 #if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
 noise = 1 
+#if coverage_eval= T: adjusts sample size by dividing p(S) by scalar pS_denom (i.e. pS = plogis(XBeta)/pS_denom)
+pS_denom = 60
 #use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
 manual_lambda = FALSE 
 #T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice

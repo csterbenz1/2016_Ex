@@ -49,7 +49,7 @@ bern = FALSE
 #if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
 noise = 1 
 #if coverage_eval= T: adjusts sample size by dividing p(S) by scalar pS_denom (i.e. pS = plogis(XBeta)/pS_denom)
-pS_denom = 60
+pS_denom = 60 #moving to 30 doubles sample size to around 1k and we get ps bias around 6-7%
 #use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
 manual_lambda = FALSE 
 #T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
@@ -461,7 +461,6 @@ if(!coverage_eval) {
         
         xbeta = cces_expanded %*% coefs
         p_include = plogis(xbeta)
-        pS_denom = 60
         p_include = p_include/pS_denom
         sum(p_include)
         
@@ -1911,8 +1910,6 @@ system.time({
                      check = check_nums)
       out$samp_counts = check_2$counts
       
-     
-      
       if(coverage_eval) {
           out$SEs = data.frame(rake_demos_noeduc_se,
                      rake_demos_weduc_se,
@@ -2125,9 +2122,10 @@ if(eval_kpop) {
     samp_check <- lapply(sims, `[[`, 6) %>% bind_rows()
     counts <- lapply(sims, `[[`, 7) %>% bind_rows()
 } else {
-    #may nto be accruate after adding in residuals and count, mess w the index to find the correct one
-    ps_dropped <- lapply(sims, `[[`, 3)
-    samp_check <- lapply(sims, `[[`, 4)
+    
+    ps_dropped <- lapply(sims, `[[`, 4) %>% bind_rows()
+    counts <- lapply(sims, `[[`, 6) %>% bind_rows()
+    samp_check <- lapply(sims, `[[`, 5) %>% bind_rows()
 }
 colMeans(ps_dropped)
 

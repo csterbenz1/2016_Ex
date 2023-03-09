@@ -18,20 +18,20 @@ library(survey)
 
 ```{r filenames, include = F}
 #linear
-r33_file_lin = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise1.414_on2022-11-16_nsims494.RData"
-r66_file_lin= "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise0.707_on2022-11-16_nsims494.RData"
-r66_bern_file_lin  = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise0.707_on_bernTRUE_2022-11-16_nsims494.RData"
+r33_file_lin = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_res_kpopTRUE_noise1.414_on2022-11-16_nsims494.RData"
+r66_file_lin= "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_res_kpopTRUE_noise0.707_on2022-11-16_nsims494.RData"
+r66_bern_file_lin  = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_res_kpopTRUE_noise0.707_on_bernTRUE_2022-11-16_nsims494.RData"
 
 #nonlin
-r66_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise0.707106781186548_on2023-01-18_nsims481.RData"
+r66_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_kpopTRUE_noise0.707106781186548_on2023-01-18_nsims481.RData"
 
-r33_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise1.4142135623731_on2023-01-19_nsims494.RData"
+r33_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_kpopTRUE_noise1.4142135623731_on2023-01-19_nsims494.RData"
 
 #r5_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise1_on2023-01-26_nsims481.RData"
 
-r5_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_res_kpopTRUE_noise1_on2023-01-31_nsims494.RData"
+r5_nonlin_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_res_kpopTRUE_noise1_on2023-01-31_nsims494.RData"
 
-r5_nonlin_inter_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_kpopTRUE_noise1_on2023-02-15_nsims494.RData"
+r5_nonlin_inter_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_kpopTRUE_noise1_on2023-02-15_nsims494.RData"
 #"~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_kpopTRUE_noise1_on2023-02-01_nsims468.RData"
 
 ```
@@ -828,7 +828,7 @@ r66_nonlin = make_outcome(noise = noise, linear_model = F,
                           selection_model = selection_model,
                           selection_coefs = coefs,
                           outcome_coefs = coefs_outcome)
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, selection_model, pS_denom)
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom)
 
 load(r33_nonlin_file)
 r33_nonlin = make_outcome(noise = noise, linear_model = F,
@@ -838,7 +838,7 @@ r33_nonlin = make_outcome(noise = noise, linear_model = F,
                           selection_coefs = coefs,
                           outcome_coefs = coefs_outcome)
 #dumb change to update cache
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, selection_model, pS_denom)
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom)
 
 load(r5_nonlin_file)
 r5_nonlin = make_outcome(noise = noise, linear_model = F,
@@ -1104,7 +1104,7 @@ dropped_cells = lapply(ps_dropped, `[[`, 1) %>% bind_rows()
 cat(paste0("For Non-Linear Model 1 and R2=",round(r66_nonlin$R2,3), " PS must drop an average of ", round(mean(dropped_cells$sum),2),
            " units\nw/a sd=", round(sd(dropped_cells$sum)),
            " which is ", round(100*(mean(dropped_cells$sum)/44932),2),"% of the population\n"))
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE,  selection_model, pS_denom)
+rm(coefs, coefs_outcome, p_include, outcome, sims,  selection_model, pS_denom)
 
 ```
 
@@ -1379,13 +1379,13 @@ table_r33 = plot_lasso_margin_r33 %>%
         MSE = mean((margin - margin_sim)^2)
     ) %>% arrange(-abs(Bias))
 #table_r33
-dplyr_sux = table_r33 %>% filter(estimator_name == "Unweighted") %>% select(Bias) %>% pull()
+dplyr_sux = table_r33 %>% filter(estimator_name == "Unweighted") %>% dplyr::select(Bias) %>% pull()
 table_r33 = table_r33 %>% mutate(Bias_Reduc = 1- Bias / dplyr_sux)
 table_r33 = as.data.frame(table_r33)
 rownames(table_r33) = table_r33$estimator_name
 table_r33 = table_r33[,-1]
 
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, pS_denom)
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom)
 ```
 
 
@@ -1478,13 +1478,13 @@ table_r66 = plot_lasso_margin_r66 %>%
         MSE = mean((margin - margin_sim)^2)
     ) %>% arrange(-abs(Bias))
 
-dplyr_sux = table_r66 %>% filter(estimator_name == "Unweighted") %>% select(Bias) %>% pull()
+dplyr_sux = table_r66 %>% filter(estimator_name == "Unweighted") %>% dplyr::select(Bias) %>% pull()
 table_r66 = table_r66 %>% mutate(Bias_Reduc = 1- Bias / dplyr_sux)
 table_r66 = as.data.frame(table_r66)
 rownames(table_r66) = table_r66$estimator_name
 table_r66 = table_r66[,-1]
 
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, pS_denom)
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom)
 ```
 
 ```{r r5_res, echo=F}
@@ -1576,12 +1576,11 @@ table_r5 = plot_lasso_margin_r5 %>%
         MSE = mean((margin - margin_sim)^2)
     ) %>% arrange(-abs(Bias))
 
-dplyr_sux = table_r5 %>% filter(estimator_name == "Unweighted") %>% select(Bias) %>% pull()
+dplyr_sux = table_r5 %>% filter(estimator_name == "Unweighted") %>% dplyr::select(Bias) %>% pull()
 table_r5 = table_r5 %>% mutate(Bias_Reduc = 1- Bias / dplyr_sux)
 table_r5 = as.data.frame(table_r5)
 rownames(table_r5) = table_r5$estimator_name
 table_r5 = table_r5[,-1]
-table_r5
 rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, pS_denom)
 ```
 
@@ -1675,7 +1674,7 @@ table_r5_inter = plot_lasso_margin_r5_inter %>%
         MSE = mean((margin - margin_sim)^2)
     ) %>% arrange(-abs(Bias))
 
-dplyr_sux = table_r5_inter %>% filter(estimator_name == "Unweighted") %>% select(Bias) %>% pull()
+dplyr_sux = table_r5_inter %>% filter(estimator_name == "Unweighted") %>% dplyr::select(Bias) %>% pull()
 table_r5_inter = table_r5_inter %>% mutate(Bias_Reduc = 1- Bias / dplyr_sux)
 table_r5_inter = as.data.frame(table_r5_inter)
 rownames(table_r5_inter) = table_r5_inter$estimator_name
@@ -1730,8 +1729,7 @@ kable(round(SE_coverage[-5, grepl("kpop", colnames(SE_coverage))], 3), format = 
                           length(good), "sims; $R^2$ on Outcome = ", round(outcome_obj$R2, 3))) %>%
   kable_styling(latex_options = "hold_position")
               #mean(est$n)
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, pS_denom,
-   SE_coverage, table_r33, r33_emp_SEs)
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom, table_r33, r33_emp_SEs)
 ```
 
 
@@ -1777,7 +1775,7 @@ kable(round(SE_coverage[-5, grepl("kpop", colnames(SE_coverage))], 3), format = 
   kable_styling(latex_options = "hold_position")
               #mean(est$n)
 
-rm(coefs, coefs_outcome, p_include, outcome, sims,SE_coverage, emp_SE, selection_model, pS_denom,
+rm(coefs, coefs_outcome, p_include, outcome, sims, selection_model, pS_denom,
    SE_coverage, table_r66, r66_emp_SEs)
 ```
 

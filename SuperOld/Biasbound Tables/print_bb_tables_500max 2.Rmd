@@ -1,0 +1,235 @@
+---
+output: pdf_document
+header-includes:
+  - \usepackage{graphicx}
+  - \usepackage{booktabs}
+  - \usepackage{makecell}
+---
+
+# First 500 Singular Values/Vectors
+
+### Note that all ratios are original:optimal
+
+
+```{r messages = F, echo=F, warning=FALSE}
+suppressMessages(library(kableExtra))
+suppressMessages(library(tidyverse))
+suppressMessages(library(survey))
+#suppressMessages(library(dplyr))
+load("bb_dat_wEst.Rdata")
+```
+
+
+```{r, echo = F, eval = F}
+#used to add est to bb_tables but unncess if loading wEst file
+load("../cleaned data/500 Max SVD/comp_df_500.Rdata")
+#merging to bb_comps: kpop + pid + no mf
+bb_comp <- bb_comp %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
+                                  filter(PID == "PID" & MF == "No MF") 
+                                  %>% select(est))[,],
+                              Diff_from_Target = as.matrix(comp_df %>% 
+                                  filter(PID == "PID" & MF == "No MF") %>%
+                                  select(err_target))[,] )
+rownames(bb_comp) <- c("b=2x",
+                       "b=1x",
+                       "b=.5x",
+                       "b=.25x",
+                       "b=.125x")
+
+#merging to bb_comps: kpop +pid + mf
+bb_comp_mf <- bb_comp_mf %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
+                                  filter(PID == "PID" & MF == "MF") 
+                                  %>% select(est))[,],
+                              Diff_from_Target = as.matrix(comp_df %>% 
+                                  filter(PID == "PID" & MF == "MF") %>%
+                                  select(err_target))[,] )
+rownames(bb_comp_mf) <- c("b=2x",
+                       "b=1x",
+                       "b=.5x",
+                       "b=.25x",
+                       "b=.125x")
+
+#kpop +no pid + no mf
+bb_comp_nopid <- bb_comp_nopid %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
+                                  filter(PID == "No PID" & MF == "No MF") 
+                                  %>% select(est))[,],
+                              Diff_from_Target = as.matrix(comp_df %>% 
+                                  filter(PID == "No PID" & MF == "No MF") %>%
+                                  select(err_target))[,] )
+rownames(bb_comp_nopid) <- c("b=2x",
+                       "b=1x",
+                       "b=.5x",
+                       "b=.25x",
+                       "b=.125x",
+                       "b=0.0625")
+
+bb_comp_mf_nopid <-  bb_comp_mf_nopid %>% mutate(Est_VoteMargin = as.matrix(comp_df %>% 
+                                  filter(PID == "No PID" & MF == "MF") 
+                                  %>% select(est))[,],
+                              Diff_from_Target = as.matrix(comp_df %>% 
+                                  filter(PID == "No PID" & MF == "MF") %>%
+                                  select(err_target))[,] )
+rownames(bb_comp_mf_nopid) <- c("b=2x",
+                                "b=1x",
+                                "b=.5x",
+                                "b=.25x",
+                                "b=.125x")
+
+save(bb_comp_nopid, bb_comp, bb_comp_mf, file = "bb_dat_wEst.Rdata")
+
+
+```
+
+# With Party Id
+
+### KPOP (no meanfirst)
+```{r, echo = F, results= "asis"}
+
+kable(bb_comp[1:6],
+      format = "latex",
+      caption = "KPOP + MF=FALSE + W PID: Comparison of Bias bound and L1 distance by choice of b",
+      col.names = c("Bias Bound Ratio", "L1 Ratio",
+                    "Bias Bound Orig", "Bias Bound Opt",
+                    "L1 Orig", "L1 Opt"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+
+kable(bb_comp[c(1,2,7,8)],
+      format = "latex",
+      caption = "KPOP + MF=FALSE + W PID: Choice of b and Estimated Outcome",
+      col.names = c("Bias Bound Ratio", "L1 Ratio","Est Vote Margin", "Diff from Target"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+
+
+
+```
+
+### KPOP with meanfirst
+
+```{r, echo  = F, results = "asis"}
+
+
+kable(bb_comp_mf[1:6],
+      format = "latex",
+      caption = "KPOP + MF=TRUE + W PID: Comparison of Bias bound and L1 distance by choice of b",
+      col.names = c("Bias Bound Ratio", "L1 Ratio",
+                    "Bias Bound Orig", "Bias Bound Opt",
+                    "L1 Orig", "L1 Opt"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+
+kable(bb_comp_mf[c(1,2,7,8)],
+      format = "latex",
+      caption = "KPOP + MF=TRUE + W PID: Choice of b and Estimated Outcome",
+      col.names = c("Bias Bound Ratio", "L1 Ratio","Est Vote Margin", "Diff from Target"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+```
+
+
+# Without Party Id
+
+
+### KPOP (no meanfirst)
+
+```{r, echo  = F, results = "asis"}
+
+
+kable(bb_comp_nopid[1:6],
+      format = "latex",
+      caption = "KPOP + MF=FALSE + NO PID: Comparison of Bias bound and L1 distance by choice of b",
+      col.names = c("Bias Bound Ratio", "L1 Ratio",
+                    "Bias Bound Orig", "Bias Bound Opt",
+                    "L1 Orig", "L1 Opt"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+
+kable(bb_comp_nopid[c(1,2,7,8)],
+      format = "latex",
+      caption = "KPOP + MF=FALSE + NO PID: Choice of b and Estimated Outcome",
+      col.names = c("Bias Bound Ratio", "L1 Ratio","Est Vote Margin", "Diff from Target"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+```
+
+
+### KPOP with meanfirst
+
+
+```{r, echo  = F, eval= T, results = "asis"}
+
+kable(bb_comp_mf_nopid[1:6],
+      format = "latex",
+      caption = "KPOP + MF=TRUE + NO PID: Comparison of Bias bound and L1 distance by choice of b",
+      col.names = c("Bias Bound Ratio", "L1 Ratio",
+                    "Bias Bound Orig", "Bias Bound Opt",
+                    "L1 Orig", "L1 Opt"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+
+kable(bb_comp_mf_nopid[c(1,2,7,8)],
+      format = "latex",
+      caption = "KPOP + MF=TRUE + NO PID: Choice of b and Estimated Outcome",
+      col.names = c("Bias Bound Ratio", "L1 Ratio","Est Vote Margin", "Diff from Target"),
+      booktabs = T, digits= 4) %>%
+    kable_styling(position = "center", latex_options = "hold_position")
+
+#save(bb_comp, bb_comp_mf, bb_comp_nopid, bb_comp_mf_nopid,file = "bb_dat_wEst.Rdata")
+
+```
+
+
+## Best Choice of B
+
+### MF = F + Pid
+```{r}
+#best
+#bb_comp: best in terms of balance on target
+rownames(bb_comp)[which(abs(bb_comp$Diff_from_Target) == min(abs(bb_comp$Diff_from_Target)))]
+#best in terms of bias bound ratio
+rownames(bb_comp)[which(abs(bb_comp$bb_ratio) == max(abs(bb_comp$bb_ratio)))]
+```
+
+### MF = T + Pid
+```{r}
+#best
+#bb_comp_mf: best in terms of balance on target
+rownames(bb_comp_mf)[which(abs(bb_comp_mf$Diff_from_Target) == min(abs(bb_comp_mf$Diff_from_Target)))]
+#best in terms of bias bound ratio
+rownames(bb_comp_mf)[which(abs(bb_comp_mf$bb_ratio) == max(abs(bb_comp_mf$bb_ratio)))]
+```
+
+
+### MF = F + No Pid
+```{r}
+#best
+#bb_comp_nopid: best in terms of balance on target
+rownames(bb_comp_nopid)[which(abs(bb_comp_nopid$Diff_from_Target) == min(abs(bb_comp_nopid$Diff_from_Target)))]
+#best in terms of bias bound ratio
+rownames(bb_comp_nopid)[which(abs(bb_comp_nopid$bb_ratio) == max(abs(bb_comp_nopid$bb_ratio)))]
+```
+
+
+### MF = T + No Pid
+```{r}
+#best
+#bb_comp_nopid_mf: best in terms of balance on target
+rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$Diff_from_Target) == min(abs(bb_comp_mf_nopid$Diff_from_Target)))]
+#best in terms of bias bound ratio
+rownames(bb_comp_mf_nopid)[which(abs(bb_comp_mf_nopid$bb_ratio) == max(abs(bb_comp_mf_nopid$bb_ratio)))]
+
+```
+
+
+
+
+
+

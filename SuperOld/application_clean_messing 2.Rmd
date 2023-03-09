@@ -1,0 +1,472 @@
+---
+title: "Application to 2016 Election Data"
+output: 
+  pdf_document:
+    keep_tex: true
+header-includes:
+  - \usepackage{stackengine}
+  - \usepackage{rotating}
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+## WEIGHTING A 2016 PRE-ELECTION SURVEY
+
+### Packages
+library(tidyverse)
+library(survey)
+library(knitr)
+library(kableExtra)
+
+#devtools::install_github("chadhazlett/KBAL", ref = "master") 
+library(kbal)
+```
+
+
+```{r setup_params}
+## Erin's path
+#path_data = "~/Dropbox/Documents/2019__2020/work/kpop/2016_reweighting_example/data/"
+#Ciara's 
+#path_data = "../data/"
+path_data = "/Users/Ciara/Dropbox/kpop/2016_reweighting_example/data/"
+```
+
+```{r useful_functions}
+vote_contrast <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /
+                           (recode_vote_2016Democrat + recode_vote_2016Republican))
+
+### Function for creating targets from auxiliary information and formula
+create_targets <- function (target_design, target_formula) {
+    target_mf <- model.frame(target_formula, model.frame(target_design))
+    target_mm <- model.matrix(target_formula, target_mf)
+    wts <- weights(target_design)
+    colSums(target_mm * wts) / sum(wts)
+}
+
+```
+
+## Load Data
+
+```{r}
+## SURVEY DATA (PEW)
+### Load
+pew <- readRDS(paste0(path_data, "pew.rds"))
+
+## AUXILIARY INFORMATION (CCES)
+### Load
+cces <- readRDS(paste0(path_data, "cces.rds"))
+### Drop invalid cases
+cces <- cces %>%
+    filter((CC16_401 == "I definitely voted in the General Election.") &
+               !is.na(commonweight_vv_post))
+
+## make recode_educ_white column
+cces <- cces %>%
+  mutate(recode_educ_white = 
+           factor(case_when(recode_race == "White" ~ as.character(recode_educ),
+                            TRUE ~ "No Split"), 
+                  levels = c(levels(cces$recode_educ), "No Split")))
+
+pew <- pew %>%
+  mutate(recode_educ_white = 
+           factor(case_when(recode_race == "White" ~ as.character(recode_educ),
+                            TRUE ~ "No Split"), 
+                  levels = c(levels(pew$recode_educ), "No Split")))
+
+### Actual results
+pres <- readRDS(paste0(path_data, "election.rds"))
+
+natl_margin <- pres %>%
+    summarise(margin = (sum(demtotal) - sum(reptotal)) /
+                  (sum(demtotal) + sum(reptotal))) %>%
+    as.numeric()
+natl_margin
+```
+
+```{r age_NA}
+## recode missing age
+#mean(cces$recode_age, na.rm = TRUE)
+#mean(pew$recode_age, na.rm = TRUE)
+#sum(is.na(pew$recode_age))
+#sum(is.na(cces$recode_age))
+#####XXXXXX issue here
+#pew$recode_age_bucket[is.na(pew$recode_age)]
+pew$recode_age_3way[is.na(pew$recode_age)] <- "a_18to50"
+pew$recode_age_bucket[is.na(pew$recode_age)] <- "18 to 35"
+pew$recode_age[is.na(pew$recode_age)] <- mean(pew$recode_age, na.rm = TRUE)
+cces$recode_age[is.na(cces$recode_age)] <- mean(cces$recode_age, na.rm = TRUE)
+
+
+```
+
+
+```{r define_models}
+formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + 
+    recode_race + recode_region + recode_pid_3way
+formula_rake_demos_weduc <- ~recode_age_bucket + recode_female + 
+  recode_race + recode_region + recode_educ + recode_pid_3way
+formula_ps <- ~recode_age_3way + recode_female + recode_race +
+    recode_region + recode_educ_3way + recode_pid_3way
+formula_retrospective <- ~recode_age_bucket:recode_pid_3way + 
+  recode_female:recode_pid_3way+
+    recode_race_educ_reg:recode_pid_3way
+```
+
+```{r make_svydesign, warning = FALSE}
+## Find Missing Strata
+## Make "strata" variable in CCES and Pew
+cces <- bind_cols(cces, cces %>% 
+                    unite("strata", all.vars(formula_ps), remove = FALSE) %>%
+                    unite("strata_wage", c(all.vars(formula_ps), "recode_age"), 
+                          remove = FALSE) %>%
+                    select(strata, strata_wage))
+
+pew <- bind_cols(pew, pew %>% 
+                   unite("strata", all.vars(formula_ps), remove = FALSE) %>%
+                   unite("strata_wage", c(all.vars(formula_ps), "recode_age"), 
+                         remove = FALSE) %>%
+                   select(strata, strata_wage))
+
+
+missing_strata <- unique(cces$strata)[!(unique(cces$strata) %in% unique(pew$strata))]
+
+
+### Make survey designs
+
+## For Pew, since there are no design weights, assume SRS
+pew_srs <- svydesign(ids = ~1, data = pew)
+cces_awt <- svydesign(ids = ~1, weights = ~commonweight_vv_post, data = cces)
+```
+
+```{r population_targets}
+### Population targets
+targets_rake_demos_noeduc <- create_targets(cces_awt, formula_rake_demos_noeduc)
+targets_rake_demos_weduc <- create_targets(cces_awt, formula_rake_demos_weduc)
+targets_retrospective <- create_targets(cces_awt, formula_retrospective)
+```
+
+```{r do_calibration}
+
+## Raking on demographics, excluding education
+rake_demos_noeduc <- calibrate(design = pew_srs,
+                       formula = formula_rake_demos_noeduc,
+                       population = targets_rake_demos_noeduc,
+                       calfun = "raking")
+
+rake_demos_noeduc <- svydesign(~1, data = pew, weights = weights(rake_demos_noeduc))
+
+## Raking on demographics, including education
+rake_demos_weduc <- calibrate(design = pew_srs,
+                              formula = formula_rake_demos_weduc,
+                              population = targets_rake_demos_weduc,
+                              calfun = "raking")
+
+rake_demos_weduc <- svydesign(~1, data = pew, weights = weights(rake_demos_weduc))
+
+## Post-stratification
+targets_ps <- svytable(formula = ~strata, 
+                       design = subset(cces_awt, !(strata %in% missing_strata)))
+
+post_stratification <- postStratify(design = pew_srs,
+                         strata = ~strata,
+                         population = targets_ps)
+
+post_stratification <- svydesign(~1, data = pew, 
+                                 weights = weights(post_stratification))
+
+## Retrospective weighting scheme
+#failed to converge? XX
+rake_retrospective <- calibrate(design = pew_srs,
+                              formula = formula_retrospective,
+                              population = targets_retrospective,
+                              calfun = "raking",
+                              force = TRUE)
+
+rake_retrospective <- svydesign(~1, data = pew, weights = weights(rake_retrospective))
+```
+
+```{r kpop, cache = T, warning= F }
+
+kpop_data <- rbind(pew %>% select(recode_age,
+                                  recode_female,
+                                  recode_race, 
+                                  recode_region, 
+                                  recode_pid_3way,
+                                  recode_educ, 
+                                  recode_age_bucket),
+                   cces %>% select(recode_age, 
+                                   recode_female, 
+                                   recode_race, 
+                                   recode_region,
+                                   recode_pid_3way, 
+                                   recode_educ,
+                                   recode_age_bucket)) %>%
+   model.matrix(as.formula("~. - 1"), .)
+
+
+kpop_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
+
+
+kpop_mf_b2x <- kbal(allx=kpop_data,
+                      sampled = kpop_sampled,
+                      b = 2 * ncol(kpop_data),
+                      incrementby = 1,
+                      fullSVD = TRUE,
+                      meanfirst = TRUE,
+        population.w = cces$commonweight_vv_post/mean(cces$commonweight_vv_post),
+                      sampledinpop = FALSE,
+                      ebal.convergence = TRUE, 
+                      printprogress = FALSE)
+
+kpop_b.5x <- kbal(allx=kpop_data,
+                    sampled = kpop_sampled,
+                    b = 0.5 * ncol(kpop_data),
+                    fullSVD = TRUE,
+                    meanfirst = FALSE,
+                    incrementby = 1,
+    population.w = cces$commonweight_vv_post /mean(cces$commonweight_vv_post),
+                    sampledinpop = FALSE,
+                    printprogress = TRUE)
+
+```
+ 
+```{r kpop_load, echo = F}
+#kpop <- svydesign(~1, data = pew, weights = kpop_b.5x$w[kpop_sampled] )
+#kpop_mf <- svydesign(~1, data = pew, weights = kpop_mf_b2x$w[kpop_sampled])
+
+load("./cleaned data/Full SVD/weights_wPid_full.Rdata")
+kpop <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_b.5x"])
+kpop_mf <- svydesign(~1, data = pew, weights = wts_wPid[, "wtkbal_mf_b2x"])
+#load("./cleaned data/Full SVD/fullruns_noKsvd.Rdata")
+```
+
+
+
+```{r make_results}
+target_margin <- svycontrast(svymean(~recode_vote_2016, cces_awt, na.rm = TRUE),
+                       vote_contrast)[1]
+
+svymean(~recode_vote_2016, rake_demos_noeduc, deff = TRUE)
+
+comp_df <- data.frame(
+    cces = svycontrast(svymean(~recode_vote_2016, 
+                               cces_awt, na.rm = TRUE),
+                       vote_contrast),
+    unweighted = svycontrast(svymean(~recode_vote_2016, 
+                                     pew_srs, na.rm = TRUE),
+                        vote_contrast),
+    rake_demos_noeduc = svycontrast(svymean(~recode_vote_2016, 
+                                            rake_demos_noeduc, na.rm = TRUE),
+                        vote_contrast),
+    rake_demos_weduc = svycontrast(svymean(~recode_vote_2016, 
+                                           rake_demos_weduc, na.rm = TRUE),
+                        vote_contrast),
+    post_stratification = svycontrast(svymean(~recode_vote_2016, 
+                                              post_stratification, na.rm = TRUE),
+                        vote_contrast),
+    rake_retrospective = svycontrast(svymean(~recode_vote_2016, 
+                                             rake_retrospective, na.rm = TRUE),
+                        vote_contrast),
+    kpop = svycontrast(svymean(~recode_vote_2016, 
+                               kpop, na.rm = TRUE),
+                        vote_contrast),
+    kpop_mf = svycontrast(svymean(~recode_vote_2016, 
+                                  kpop_mf, na.rm = TRUE),
+                        vote_contrast)) %>%
+    pivot_longer(cols = everything(),
+                 names_to = c("source", ".value"), 
+                 names_pattern = "(.*)\\.(.*)") %>%
+    rename(est = nlcon) %>%
+    mutate(est = est * 100,
+           SE = SE * 100,
+           err_target = est - target_margin * 100,
+           source = str_replace(source, "_", " "),
+           source_name = factor(source, labels = c("Target (CCES)", 
+                                              "KPop", 
+                                              "KPop + Mean First",
+                                              "Post-Stratification", 
+                                              "Raking\nDemographics\nwithout Education", 
+                                              "Raking\nDemographics\nwith Education", 
+                                              "Raking\nRetrospective", 
+                                              "Pew\nUnweighted"),
+                           ordered = TRUE))
+
+comp_df
+comp_df_rebucket$est -comp_df$est
+comp_df_rebucket <- comp_df
+```
+
+```{r plot_results, echo = FALSE}
+comp_df %>%
+    ggplot() +
+    aes(x = source_name, y = est, ymin = est - 1.96*SE, ymax = est + 1.96*SE) +
+
+    geom_hline(yintercept = c(0, natl_margin * 100, comp_df$est[comp_df$source == "cces"]),
+               linetype = c("solid", "dashed", "longdash"),
+               color = c("black", "gray60", "black")) +
+    geom_pointrange() +
+    scale_y_continuous(breaks = round(c(natl_margin * 100, seq(-5, 10, 5)), 1),
+                       minor_breaks = NULL,
+                       labels = scales::percent_format(scale = 1, accuracy = 0.1)) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5)) +
+
+    labs(x = NULL, y = "Estimated Margin (95% CI)") +
+    ggtitle("Estimates of Clinton National Popular Vote Margin") +
+    theme(axis.text.x = element_text(angle = 55, hjust = 1)) +
+    annotate(geom = "text", x = 8.65, y = natl_margin * 100, label = " True\n National\n Margin", hjust = 0, angle = -90, color = "gray60", size = 3.5) +
+    annotate(geom = "text", x = 8.55, y = comp_df$est[comp_df$source == "cces"], label = " CCES Estimated\n Margin", hjust = 0, angle = 90, size = 3.5) +
+    theme(legend.title = element_blank()) +
+  scale_x_discrete(limits=comp_df$source_name, expand = expansion(0, 1.2))
+```
+
+```{r save_plot}
+ggsave("./plots/weighted_pew_results.pdf", width = 6, height = 4)
+```
+
+Note from `survey` package:
+
+The design effect compares the variance of a mean or total to the variance from a study of the same size using simple random sampling without replacement. Note that the design effect will be incorrect if the weights have been rescaled so that they are not reciprocals of sampling probabilities. To obtain an estimate of the design effect comparing to simple random sampling with replacement, which does not have this requirement, use `deff="replace"`. This with-replacement design effect is the square of Kish's "deft".
+
+```{r design_effect}
+lapply(list(rake_demos_noeduc, rake_demos_weduc, post_stratification, rake_retrospective, kpop, kpop_mf), 
+       function(x) {
+         svymean(~recode_vote_2016, x, deff = "replace")
+       })
+```
+
+
+
+
+## Weights
+
+Looking at the average weight in margins.
+
+
+```{r check_weights}
+
+load("cleaned data/Full SVD/weights_wPid_full.Rdata")
+#optimal choice w pid: no mf = 0.5, mf = 2
+weights <- pew %>% select(recode_age_bucket,
+                          recode_age_3way,
+                          recode_female,
+                          recode_race,
+                          recode_region,
+                          recode_educ,
+                          recode_educ_3way,
+                          recode_pid_3way,
+                          recode_race_educ_reg)  %>%
+    mutate(rake_demos_noeduc_wt = weights(rake_demos_noeduc)/
+                                 mean(weights(rake_demos_noeduc)),
+           rake_demos_weduc_wt = weights(rake_demos_weduc)/
+                                 mean(weights(rake_demos_weduc)),
+           post_stratification_wt = weights(post_stratification)/
+                                 mean(weights(post_stratification)),
+           rake_retrospective_wt = weights(rake_retrospective)/
+                                 mean(weights(rake_retrospective)),
+           k_wt = wts_wPid$wtkbal_b.5x,
+           k_mf_wt = wts_wPid$wtkbal_mf_b2x)
+
+#just checking everything is internally consistent
+#sum(weights$rake_demos_noeduc_wt != wts_wPid$wt1_pid)
+
+age <- weights %>% 
+    group_by(recode_age_bucket) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+female <- weights %>% 
+    group_by(recode_female) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+race <- weights %>% 
+    group_by(recode_race) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+region <- weights %>% 
+    group_by(recode_region) %>%
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+education <- weights %>% 
+    group_by(recode_educ) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+pid <- weights %>% 
+    group_by(recode_pid_3way) %>% 
+    summarise(mu_1 = mean(rake_demos_noeduc_wt),
+              mu_2 = mean(rake_demos_weduc_wt),
+              mu_3 = mean(post_stratification_wt),
+              mu_4 = mean(rake_retrospective_wt),
+              mu_kpop = mean(k_wt),
+              mu_kpop_mf = mean(k_mf_wt)) %>% ungroup()
+
+
+colnames(age) <- c("Variable", colnames(age)[-1])
+colnames(female)<- c("Variable", colnames(female)[-1])
+colnames(race)<- c("Variable", colnames(race)[-1])
+colnames(region) <- c("Variable", colnames(region)[-1])
+colnames(education) <- c("Variable", colnames(education)[-1])
+colnames(pid) <- c("Variable", colnames(pid)[-1])
+
+weights_summary <- rbind(age, female, race, region, education, pid) 
+
+```
+
+
+
+```{r weights_print, echo = F, results = "asis"}
+
+weights_summary %>% 
+  mutate(Variable = str_replace(Variable, "graduate", "")) %>%
+  kable(format = "latex", booktabs = T,
+        col.names = linebreak(
+          c("", 
+            "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics without Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking \\\\Demographics with Education }}}}",
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Post-Stratification}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{Raking Retrospective}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop}}}}", 
+          "\\belowbaseline[0ex]{\\rotatebox{90}{\\parbox{1.1in}{\\raggedright{KPop Mean First}}}}")), 
+        escape = FALSE,  digits= 3,
+        caption = "Mean weights of important demographics under different weighting models .") %>%
+  column_spec(2:ncol(weights_summary), width = "0.45in") %>%
+  column_spec(1, width = "1.45in") %>%
+  kable_styling() %>%
+  pack_rows("4-way Age Bucket", 1, 4, latex_gap_space = "0.5em") %>%
+  pack_rows("Gender", 5, 6, latex_gap_space = "0.5em") %>%
+  pack_rows("Race/Ethnicity", 7, 10, latex_gap_space = "0.5em") %>%
+  pack_rows("Region", 11, 14, latex_gap_space = "0.5em") %>%
+  pack_rows("Education Level", 15, 20, latex_gap_space = "0.5em") %>%
+  pack_rows("Party Identification", 21, 23, latex_gap_space = "0.5em")%>%
+  footnote(general = "Cells present the average weight used to reweight the Pew sample to the CCES target population in each variable level.",
+           threeparttable = T)
+
+
+```
+
+
+

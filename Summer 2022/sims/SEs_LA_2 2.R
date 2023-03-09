@@ -1,5 +1,4 @@
 ##################### functiions
-library(tidyverse)
 coverage <- function(SE, x_bar, truth, crit_val= qnorm(0.975)) {
     x_upper = x_bar +  (SE*crit_val)
     x_lower = x_bar - (SE*crit_val)
@@ -151,7 +150,7 @@ empirical_SEs <- function(sims, eval_kpop = T, return_svy_package = F, na_rm = F
 ##############################################################################################################################
 ### Lambda 1se + auto choice of  lamdbas r^2
 
-r5_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2023 Data/noscale_kpopTRUE_noise1_on2023-02-15_nsims494.RData"
+r5_file = "~/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Summer 2022/sims/noscale_kpopTRUE_noise1_on2023-02-15_nsims494.RData"
 load(r5_file)
 good = which(lapply(sims, function (x) return(class(x))) == "list")
 #1. look at SEs:
@@ -222,19 +221,24 @@ big_SE = which(kpop_all_SE$kpop_mf_SE_chad %in% kpop_mf_chad[370:494])
 
 #start by looking at the sample for those
 b_SE = sims[big_SE]
+b_SE
 s_SE = sims[-big_SE]
 length(s_SE)
 length(b_SE)
+# ps_dropped <- lapply(b_SE, `[[`, 4)
+# dropped_cells = lapply(ps_dropped, `[[`, 1) %>% bind_rows()
+# dropped_cells_reduc = lapply(ps_dropped, `[[`, 2)  %>% bind_rows()
+# dropped_cells_all = lapply(ps_dropped, `[[`, 3) %>% bind_rows()
+# mean(dropped_cells$sum)
 
 samp_check <- lapply(b_SE, `[[`, 5)
 samp_check = samp_check %>% bind_rows()
 sum(samp_check$bad_sample)
-samp_check
+
 
 s_samp_check <- lapply(s_SE, `[[`, 5)
 s_samp_check= s_samp_check %>% bind_rows()
 sum(s_samp_check$bad_sample)
-s_samp_check
 
 # <= 5%
 mean(samp_check$check.leq_5pp)
@@ -242,18 +246,8 @@ mean(s_samp_check$check.leq_5pp)
 
 summary(samp_check$check.leq_5pp)
 summary(s_samp_check$check.leq_5pp)
+
 #verrrrrry slightly worse samples but not remarkably
-
-
-#what about by category, well shit i did not print that out
-
-
-#could also check numdims
-
-
-
-
-
 
 
 #3. look at var(w) and max and min weights 
@@ -263,41 +257,33 @@ s_weights = weights[-big_SE]
 
 
 #mean summary stats
-t = lapply(b_weights, function(x) data.frame(apply(x, 2, summary)))
-t = t %>% bind_rows()
-nrow(t)
-min = colMeans(t[grepl("Min", rownames(t)),])
-max = colMeans(t[grepl("Max", rownames(t)),])
-mean = colMeans(t[grepl("Mean", rownames(t)),])
-perc_25 = colMeans(t[grepl("1st", rownames(t)),])
-perc_75 = colMeans(t[grepl("3rd", rownames(t)),])    
-avg_w = rbind(min = min, perc_25 = perc_25, mean = mean, perc_75 = perc_75, max = max)
-avg_w
+b_weights = b_weights[1:3]
+t = lapply(b_weights, function(x) apply(x, 2, summary))
+t= set_names(t,"iter")
+lapply(t, `[[`, 2) %>% bind_rows()
+t = set_names(t, paste0("iter_", big_SE[1:3]))
+nrow(t %>% bind_rows())
 
-t = lapply(s_weights, function(x) data.frame(apply(x, 2, summary)))
-t = t %>% bind_rows()
-nrow(t)
-min = colMeans(t[grepl("Min", rownames(t)),])
-max = colMeans(t[grepl("Max", rownames(t)),])
-mean = colMeans(t[grepl("Mean", rownames(t)),])
-perc_25 = colMeans(t[grepl("1st", rownames(t)),])
-perc_75 = colMeans(t[grepl("3rd", rownames(t)),])    
-avg_w_s = rbind(min = min, perc_25 = perc_25, mean = mean, perc_75 = perc_75, max = max)
+map(1:length(b_weights), function(i) {
+    t[[i]]
+})
 
-#so yes the weights are bigger in the big Ses but not wildly so?
-t(avg_w)
-t(avg_w_s)
-#bigger max, smaller min, smaller 25% and 75% 
-#interesting that the larger weights have a larger 75%, though its in the hundreths so its fairly similar
-t(avg_w) - t(avg_w_s)
-#rounding helps: so min and 25% are slightly lower, but notable that max is in the tenths here
-round(t(avg_w) - t(avg_w_s),3)
 
-#lol ok but like we probably just want sd?? lol, indeed look slike sd of weights is bigger for big SEs
-t = lapply(b_weights, function(x) apply(x, 2, sd)) %>% bind_rows()
-s = lapply(s_weights, function(x) apply(x, 2, sd)) %>% bind_rows()
-rbind(colMeans(s), colMeans(t))
-#so yes the big SEs have weights that are in general bigger: by an avg of + below sds
-colMeans(t)-  colMeans(s)
+y <- map(1:2, ~ c(a=.x)) %>%
+    set_names(c("a", "b"))
+bind_rows(y)
 
-# as you'd expdct the weights are bigger, the variance of the weights are bigger... but the samples don't look as insane? maybe i didn't look closely enough there andshoudl go back and check taht again ?d 
+t %>% bind_rows()
+
+lapply(t, `[`, 1)
+lapply(t, `[[`,1)
+t %>% bind_rows()
+b_weights[1:3] %>% bind_rows()
+t[[1]]
+t[[1]]$b
+t[1]$b
+colnames(t[[1]])
+t[[1]][,2]
+
+bind_rows(t)
+bind_cols(t)

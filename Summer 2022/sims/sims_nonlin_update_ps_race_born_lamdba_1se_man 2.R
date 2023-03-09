@@ -12,6 +12,7 @@ library(tictoc)
 ###### SET PARAMS  ###############
 set.seed(9345876)
 
+
 if(detectCores() > 10) {
   path_data = "/home/csterbenz/Data/"
   cores_saved = 10
@@ -23,46 +24,26 @@ if(detectCores() > 10) {
     cores_saved = 2
 }
 options(dplyr.print_max = 1e9)
-#fit kpop and others to cces with populations weights?
 POPW = FALSE
-# to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
-TEST = FALSE 
-#ebal tolerance and max iterations for kpop
+bern = FALSE
+coverage_eval = TRUE
+linear_model = FALSE
+noise = 1
+TEST = FALSE # to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
 tolerance = 1e-4
 maxit = 500
-#adjust these both for runtime
+#both for runtime
 increment = 5
 min_num_dims = NULL
 max_num_dims = NULL
-SAVE = TRUE #save .Rdata results?
-#Need to adjust accordingly to machine for adequate number of sims
+SAVE = TRUE
+manual_lambda = TRUE
+lambda_min = FALSE
+##### Central Params to adjust
+n_sample = 500
+simple_selection_model = TRUE
 nsims = (detectCores()-cores_saved)*13
 nsims
-
-##### Central Params to adjust
-#T=selection and outcome model are identical and directly specified w OLS with noise added after the fact;F= legacy; selection model is specified and regularized w/ lasso; outcome is previously run lasso model of cces three way vote choice fitted values = p(D) - p(R) 
-coverage_eval = TRUE 
-#if coverage_eval=T: use linear or nonlinear model  
-linear_model = FALSE 
-#if coverage_eval=T: add bernoulli noise by drawing binary from p(S=1)?
-bern = FALSE 
-#if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
-noise = 1 
-#if coverage_eval= T: adjusts sample size by dividing p(S) by scalar pS_denom (i.e. pS = plogis(XBeta)/pS_denom)
-pS_denom = 60
-#use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
-manual_lambda = FALSE 
-#T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
-lambda_min = FALSE 
-
-
-
-#if coverage_eval=F: Legacy arg for coverage_eval = F that adj sample size as p(S)*(n_sample/sum(p(S)) + intercept_shift
-n_sample = 500 
-#if coverage_eval=F: Legacy arg for coverage_eval = F that flips selection model
-simple_selection_model = TRUE 
-
-
 ###################### Formulas ################
 formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + recode_race +
   recode_region + recode_pid_3way
@@ -154,14 +135,13 @@ check_sample <- function(sample, selection_model) {
                 counts = check))
 }
 
-check_sample_outcome <- function(sample, selection_model, interaction_cols, interaction_cols_2 = NULL) {
+check_sample_outcome <- function(sample, selection_model, interaction_cols) {
     
     vars = all.vars(selection_model)
     var = NULL
     counts = NULL
     prop = NULL
     u_outcome = NULL
-    #uninteracted variables
     for(i in 1:length(vars)) {
         t = sample %>% group_by_at(vars[i]) %>%
             summarise(n = n(), 
@@ -172,7 +152,6 @@ check_sample_outcome <- function(sample, selection_model, interaction_cols, inte
         prop = c(prop,  t$prop)
         u_outcome = c(u_outcome, t$avg_outcome)
     }
-    #interactions
     t = suppressMessages(sample %>% group_by_at(interaction_cols) %>% 
         summarise(n = n(),
                   avg_outcome = mean(outcome)) %>%
@@ -182,34 +161,21 @@ check_sample_outcome <- function(sample, selection_model, interaction_cols, inte
                n = c(counts, t$n), 
                prop = c(prop, t$prop),
                avg_outcome = c(u_outcome, t$avg_outcome))
-    
-    if(!is.null(interaction_cols_2)) {
-        t2 = suppressMessages(sample %>% group_by_at(interaction_cols_2) %>% 
-                                 summarise(n = n(),
-                                           avg_outcome = mean(outcome)) %>%
-                                 mutate(prop = round(n/nrow(sample), 4)))
-        interaction = apply(t2, 1,  function(r) paste(r[1],r[2], collapse = "_"))
-        append = cbind(data.frame(var = interaction), t2[, - c(1,2)])
-        counts = rbind(counts, append)
-    }
-    
     fail = sum(counts$n == 0)
     bad = sum(counts$prop <= 0.05)
-    bad_strata = data.frame(strata = as.character(counts$var[counts$prop <= 0.05]), prop = counts$prop[counts$prop <= 0.05])
+    bad_strata = counts$var[counts$prop <= 0.05]
     v_bad = sum(counts$prop <= 0.01)
-    v_bad_strata = data.frame(strata = as.character(counts$var[counts$prop <= 0.01]), prop = counts$prop[counts$prop <= 0.01])
-    counts$var[counts$prop <= 0.01]
+    v_bad_strata = counts$var[counts$prop <= 0.01]
     
     counts = counts %>% mutate(leq_5pp = as.numeric(prop <= 0.05),
                                leq_1pp = as.numeric(prop <= 0.01))
     
-   
     return(list(counts = counts,
                 fail = fail, 
                 bad = bad, 
                 v_bad = v_bad, 
-                bad_strata = bad_strata,
-                v_bad_strata = v_bad_strata))
+                bad_strata = as.character(bad_strata),
+                v_bad_strata = as.character(v_bad_strata)))
 }
 
 check_outcome <- function(outcome) {
@@ -266,8 +232,8 @@ if(!coverage_eval) {
 
     if(simple_selection_model) {
         #first attempt to make this worse
-        # selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) +
-        #                                  recode_female:recode_pid_3way)
+        selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) +
+                                         recode_female:recode_pid_3way)
         #first attempt to make this worse
         #center age then square
         pew = pew %>% mutate(centered_age = scale(recode_age, scale = F))
@@ -772,11 +738,8 @@ system.time({
     ########################### check sample ##########################
     check_s = check_sample(survey_sim, selection_model)
     bad_sample = check_s$fail_bin
-    check_2 = check_sample_outcome(survey_sim, selection_model, interaction_cols = inter, interaction_cols_2 = inter_2)
-    
-    check_nums = c(leq_5pp = check_2$bad,
-                   leq_1pp = check_2$v_bad, 
-                   fail = check_2$fail)
+    check_2 = check_sample_outcome(survey_sim, selection_model, interaction_cols = inter)
+    check_nums = c(leq_5pp = check_2$bad, leq_1pp = check_2$v_bad, fail = check_2$fail)
     s = survey_sim %>% group_by(recode_pid_3way,recode_female, recode_age_bucket,
                                 recode_educ_3way) %>% count() %>%
         mutate(n_s = round(n/nrow(survey_sim), 3))
@@ -816,13 +779,6 @@ system.time({
     } else {
         residuals = residuals(lm(update(formula_rake_demos_noeduc, outcome ~ .), 
                                  data = rake_demos_noeduc_svyd$variables))
-
-        res_rake_demos_noeduc = data.frame(min = min(residuals), 
-                                           perc_25 = quantile(residuals, .25), 
-                                           mean = mean(residuals),
-                                           perc_75 = quantile(residuals, .75),
-                                           var = var(residuals))
-
         rake_demos_noeduc_se <- calc_SEs(Y = rake_demos_noeduc_svyd$variables$outcome, 
                                          residuals = residuals, 
                                          pop_size = nrow(cces), 
@@ -858,11 +814,6 @@ system.time({
     } else {
         residuals = residuals(lm(update(formula_rake_demos_weduc, outcome ~ .), 
                                  data = rake_demos_weduc_svyd$variables))
-        res_rake_demos_wedu = data.frame(min = min(residuals), 
-                                         perc_25 = quantile(residuals, .25), 
-                                         mean = mean(residuals),
-                                         perc_75 = quantile(residuals, .75),
-                                         var = var(residuals))
         rake_demos_weduc_se <- calc_SEs(Y = rake_demos_weduc_svyd$variables$outcome, 
                                         residuals = residuals, 
                                         pop_size = nrow(cces),
@@ -893,11 +844,6 @@ system.time({
     } else {
         residuals = residuals(lm(update(formula_rake_all_vars, outcome ~ .), 
                                  data = rake_all_svyd$variables))
-        res_rake_all = data.frame(min = min(residuals), 
-                                  perc_25 = quantile(residuals, .25), 
-                                  mean = mean(residuals),
-                                  perc_75 = quantile(residuals, .75),
-                                  var = var(residuals))
         rake_all_se <- calc_SEs(Y = rake_all_svyd$variables$outcome, 
                                 residuals = residuals, 
                                 pop_size = nrow(cces), 
@@ -919,8 +865,8 @@ system.time({
         "% cces original strata missing from sample, ",
         " and", cces %>% filter(strata %in% missing_strata) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
     dropped_cells = cces %>% filter(strata %in% missing_strata) %>% group_by(strata) %>% count()
-    #dropped_cells = data.frame(sum = sum(dropped_cells$n), strata = paste(dropped_cells$strata, collapse = " | "))
-    dropped_cells = sum(dropped_cells$n)
+    dropped_cells = data.frame(sum = sum(dropped_cells$n), strata = paste(dropped_cells$strata, collapse = " | "))
+    
     missing_strata_reduc <- unique(cces$strata_reduc)[!(unique(cces$strata_reduc) %in%
                                                             unique(survey_sim$strata_reduc))]
     cat(round(length(missing_strata_reduc)/ length( unique(cces$strata_reduc)),3),
@@ -928,8 +874,7 @@ system.time({
         " and", cces %>% filter(strata_reduc %in% missing_strata_reduc) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n" )
     dropped_cells_reduc = cces %>% 
         filter(strata_reduc %in% missing_strata_reduc) %>% group_by(strata) %>% count()
-    dropped_cells_reduc = sum(dropped_cells_reduc$n)
-    #dropped_cells_reduc = data.frame(sum = sum(dropped_cells_reduc$n), strata = paste(dropped_cells_reduc$strata, collapse = " | "))
+    dropped_cells_reduc = data.frame(sum = sum(dropped_cells_reduc$n), strata = paste(dropped_cells_reduc$strata, collapse = " | "))
 
     missing_strata_all <- unique(cces$strata_all)[!(unique(cces$strata_all) %in%
                                                         unique(survey_sim$strata_all))]
@@ -937,9 +882,8 @@ system.time({
         "% cces all strata missing from sample, ",
         "and", cces %>% filter(strata_all %in% missing_strata_all) %>% summarise(n()) %>% pull(), "/", nrow(cces), "units\n")
     dropped_cells_all = cces %>% 
-        filter(strata_all %in% missing_strata_all) %>% group_by(strata) %>% count() 
-    dropped_cells_all = sum(dropped_cells_all$n)
-    #dropped_cells_all = data.frame(sum = sum(dropped_cells_all$n), strata = paste(dropped_cells_all$strata, collapse = " | "))
+        filter(strata_all %in% missing_strata_all) %>% group_by(strata) %>% count()
+    dropped_cells_all = data.frame(sum = sum(dropped_cells_all$n), strata = paste(dropped_cells_all$strata, collapse = " | "))
 
     #note that we no longer have the issue of pew having strata that cces doesn bc
     #we use survey_sim a sample of cces so it will never have diff strata
@@ -1020,11 +964,6 @@ system.time({
         fit <- cv_fit$glmnet.fit
         
         residuals = rake_truth_svyd$variables$outcome - predict(fit, s = opt_lambda, newx = x)
-        res_rake_truth = data.frame(min = min(residuals), 
-                                    perc_25 = quantile(residuals, .25), 
-                                    mean = mean(residuals),
-                                    perc_75 = quantile(residuals, .75),
-                                    var = var(residuals))
     }
     
     rake_truth <- tryCatch(est_mean("outcome", rake_truth_svyd), 
@@ -1193,17 +1132,11 @@ system.time({
         
         residuals = kpop_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
                                                           s = lambda_pass, newx = x)
-        res_kpop = data.frame(min = min(residuals), 
-                              perc_25 = quantile(residuals, .25), 
-                              mean = mean(residuals),
-                              perc_75 = quantile(residuals, .75),
-                              var = var(residuals))
         kpop_se <- tryCatch(calc_SEs(Y = kpop_svyd$variables$outcome,
                                      residuals = residuals,
                                      pop_size = nrow(cces),
                                      sample_size = sum(sample),
-                                     weights = weights(kpop_svyd)), error = function(e) NA)
-        
+                                     weights = weights(kpop_svyd)), error = function(e) NA)=
         if(length(kpop_se) == 1) {
             kpop_se <- data.frame(SE_fixed = NA, 
                                   SE_quasi = NA, 
@@ -1220,7 +1153,7 @@ system.time({
         #                              residuals = residuals_krls,
         #                              pop_size = nrow(cces),
         #                              sample_size = sum(sample),
-        #                              weights = weights(kpop_svyd)), error = function(e) NA)
+        #                              weights = weights(kpop_svyd)), error = function(e) NA)=
         # if(length(kpop_krls_se) == 1) {
         #     kpop_krls_se <- data.frame(SE_fixed = NA, 
         #                              SE_quasi = NA, 
@@ -1283,11 +1216,6 @@ system.time({
           residuals = kpop_svyd_conv$variables$outcome - predict(cv_fit$glmnet.fit, 
                                                                  s = lambda_pass, 
                                                                            newx = x)
-          res_kpop_conv = data.frame(min = min(residuals), 
-                                     perc_25 = quantile(residuals, .25), 
-                                     mean = mean(residuals),
-                                     perc_75 = quantile(residuals, .75),
-                                     var = var(residuals))
           kpop_conv_se <- tryCatch(calc_SEs(Y = kpop_svyd_conv$variables$outcome,
                                        residuals = residuals,
                                        pop_size = nrow(cces),
@@ -1359,11 +1287,8 @@ system.time({
             residuals = kpop_mf_svyd$variables$outcome - predict(cv_fit$glmnet.fit, 
                                                                  s = lambda_pass, 
                                                                  newx = X)
-            res_kpop_mf = data.frame(min = min(residuals), 
-                                     perc_25 = quantile(residuals, .25), 
-                                     mean = mean(residuals),
-                                     perc_75 = quantile(residuals, .75),
-                                     var = var(residuals))
+            summary(residuals)
+            
             
             kpop_mf_se <- tryCatch(calc_SEs(Y = kpop_mf_svyd$variables$outcome,
                                               residuals = residuals,
@@ -1447,11 +1372,6 @@ system.time({
             residuals =  kpop_demos_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
                                                                      s = lambda_pass, 
                                                                  newx = X)
-            res_kpop_demos = data.frame(min = min(residuals), 
-                                        perc_25 = quantile(residuals, .25), 
-                                        mean = mean(residuals),
-                                        perc_75 = quantile(residuals, .75),
-                                        var = var(residuals))
             
             kpop_demos_se <- tryCatch(calc_SEs(Y = kpop_demos_svyd$variables$outcome,
                                                residuals = residuals,
@@ -1515,11 +1435,7 @@ system.time({
             residuals =  kpop_demos_wedu_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
                                                                           s = lambda_pass, 
                                                                      newx = X)
-            res_kpop_demos_wedu = data.frame(min = min(residuals), 
-                                             perc_25 = quantile(residuals, .25), 
-                                             mean = mean(residuals),
-                                             perc_75 = quantile(residuals, .75),
-                                             var = var(residuals))
+            
             kpop_demos_wedu_se <- tryCatch(calc_SEs(Y = kpop_demos_wedu_svyd$variables$outcome,
                                                residuals = residuals,
                                                pop_size = nrow(cces),
@@ -1583,11 +1499,7 @@ system.time({
             residuals =  kpop_all_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
                                                                    s = lambda_pass, 
                                                                           newx = X)
-            res_kpop_all = data.frame(min = min(residuals), 
-                                      perc_25 = quantile(residuals, .25), 
-                                      mean = mean(residuals),
-                                      perc_75 = quantile(residuals, .75),
-                                      var = var(residuals))
+            
             kpop_all_se <- tryCatch(calc_SEs(Y = kpop_all_svyd$variables$outcome,
                                                     residuals = residuals,
                                                     pop_size = nrow(cces),
@@ -1646,11 +1558,7 @@ system.time({
         lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
         residuals = kpop_svyd_reduc$variables$outcome - predict(cv_fit$glmnet.fit, 
                                                                 s = lambda_pass, newx = x)
-        res_kpop_reduc = data.frame(min = min(residuals), 
-                                    perc_25 = quantile(residuals, .25), 
-                                    mean = mean(residuals),
-                                    perc_75 = quantile(residuals, .75),
-                                    var = var(residuals))
+        
         kpop_reduc_se <- tryCatch(calc_SEs(Y = kpop_svyd_reduc$variables$outcome,
                                            residuals = residuals,
                                            pop_size = nrow(cces),
@@ -1749,21 +1657,6 @@ system.time({
                            kpop_demos_wedu_w = weights(kpop_demos_wedu_svyd),
                            kpop_all_w = weights(kpop_all_svyd))
         
-        #residuals
-        out$residuals = rbind(b = b_out,
-                           kpop_res = res_kpop,
-                           kpop_w_reduc = res_kpop_reduc,
-                           kpop_w_conv = res_kpop_conv,
-                           kpop_mf_w = res_kpop_mf,
-                           kpop_demos_w = res_kpop_demos,
-                           kpop_demos_wedu_w = res_kpop_demos_wedu,
-                           kpop_all_w = res_kpop_all,
-                           rake_truth = res_rake_truth,
-                           rake_demos = res_rake_demos_noeduc,
-                           rake_demos_wedu = res_rake_demos_wedu ,
-                           rake_all = res_rake_all
-                          )
-        
         ######## Kpop Margins ########
         
         out$km <- round(cbind(b = b_out/100,
@@ -1803,16 +1696,14 @@ system.time({
       
       out$SEs = lapply(kpop, `[[`,2) %>% bind_rows()
       out$weights = lapply(kpop, `[[`,3) %>% bind_cols()
-      out$residuals = lapply(kpop, `[[`,4) %>% bind_rows()
-      out$dropped_cells = c(dropped_cells = dropped_cells,
-                            dropped_cells_reduc = dropped_cells_reduc,
-                            dropped_cells_all = dropped_cells_all)
+      
+      out$dropped_cells = list(dropped_cells = dropped_cells,
+                               dropped_cells_reduc = dropped_cells_reduc, 
+                               dropped_cells_all = dropped_cells_all)
       
       out$sample = c(drop_ps = count, 
                      bad_sample = bad_sample, 
-                     #chaningn temporarily to the fuller view from check_nums
                      check = check_nums)
-      out$samp_counts = check_2$counts
       
       margin <- round(cbind(sample = svymean(margins_formula, survey_design),
                             cces =  svymean(margins_formula, cces_svy),
@@ -1837,7 +1728,7 @@ system.time({
       
       
       margin = cbind(margin,
-                     as.data.frame(sapply(kpop, `[`, 5)))
+                     as.data.frame(sapply(kpop, `[`, 4)))
       
       margin <- margin[,grepl("km.kpop", colnames(margin))|
                          !grepl("km.", colnames(margin)) ]
@@ -1875,6 +1766,8 @@ system.time({
     } else {
         margin = NULL
     }
+      
+      
       out$sims = data.frame(nsim, n,
                             unweighted,
                             rake_demos_noeduc,
@@ -1894,24 +1787,14 @@ system.time({
                            post_strat_reduc_se,
                            post_strat_all_se,
                            rake_truth_se)
-      out$residuals = rbind(b = b_out,
-                            rake_truth = res_rake_truth,
-                            rake_demos = res_rake_demos_noeduc,
-                            rake_demos_wedu = res_rake_demos_wedu ,
-                            rake_all = res_rake_all
-      )
       
-      out$dropped_cells = c(dropped_cells = dropped_cells ,
-                            dropped_cells_reduc = dropped_cells_reduc, 
-                            dropped_cells_all= dropped_cells_all)
+      out$dropped_cells = list(dropped_cells = dropped_cells,
+                               dropped_cells_reduc = dropped_cells_reduc, 
+                               dropped_cells_all = dropped_cells_all)
       
       out$sample = c(drop_ps = count, 
                      bad_sample = bad_sample, 
-                     #chaningn temporarily to the fuller view from check_nums
                      check = check_nums)
-      out$samp_counts = check_2$counts
-      
-     
       
       if(coverage_eval) {
           out$SEs = data.frame(rake_demos_noeduc_se,
@@ -1937,10 +1820,11 @@ good = which(lapply(sims, function (x) return(class(x))) == "list")
 length(good)
 
 #sims[-good]
+
 if(SAVE) {
     save(sims, outcome, tolerance, maxit, increment, min_num_dims, noise,R2_outcome,eval_kpop,
-         coefs, coefs_outcome, selection_model, p_include, pS_denom, manual_lambda, lambda_min,
-         file = paste0("./res_kpop", eval_kpop, "lambdamin", lambda_min, "man", manual_lambda,
+         coefs, coefs_outcome, selection_model, p_include, pS_denom,
+         file = paste0("./noscale_kpop", eval_kpop,
                        "_noise", noise, "_on",
                        Sys.Date(),
                        "_nsims", length(good),
@@ -1951,12 +1835,10 @@ sims = sims[good]
 #combines all weights across rows but can group by b to get them per iteration
 if(eval_kpop) { 
     weights <- lapply(sims, `[[`, 3) %>% bind_rows() 
-    residuals <- lapply(sims, `[[`, 4) %>% bind_rows()
-    
-    margins <- lapply(sims, `[[`, 8) 
+    margins <- lapply(sims, `[[`, 4) 
 } else { 
     weights = NULL
-    if(!coverage_eval) {margins = lapply(sims, `[[`, 6) }
+    if(!coverage_eval) {margins = lapply(sims, `[[`, 3) }
 }
 
 ##################### eval coverage ####################
@@ -2073,6 +1955,9 @@ bias = bias - mean(cces$outcome)
 bias = data.frame(bias = t(t(bias))*100)
 bias = bias %>% arrange(desc(abs(bias)))
 round(bias,3)
+round(bias15.5,3)
+#bias15.5 = bias
+round(bias1, 3)
 # kable(round(bias, 3), format = "latex", booktabs = T, 
 #       caption = paste0("Bias \\textbf{in Percent} across ", length(good), " sims: All Methods (Target = ", round(mean(outcome),3)*100, ")"))
 
@@ -2121,19 +2006,20 @@ emp_SE
 
 ########## Dropped Cells
 if(eval_kpop) {
-    ps_dropped <- lapply(sims, `[[`, 5) %>% bind_rows()
-    samp_check <- lapply(sims, `[[`, 6) %>% bind_rows()
-    counts <- lapply(sims, `[[`, 7) %>% bind_rows()
+    ps_dropped <- lapply(sims, `[[`, 4)
+    samp_check <- lapply(sims, `[[`, 5)
 } else {
-    #may nto be accruate after adding in residuals and count, mess w the index to find the correct one
     ps_dropped <- lapply(sims, `[[`, 3)
     samp_check <- lapply(sims, `[[`, 4)
 }
-colMeans(ps_dropped)
+dropped_cells = lapply(ps_dropped, `[[`, 1) %>% bind_rows()
+dropped_cells_reduc = lapply(ps_dropped, `[[`, 2)  %>% bind_rows()
+dropped_cells_all = lapply(ps_dropped, `[[`, 3) %>% bind_rows()
+mean(dropped_cells$sum)
 
 
 ############# check sample
-
+samp_check = samp_check %>% bind_rows()
 #samp_check
 sum(samp_check$bad_sample)
 sum(samp_check$check.fail)
@@ -2141,8 +2027,7 @@ sum(samp_check$check.fail)
 mean(samp_check$check.leq_5pp)
 #on average sample has 3/24 cats important in the selection model that have <1% units in it
 mean(samp_check$check.leq_1pp)
-counts %>% filter(leq_5pp ==1) %>% group_by(var) %>% summarise(n = n(),
-                                                               avg_prop = mean(prop))
+
 ########## RES ################
 est <- lapply(sims, `[[`, 1) %>% bind_rows()
 plot = est
@@ -2265,7 +2150,7 @@ if(eval_kpop) {
 #target:
 #margin_sim = svymean(~outcome, cces_svy)[1]* 100
 #### Box Plot
-#options(dplyr.print_max = 1e9)
+options(dplyr.print_max = 1e9)
 gg_out = ggplot(data = plot_lasso_margin,
                 aes(x = estimator_name, y = margin)) +
     geom_boxplot(alpha = 0.2) +
@@ -2296,12 +2181,12 @@ table = plot_lasso_margin %>%
 table
 
 if(SAVE) {
-    save(sims, outcome, SE_coverage, bias, table, plot_lasso_margin, noise,eval_kpop,emp_SE,
-         tolerance, maxit, increment, min_num_dims,
-         coefs, coefs_outcome, selection_model, p_include, pS_denom, manual_lambda, lambda_min,
-         file = paste0("./res_kpop", eval_kpop, "lambdamin", lambda_min, "man", manual_lambda, 
-                       "_noise", noise, "_on",
-                       Sys.Date(), 
-                       "_nsims", length(good),
-                       ".RData"))
+  save(sims, outcome, SE_coverage, bias, table, plot_lasso_margin, noise,eval_kpop,emp_SE,
+       tolerance, maxit, increment, min_num_dims,
+       coefs, coefs_outcome, selection_model, p_include, pS_denom,
+       file = paste0("./noscale_res_kpop", eval_kpop,
+                     "_noise", noise, "_on",
+                     Sys.Date(), 
+                     "_nsims", length(good),
+                     ".RData"))
 }

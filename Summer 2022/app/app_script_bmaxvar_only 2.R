@@ -5,6 +5,7 @@ library(survey)
 library(parallel)
 #devtools::install_github("csterbenz1/KBAL", ref = "cat_kernel") 
 library(kbal)
+library(glmnet)
 
 if(detectCores() > 10) {
   path_data= "/home/csterbenz/Data/"
@@ -40,7 +41,7 @@ if(TEST) {
 }
 
 
-kbal_data <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
+kbal_data_old <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
                                              recode_female,
                                              recode_race,
                                              recode_region,
@@ -61,10 +62,10 @@ kbal_data <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
                                                         recode_relig_6way,
                                                         recode_born,
                                                         recode_attndch_4way)) 
-kbal_data <- data.frame(lapply(kbal_data, as.factor))
-kbal_data <- model.matrix(~ ., kbal_data,
-                          contrasts.arg = lapply(kbal_data[,], contrasts, contrasts=FALSE))
-kbal_data <- kbal_data[, -1]
+kbal_data_old <- data.frame(lapply(kbal_data_old, as.factor))
+kbal_data_old <- model.matrix(~ ., kbal_data_old,
+                          contrasts.arg = lapply(kbal_data_old[,], contrasts, contrasts=FALSE))
+kbal_data_old <- kbal_data_old[, -1]
 #colnames(kbal_data)
 #nrow(kbal_data)
 

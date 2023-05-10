@@ -1192,6 +1192,7 @@ system.time({
         
         residuals = kpop_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
                                                           s = lambda_pass, newx = x)
+        
         res_kpop = data.frame(min = min(residuals), 
                               perc_25 = quantile(residuals, .25), 
                               mean = mean(residuals),
@@ -1211,19 +1212,49 @@ system.time({
         }
         names(kpop_se) = tryCatch(paste0("kpop_", names(kpop_se)), error = function(e) NA)
         
-        
+        # eigen_pass = kbal_est$svdK$d[kbal_est$numdims]^2/kbal_est$svdK$d[1]^2
+        # 
         # krls_kpop = KRLS::krls(X = kbal_est$onehot_data[kbal_data_sampled==1,],
-        #                        y = kpop_svyd$variables$outcome)
+        #                        y = kpop_svyd$variables$outcome,
+        #                        sigma = 2*kbal_est$b,
+        #                        eigtrunc =  eigen_pass)
+        # 
+        # 
+        # dat = kbal_est$onehot_data[kbal_data_sampled==1,]
+        # k_test = makeK(sqrt(0.5)*dat, b = kbal_est$b, scale = F)
+        # k_test = makeK(dat, b = 2*kbal_est$b, scale = F)
+        # k_test[1:10,1:10]
+        # kbal_est$K[1:10,1:10]
+
+        # X.init.sd <- apply(dat, 2, sd)
+        # X <- scale(dat, center = TRUE, scale = X.init.sd)
+        # head(dat)
+        # head(X)
+        #big issue here: can't produce the same kernel, appears to be bc we can't turn of the demeaning of X before
+        #it's passed to the kernel
+        # krls_kpop$K[1:10,1:10]
+        # dim(krls_kpop$K)
+        # dim(kbal_est$K)
+        # kbal_est$K[1:10,1:10]
         # residuals_krls = kpop_svyd$variables$outcome - krls_kpop$fitted
+        # #residuals_krls
         # kpop_krls_se <- tryCatch(calc_SEs(Y = kpop_svyd$variables$outcome,
         #                              residuals = residuals_krls,
         #                              pop_size = nrow(cces),
         #                              sample_size = sum(sample),
         #                              weights = weights(kpop_svyd)), error = function(e) NA)
+        # 
+        # test = gKRLS::gKRLS(sketch_method = "gaussian", standardize = "none", bandwidth = 2*kbal_est$b)
+        # gkrls_est <- mgcv::gam(kpop_svyd$variables$outcome ~ s(dat, bs = "gKRLS", xt = test))
+        # 
+        # summary(gkrls_est)
+        # 
+        # kpop_krls_se
+        # kpop_se
         # if(length(kpop_krls_se) == 1) {
-        #     kpop_krls_se <- data.frame(SE_fixed = NA, 
-        #                              SE_quasi = NA, 
-        #                               SE_linear = NA, 
+        #     kpop_krls_se <- data.frame(SE_fixed = NA,
+        #                              SE_quasi = NA,
+        #                               SE_linear = NA,
         #                               SE_chad = NA)
         # }
         # names(kpop_krls_se) = tryCatch(paste0("kpop_", names(kpop_krls_se)), error = function(e) NA)

@@ -206,6 +206,9 @@ gg_t2
 
 
 
+
+
+
 #2. observing the large right tales, let's look at what the sample looks like and the weights look like for these large SEs
 kpop_all_SE = SEs[, grepl("kpop_mf", colnames(SEs))]
 apply(kpop_all_SE, 2, summary)
@@ -220,7 +223,80 @@ length(kpop_mf_chad)*.75
 big_SE = which(kpop_all_SE$kpop_mf_SE_chad %in% kpop_mf_chad[370:494])
 
 
-#start by looking at the sample for those
+
+
+######### plot again by big vs small
+####
+SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
+SEs = SEs[big_SE,]
+SE_fixed = SEs[grepl("SE_fixed$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_fixed") %>% mutate(estimator = gsub("_SE_fixed", "", estimator))
+SE_linear = SEs[grepl("SE_linear$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_linear") %>% mutate(estimator = gsub("_SE_linear", "", estimator))
+SE_quasi = SEs[grepl("SE_quasi$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_quasi") %>% mutate(estimator = gsub("_SE_quasi", "", estimator))
+SE_chad= SEs[grepl("SE_chad$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_chad") %>% mutate(estimator = gsub("_SE_chad", "", estimator))
+tot_big = cbind(SE_fixed, SE_linear[,2], SE_quasi[,2], SE_chad[,2])
+
+
+SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
+SEs = SEs[-big_SE,]
+SE_fixed = SEs[grepl("SE_fixed$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_fixed") %>% mutate(estimator = gsub("_SE_fixed", "", estimator))
+SE_linear = SEs[grepl("SE_linear$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_linear") %>% mutate(estimator = gsub("_SE_linear", "", estimator))
+SE_quasi = SEs[grepl("SE_quasi$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_quasi") %>% mutate(estimator = gsub("_SE_quasi", "", estimator))
+SE_chad= SEs[grepl("SE_chad$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_chad") %>% mutate(estimator = gsub("_SE_chad", "", estimator))
+tot_s = cbind(SE_fixed, SE_linear[,2], SE_quasi[,2], SE_chad[,2])
+
+method ="kpop_all|mf|truth"
+sub = tot_big %>% filter(grepl(method, estimator) | estimator == "kpop")
+big = sub %>% pivot_longer(cols= c(2:5), names_to = "SE_type") %>% rename(SE = value)
+sub = tot_s %>% filter(grepl(method, estimator) | estimator == "kpop")
+small = sub %>% pivot_longer(cols= c(2:5), names_to = "SE_type") %>% rename(SE = value)
+
+#if you want a closer look at those tails...
+gg_big = ggplot(big) + 
+    geom_density(aes(x = SE, color = SE_type, fill = SE_type ), alpha = .2) +  
+    geom_vline(aes(xintercept =SE_Boot),
+               data = Boot %>% filter(grepl(method, estimator)| estimator == "kpop")) +
+    annotate(geom = "label",
+             x= .005,
+             y=Inf, vjust = 1.4,
+             color = "Black",
+             parse = T,
+             label =  "sd(Y_hat)") + 
+    theme_bw()  + 
+    xlab("SE Estimate") + 
+    facet_grid(cols = vars(estimator))
+gg_small = ggplot(small) + 
+    geom_density(aes(x = SE, color = SE_type, fill = SE_type ), alpha = .2) +  
+    geom_vline(aes(xintercept =SE_Boot),
+               data = Boot %>% filter(grepl(method, estimator)| estimator == "kpop")) +
+    annotate(geom = "label",
+             x= .005,
+             y=Inf, vjust = 1.4,
+             color = "Black",
+             parse = T,
+             label =  "sd(Y_hat)") + 
+    theme_bw()  + 
+    xlab("SE Estimate") + 
+    facet_grid(cols = vars(estimator))
+
+
+
+###### start by looking at the sample for those
 b_SE = sims[big_SE]
 s_SE = sims[-big_SE]
 length(s_SE)
@@ -249,8 +325,14 @@ summary(s_samp_check$check.leq_5pp)
 
 
 #could also check numdims
-
-
+big_est = est[big_SE,]
+s_est = est[-big_SE,]
+#interesting on avg the bigger SEs have slkightlyu fewer numdims and lower variance in the choice
+#that is the polar opposite of what id expect....bc if the weights have more variance, presumably we have more numdims?
+#but it's the opposite, maybe weightsare  more constrained with more numdims> 
+cbind(big_SE = colMeans(big_est[,grepl("numdims", colnames(est))]), s_SE = colMeans(s_est[,grepl("numdims", colnames(est))]))
+cbind(big_SE = apply(big_est[,grepl("numdims", colnames(est))],2, sd),
+      s_SE = apply(s_est[,grepl("numdims", colnames(est))], 2, sd))
 
 
 

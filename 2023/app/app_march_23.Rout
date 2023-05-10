@@ -1,0 +1,1868 @@
+
+R version 3.6.0 (2019-04-26) -- "Planting of a Tree"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> ### Packages
+> library(tidyverse)
+── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
+✔ ggplot2 3.3.3     ✔ purrr   0.3.4
+✔ tibble  3.1.7     ✔ dplyr   1.0.9
+✔ tidyr   1.1.3     ✔ stringr 1.4.0
+✔ readr   1.4.0     ✔ forcats 0.5.1
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+Warning messages:
+1: package ‘tidyverse’ was built under R version 3.6.2 
+2: package ‘ggplot2’ was built under R version 3.6.2 
+3: package ‘tidyr’ was built under R version 3.6.2 
+4: package ‘readr’ was built under R version 3.6.2 
+5: package ‘purrr’ was built under R version 3.6.2 
+6: package ‘forcats’ was built under R version 3.6.2 
+> 
+> library(survey)
+Loading required package: grid
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following objects are masked from ‘package:tidyr’:
+
+    expand, pack, unpack
+
+Loading required package: survival
+
+Attaching package: ‘survey’
+
+The following object is masked from ‘package:graphics’:
+
+    dotchart
+
+Warning message:
+package ‘Matrix’ was built under R version 3.6.2 
+> library(parallel)
+> #devtools::install_github("csterbenz1/KBAL", ref = "cat_kernel") 
+> library(kbal)
+> library(glmnet)
+Loaded glmnet 4.1-1
+Warning message:
+package ‘glmnet’ was built under R version 3.6.2 
+> 
+> if(detectCores() > 10) {
++     path_data= "/home/csterbenz/Data/"
++ } else {
++     path_data= "/Users/Ciara_1/Dropbox/kpop/Updated/application/data/" 
++ }
+> PRE = TRUE
+> TEST = FALSE
+> DEBUG = TRUE
+> POPW = TRUE
+> SAVE = T
+> tolerance = 1e-6
+> maxit = 500
+> increment = 1
+> min_num_dims = 1
+> max_num_dims = 500
+> #use the manually specified range of lambdas in the ridge residuQ                                                                                           1Q2121111       21     alization or allow glmnet to choose internally?
+> manual_lambda = FALSE 
+> #T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
+> lambda_min = FALSE 
+> 
+> 
+> ############################ Standard Error Functions ######################
+> var_fixed <- function(Y, weights, pop_size) {
++     ## note: needs weights that sum to population total
++     if(round(sum(weights)) != pop_size) { weights = weights*pop_size/sum(weights)}
++     return(Hmisc::wtd.var(Y, weights))
++ }
+> 
+> ## kott (14) (under poisson)
+> var_quasi <- function(weights, residuals, pop_size) {
++     #moving from kott 14 w sum w =N to weights that sum to 1 + var of total to var of mean:
++     #sum^n (w_i^2 - 1/N_pop w_i)e_i^2 
++     return(sum((weights^2 - (weights / pop_size))*residuals^2))
++ }
+> 
+> ## kott (15) linearization
+> var_linear <- function(weights, residuals, sample_size) {
++     #moving from kott 14 w sum w =N to weights that sum to 1 + var of total to var of mean:
++     # n/(n-1) sum^n (w_i*e_i)^2 - (1/n-1) [sum^n] *using this for now
++     # approx = sum^n (w_i*e_i)^2 - (1/n) [sum^n]
++     n = sample_size
++     return((n/(n-1))*sum((weights * residuals)^2) - 1/n * sum(weights * residuals)^2)
++ }
+> 
+> ## chad
+> var_chad <- function(weights, residuals) {
++     return(sum(weights^2 * residuals^2))
++ }
+> 
+> ## calculate all variances
+> calc_SEs <- function(Y, residuals, pop_size, weights, sample_size) {
++     if(round(sum(weights)) != 1 ) {
++         weights = weights/sum(weights)
++     }
++     return(data.frame(SE_fixed = sqrt(var_fixed(Y, weights, pop_size) / length(Y)),
++                       SE_quasi = sqrt(var_quasi(weights, residuals, pop_size)),
++                       SE_linear = sqrt(var_linear(weights, residuals, sample_size)),
++                       SE_chad = sqrt(var_chad(weights, residuals))))
++ }
+> 
+> ############################## Load Data ##########################
+> ## SURVEY DATA (PEW)
+> ### Load
+> if(PRE) {
++     pew <- readRDS(paste0(path_data, "pew_lasso_061021.rds"))
++ } else {
++     pew <- readRDS(paste0(path_data, "pew_post_CS_q4.rds"))
++ }
+> 
+> ## AUXILIARY INFORMATION (CCES)
+> ### Load
+> cces <- readRDS(paste0(path_data, "cces_lasso_061021.rds"))
+> 
+> cces <- cces%>% 
++     mutate(commonweight_vv_post = commonweight_vv_post/ mean(commonweight_vv_post))
+> 
+> 
+> if(TEST) {
++     rs_cces = sample.int(nrow(cces),  (nrow(cces)/10)*1)
++     cces =cces[rs_cces,]
++     rs_pew = sample.int(nrow(pew),  (nrow(pew)/10)*1)
++     pew = pew[rs_pew,]
++ } 
+> 
+> ####### DEFINE OUTCOME: important to do this to match what plot you're interested in bc to generate the SEs we need to run reg on the appropriate outcome
+> #outcome is now projected cces modeled vote margin
+> pew = pew %>% mutate(outcome = diff_cces_on_pew)
+> cces = cces %>% mutate(outcome = diff_cces_on_cces)
+> 
+> 
+> kbal_data <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
++                                                     recode_female,
++                                                     recode_race,
++                                                     recode_region,
++                                                     recode_pid_3way,
++                                                     recode_educ,
++                                                     
++                                                     recode_income_5way,
++                                                     recode_relig_6way,
++                                                     recode_born,
++                                                     recode_attndch_4way),
++                        cces %>% dplyr::select(recode_age_bucket,
++                                               recode_female,
++                                               recode_race,
++                                               recode_region,
++                                               recode_pid_3way,
++                                               recode_educ,
++                                               
++                                               recode_income_5way,
++                                               recode_relig_6way,
++                                               recode_born,
++                                               recode_attndch_4way))
+> 
+> kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces)))
+> ##### Demos Constraint
+> rake_demos_constraint <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
++                                                                 recode_female,
++                                                                 recode_race,
++                                                                 recode_region,
++                                                                 recode_pid_3way),
++                                    cces %>% dplyr::select(recode_age_bucket,
++                                                           recode_female,
++                                                           recode_race,
++                                                           recode_region,
++                                                           recode_pid_3way))%>%
++     model.matrix(as.formula("~."), .)
+> 
+> rake_demos_constraint <- rake_demos_constraint[,-1]
+> #rake_demos_constraint <- scale(rake_demos_constraint)
+> 
+> 
+> rake_demos_wedu_constraint <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
++                                                                      recode_female,
++                                                                      recode_race,
++                                                                      recode_region,
++                                                                      recode_pid_3way,
++                                                                      recode_educ),
++                                         cces %>% dplyr::select(recode_age_bucket,
++                                                                recode_female,
++                                                                recode_race,
++                                                                recode_region,
++                                                                recode_pid_3way,
++                                                                recode_educ))%>%
++     model.matrix(as.formula("~."), .)
+> 
+> rake_demos_wedu_constraint <- rake_demos_wedu_constraint[,-1]
+> #rake_demos_wedu_constraint <- scale(rake_demos_wedu_constraint)
+> 
+> 
+> rake_all_constraint <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
++                                                               recode_female,
++                                                               recode_race,
++                                                               recode_region,
++                                                               recode_pid_3way,
++                                                               recode_educ,
++                                                               
++                                                               recode_income_5way,
++                                                               recode_relig_6way,
++                                                               recode_born,
++                                                               recode_attndch_4way),
++                                  cces %>% dplyr::select(recode_age_bucket,
++                                                         recode_female,
++                                                         recode_race,
++                                                         recode_region,
++                                                         recode_pid_3way,
++                                                         recode_educ,
++                                                         recode_income_5way,
++                                                         recode_relig_6way,
++                                                         recode_born,
++                                                         recode_attndch_4way)) %>%
++     model.matrix(as.formula("~."), .)
+> 
+> rake_all_constraint <- rake_all_constraint[,-1]
+> #rake_all_constraint <- scale(rake_all_constraint)
+> 
+> ##### expanding b:
+> vote_diff <- quote((recode_vote_2016Democrat - recode_vote_2016Republican) /(recode_vote_2016Democrat + recode_vote_2016Republican + recode_vote_2016Other)) 
+> 
+> 
+> ########################### RUN KPOP ####################################################
+> #### kpop Default
+> kbal_est <- kbal(allx=kbal_data,
++              sampled = kbal_data_sampled,
++              cat_data = TRUE,
++              incrementby = increment,
++              meanfirst = FALSE,
++              ebal.tol = tolerance,
++              ebal.maxit = maxit,
++              population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++              minnumdims = min_num_dims,
++              maxnumdims = max_num_dims,
++              sampledinpop = FALSE,
++              fullSVD = TRUE)
+Warning in kbal(allx = kbal_data, sampled = kbal_data_sampled, cat_data = TRUE,  :
+  Dimensions of K greater than 4000, using sampled as default bases
+
+Searching for b value which maximizes the variance in K: 5.66 selected 
+Building kernel matrix
+Running full SVD on kernel matrix 
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With 1 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.04363  
+With 2 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.04234  
+With 3 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.04225  
+With 4 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03706  
+With 5 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03553  
+With 6 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03418  
+With 7 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0316  
+With 8 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03163  
+With 9 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03156  
+With 10 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03123  
+With 11 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02809  
+With 12 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0235  
+With 13 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02085  
+With 14 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02084  
+With 15 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01928  
+With 16 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01863  
+With 17 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01702  
+With 18 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01712  
+With 19 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01527  
+With 20 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01527  
+With 21 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0157  
+With 22 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0152  
+With 23 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01502  
+With 24 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01333  
+With 25 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0125  
+With 26 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01148  
+With 27 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01153  
+With 28 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01152  
+With 29 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01102  
+With 30 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00947  
+With 31 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00946  
+With 32 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 33 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 34 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00945  
+With 35 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00947  
+With 36 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00944  
+With 37 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 38 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 39 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0094  
+With 40 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 41 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0093  
+With 42 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 43 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 44 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00914  
+With 45 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00908  
+With 46 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00909  
+With 47 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0089  
+With 48 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 49 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00885  
+With 50 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 51 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 52 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00885  
+With 53 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00894  
+With 54 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 55 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 56 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00868  
+With 57 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00873  
+With 58 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 59 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 60 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 61 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 62 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 63 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 64 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 65 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00871  
+With 66 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 67 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 68 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 69 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 70 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 71 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 72 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0085  
+With 73 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 74 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 75 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 76 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 77 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 78 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0084  
+With 79 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00822  
+With 80 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00813  
+With 81 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 82 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00812  
+With 83 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 84 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 85 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00803  
+With 86 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00804  
+With 87 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 88 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00798  
+With 89 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00796  
+With 90 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00791  
+With 91 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0079  
+With 92 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 93 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 94 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00775  
+With 95 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 96 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00777  
+With 97 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 98 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 99 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 100 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 101 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 102 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 103 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00766  
+With 104 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 105 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 106 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 107 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00766  
+With 108 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00766  
+With 109 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00769  
+With 110 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 111 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00748  
+With 112 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00746  
+With 113 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00745  
+With 114 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00742  
+With 115 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00743  
+With 116 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00742  
+With 117 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00742  
+With 118 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0074  
+With 119 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0074  
+With 120 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0074  
+With 121 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00738  
+With 122 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00738  
+With 123 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00737  
+With 124 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00738  
+With 125 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00735  
+With 126 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00733  
+With 127 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00733  
+With 128 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00734  
+With 129 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00735  
+With 130 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00736  
+With 131 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00736  
+With 132 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00737  
+With 133 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00737  
+With 134 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00737  
+With 135 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00737  
+With 136 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00731  
+With 137 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00727  
+With 138 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00727  
+With 139 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0073  
+With 140 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00731  
+With 141 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00731  
+With 142 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00731  
+With 143 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00732  
+With 144 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00733  
+With 145 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00732  
+With 146 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00728  
+With 147 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00727  
+With 148 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00727  
+With 149 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00732  
+With 150 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00735  
+With 151 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00734  
+With 152 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00732  
+With 153 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00732  
+With 154 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00725  
+With 155 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00725  
+With 156 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00708  
+With 157 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00705  
+With 158 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.007  
+With 159 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00695  
+With 160 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00756  
+With 161 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00771  
+With 162 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00771  
+With 163 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00779  
+With 164 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0079  
+With 165 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00815  
+With 166 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00814  
+With 167 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00814  
+With 168 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00813  
+With 169 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00821  
+With 170 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00821  
+With 171 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00871  
+Disregarding ebalance convergence and re-running at optimal choice of numdims, 159 
+> 
+> kpop_svyd <- svydesign(~1, data = pew,
++                        weights = kbal_est$w[kbal_data_sampled ==1])
+> kpop <- svymean(~outcome, kpop_svyd,na.rm = TRUE)*100
+> b_kpop = kbal_est$b
+> 
+> if(DEBUG) {
++     path = "/Users/Ciara_1/Dropbox/kpop/2023/application/weights/DEBUG_"
++     save(kbal_est,
++          file = paste0(path, "full_kbal_obj_", 
++                        Sys.Date(), ".Rdata"))
++ }
+> 
+> 
+> l1_orig = ifelse(!is.null(kbal_est$L1_orig),kbal_est$L1_orig, NA)
+> l1 = ifelse(!is.null(kbal_est$L1_opt),kbal_est$L1_opt, NA)
+> 
+> #save memory by saving only the svd to re use
+> svdK = kbal_est$svdK 
+> numdims = kbal_est$numdims
+> biasbound_r = kbal_est$biasbound_ratio
+> biasbound = kbal_est$biasbound_opt
+> 
+> ##### Kpop SEs
+> lambdas <- if(manual_lambda) { 10^seq(3, -2, by = -.1) } else {NULL}
+> 
+> x <- as.matrix(data.frame(kbal_dims = kbal_est$svdK$v[, 1:kbal_est$numdims]))
+> cv_fit <- cv.glmnet(x, kpop_svyd$variables$outcome, alpha = 0, lambda = lambdas)
+> lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
+> residuals = kpop_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
++                                                   s = lambda_pass, newx = x)
+> res_kpop = data.frame(min = min(residuals), 
++                       perc_25 = quantile(residuals, .25), 
++                       mean = mean(residuals),
++                       perc_75 = quantile(residuals, .75),
++                       var = var(residuals))
+> kpop_se <- tryCatch(calc_SEs(Y = kpop_svyd$variables$outcome,
++                              residuals = residuals,
++                              pop_size = nrow(cces),
++                              sample_size = nrow(pew),
++                              weights = weights(kpop_svyd)), error = function(e) NA)
+> 
+> if(length(kpop_se) == 1) {
++     kpop_se <- data.frame(SE_fixed = NA, 
++                           SE_quasi = NA, 
++                           SE_linear = NA, 
++                           SE_chad = NA)
++ }
+> #names(kpop_se) = tryCatch(paste0("kpop_", names(kpop_se)), error = function(e) NA)
+> rownames(kpop_se) = "kpop"
+> 
+> ######################################################
+> #KPOP CONVERGED
+> dist_record = data.frame(t(kbal_est$dist_record))
+> min_converged = dist_record[which.min(dist_record[dist_record$Ebal.Convergence ==1,"BiasBound"]), "Dims"]
+> 
+> rm(kbal_est)
+> if(is.null(min_converged) | length(min_converged) ==0) {
++     kpop_conv_svyd <- "dn converge"
++     kpop_conv <- "dn converge"
++     
++     numdims_conv = "dn converge"
++     biasbound_r_conv = "dn converge"
++     biasbound_conv = "dn converge"
++     kpop_conv_se = data.frame(SE_fixed = NA, 
++                               SE_quasi = NA, 
++                               SE_linear = NA, 
++                               SE_chad = NA)
++     
++ } else {
++     kbal_est_conv <- kbal(allx=kbal_data,
++                           K.svd = svdK,
++                           sampled = kbal_data_sampled,
++                           numdims = min_converged,
++                           ebal.tol = tolerance,
++                           ebal.maxit = maxit,
++                           minnumdims = min_num_dims,
++                           maxnumdims = max_num_dims,
++                           population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++                           scale_data = FALSE,
++                           drop_MC = FALSE,
++                           incrementby = increment,
++                           meanfirst = FALSE,
++                           sampledinpop = FALSE,
++                           ebal.convergence = TRUE)
++     
++     kpop_conv_svyd <- svydesign(~1, data = pew,
++                            weights = kbal_est_conv$w[kbal_data_sampled ==1])
++     kpop_conv <- svymean(~outcome, kpop_conv_svyd,na.rm = TRUE)*100
++     
++     numdims_conv = kbal_est_conv$numdims
++     biasbound_r_conv = kbal_est_conv$biasbound_ratio
++     biasbound_conv = kbal_est_conv$biasbound_opt
++     l1_conv = ifelse(!is.null(kbal_est_conv$L1_opt), kbal_est_conv$L1_opt, NA)
++     #SEs
++     x <- as.matrix(data.frame(kbal_dims = kbal_est_conv$svdK$v[, 1:kbal_est_conv$numdims]))
++     cv_fit <- cv.glmnet(x, kpop_conv_svyd$variables$outcome, alpha = 0, 
++                         lambda = lambdas)
++     fit <- cv_fit$glmnet.fit
++     lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
++     residuals = kpop_conv_svyd$variables$outcome - predict(cv_fit$glmnet.fit, 
++                                                            s = lambda_pass, 
++                                                            newx = x)
++     res_kpop_conv = data.frame(min = min(residuals), 
++                                perc_25 = quantile(residuals, .25), 
++                                mean = mean(residuals),
++                                perc_75 = quantile(residuals, .75),
++                                var = var(residuals))
++     kpop_conv_se <- tryCatch(calc_SEs(Y = kpop_conv_svyd$variables$outcome,
++                                       residuals = residuals,
++                                       pop_size = nrow(cces),
++                                       sample_size = nrow(pew),
++                                       weights = weights(kpop_conv_svyd)), error = function(e) NA)
++     if(length(kpop_conv_se) == 1) {
++         kpop_conv_se <- data.frame(SE_fixed = NA, 
++                                    SE_quasi = NA, 
++                                    SE_linear = NA, 
++                                    SE_chad = NA)
++     }
++     #names(kpop_conv_se) = tryCatch(paste0("kpop_conv_", names(kpop_conv_se)), error = function(e) NA)
++     #KRLS SEs are exactly the same for coverged
++     rownames(kpop_conv_se) = "kpop_conv"
++     
++     rm(kbal_est_conv) 
++ }
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With user-specified 154 dimensions, biasbound (norm=1) of  0.00725  
+> 
+> ########################################################################
+> 
+> ####### MF #######
+> kbal_mf_est <- kbal(K.svd = svdK,
++                     cat_data = T,
++                     allx=kbal_data,
++                     sampled = kbal_data_sampled,
++                     ebal.tol = tolerance,
++                     ebal.maxit = maxit,
++                     minnumdims = min_num_dims,
++                     maxnumdims = max_num_dims,
++                     population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++                     incrementby = increment,
++                     meanfirst = TRUE,
++                     sampledinpop = FALSE)
+Selected 30 dimensions of "allx" to use as mean balance constraints. 
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With 1 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00888  
+With 2 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 3 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00881  
+With 4 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 5 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00893  
+With 6 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 7 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00883  
+With 8 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00887  
+With 9 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 10 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00894  
+With 11 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00907  
+With 12 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 13 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00917  
+With 14 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00918  
+With 15 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 16 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 17 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 18 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 19 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 20 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00916  
+With 21 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 22 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 23 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00912  
+With 24 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 25 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 26 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 27 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 28 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00916  
+With 29 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 30 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 31 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 32 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 33 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 34 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 35 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00876  
+With 36 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 37 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 38 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 39 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 40 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00879  
+With 41 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00879  
+With 42 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 43 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 44 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 45 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00871  
+With 46 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00866  
+With 47 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 48 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 49 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 50 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 51 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 52 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 53 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 54 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 55 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00861  
+With 56 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00868  
+With 57 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0087  
+With 58 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 59 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00876  
+With 60 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 61 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 62 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 63 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 64 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 65 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 66 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 67 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 68 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 69 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 70 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00917  
+With 71 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00914  
+With 72 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 73 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 74 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00914  
+With 75 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 76 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 77 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00923  
+With 78 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 79 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00923  
+With 80 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00926  
+With 81 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00926  
+With 82 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00931  
+With 83 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0093  
+With 84 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 85 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00932  
+With 86 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 87 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 88 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00936  
+With 89 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0091  
+With 90 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00903  
+With 91 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00902  
+With 92 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00913  
+With 93 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00912  
+With 94 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0091  
+With 95 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0091  
+With 96 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00905  
+With 97 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00904  
+With 98 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00904  
+With 99 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00903  
+With 100 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00904  
+With 101 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00904  
+With 102 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00908  
+With 103 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00922  
+With 104 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00937  
+With 105 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00934  
+With 106 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00938  
+With 107 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00937  
+With 108 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00936  
+With 109 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00934  
+With 110 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00938  
+With 111 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.00951  
+With 112 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01009  
+With 113 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01018  
+With 114 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0102  
+With 115 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.0102  
+With 116 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01017  
+With 117 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01017  
+With 118 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01023  
+With 119 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01042  
+With 120 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01044  
+With 121 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01041  
+With 122 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01041  
+With 123 dimensions of K, ebalance convergence is FALSE yielding biasbound (norm=1) of 0.01073  
+Re-running at optimal choice of numdims, 52 
+Used 30 dimensions of "allx" for mean balancing, and an additional 52 dimensions of "K" from kernel balancing.
+> 
+> kpop_mf_svyd <- svydesign(~1, data = pew, 
++                           weights = kbal_mf_est$w[kbal_data_sampled ==1])
+> 
+> kpop_mf <- svymean(~outcome, kpop_mf_svyd, na.rm = TRUE)*100
+> 
+> mfnumdims = kbal_mf_est$numdims
+> mf_appended_dims = kbal_mf_est$meanfirst_dims
+> if(is.null(mf_appended_dims)) {mf_appended_dims = c(NA)}
+> biasbound_r_mf = kbal_mf_est$biasbound_ratio
+> biasbound_mf = kbal_mf_est$biasbound_opt
+> l1_mf = ifelse(!is.null(kbal_mf_est$L1_opt), kbal_mf_est$L1_opt, NA)
+> 
+> mfnumdims = kbal_mf_est$numdims
+> if(is.null(mfnumdims)) {
++     mfnumdims = c(NA) 
++     kpop_mf_se = data.frame(SE_fixed = NA, 
++                             SE_quasi = NA, 
++                             SE_linear = NA, 
++                             SE_chad = NA)
++ } else {
++     #after much hair puling i have determined the following
++     #1. it is best to allow glmnet to add the intercept (it's not receptive to turning it off if you have it already bc you use model matrix; also bc the penalty.factor will always regularize the intercept when it's intercept when its internally aded)
++     #2. glmnet is entirely redundant when you run cv.glmnet, but it is very important to predict with cv_glmnet$glmnet.fit + s = lambda.min otherwise you get different answers, BUT no errors (eg predict on the raw cv.glmnet obj)
++     #3. penalty.factor will rescale the lambdas internally except when the user specifies the lambda sequence directly
++     #4. you do not need to anticipate the addition of the intercept in penalty.factor when it's added internally
++     #5. FOR GODS SAKE dont be an idiot and subset with only a vector name (kbal_data_sampled), make it a logical ==1!!!!! 
++     #SEs X = V[, 1:numdims]
++     V <-  data.frame(kbal_dims = kbal_mf_est$svdK$v[, c(1:kbal_mf_est$numdims)])
++     #binding mf cols for sample units to V
++     X <- as.matrix(cbind(kbal_mf_est$appended_constraint_cols[kbal_data_sampled==1, ], V))
++     
++     cv_fit <- cv.glmnet(X, kpop_mf_svyd$variables$outcome, alpha = 0,
++                         lambda = lambdas, 
++                         penalty.factor = c(rep(0, kbal_mf_est$meanfirst_dims), 
++                                            rep(1, kbal_mf_est$numdims)))
++     lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
++     residuals = kpop_mf_svyd$variables$outcome - predict(cv_fit$glmnet.fit, 
++                                                          s = lambda_pass, 
++                                                          newx = X)
++     res_kpop_mf = data.frame(min = min(residuals), 
++                              perc_25 = quantile(residuals, .25), 
++                              mean = mean(residuals),
++                              perc_75 = quantile(residuals, .75),
++                              var = var(residuals))
++     
++     kpop_mf_se <- tryCatch(calc_SEs(Y = kpop_mf_svyd$variables$outcome,
++                                     residuals = residuals,
++                                     pop_size = nrow(cces),
++                                     sample_size = nrow(pew),
++                                     weights = weights(kpop_mf_svyd)), 
++                            error = function(e) NA)
++     if(length(kpop_mf_se) == 1) {
++         kpop_mf_se <- data.frame(SE_fixed = NA, 
++                                  SE_quasi = NA, 
++                                  SE_linear = NA, 
++                                  SE_chad = NA)
++     }
++     # names(kpop_mf_se) = tryCatch(paste0("kpop_mf_", names(kpop_mf_se)),
++     #                              error = function(e) NA)
++     rownames(kpop_mf_se) = "kpop_mf"
++ }
+> 
+> rm(kbal_mf_est)
+> 
+> #########KPOP + demos constraint method:
+> kbal_demos_est <- kbal(K.svd = svdK,
++                        allx=kbal_data,
++                        #cat_data = TRUE,
++                        sampled = kbal_data_sampled,
++                        ebal.tol = tolerance,
++                        ebal.maxit = maxit,
++                        minnumdims = min_num_dims,
++                        maxnumdims = max_num_dims,
++                        population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++                        scale_data = FALSE,
++                        drop_MC = FALSE,
++                        incrementby = increment,
++                        #scaling these
++                        constraint = rake_demos_constraint,
++                        scale_constraint = TRUE,
++                        meanfirst = FALSE,
++                        sampledinpop = FALSE)
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With 1 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03935  
+With 2 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03922  
+With 3 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.03798  
+With 4 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.031  
+With 5 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02426  
+With 6 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02419  
+With 7 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0194  
+With 8 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01891  
+With 9 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01615  
+With 10 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01612  
+With 11 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01602  
+With 12 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01587  
+With 13 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01499  
+With 14 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01509  
+With 15 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01458  
+With 16 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01499  
+With 17 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01403  
+With 18 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01428  
+With 19 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01179  
+With 20 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01191  
+With 21 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01197  
+With 22 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01198  
+With 23 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01139  
+With 24 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01122  
+With 25 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0112  
+With 26 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0111  
+With 27 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01104  
+With 28 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00953  
+With 29 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 30 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 31 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 32 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 33 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 34 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00885  
+With 35 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00886  
+With 36 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 37 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 38 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 39 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00894  
+With 40 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00894  
+With 41 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00896  
+With 42 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00895  
+With 43 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 44 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00863  
+With 45 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 46 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 47 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 48 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00856  
+With 49 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 50 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 51 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 52 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 53 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00856  
+With 54 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00855  
+With 55 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00864  
+With 56 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00866  
+With 57 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 58 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0087  
+With 59 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 60 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 61 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00855  
+With 62 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00856  
+With 63 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 64 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 65 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 66 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 67 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00855  
+With 68 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00859  
+With 69 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 70 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00871  
+With 71 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00872  
+With 72 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00864  
+With 73 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00873  
+With 74 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00873  
+With 75 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 76 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00872  
+With 77 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0087  
+With 78 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00864  
+With 79 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 80 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 81 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 82 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00872  
+With 83 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 84 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00859  
+With 85 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00866  
+With 86 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00869  
+With 87 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00869  
+With 88 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00869  
+With 89 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 90 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0085  
+With 91 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00851  
+With 92 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 93 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 94 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00841  
+With 95 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00841  
+With 96 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0084  
+With 97 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0084  
+With 98 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 99 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00841  
+With 100 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00841  
+With 101 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00834  
+With 102 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00834  
+With 103 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00826  
+With 104 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00828  
+With 105 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00827  
+With 106 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00825  
+With 107 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00822  
+With 108 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0082  
+With 109 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0082  
+With 110 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0082  
+With 111 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00812  
+With 112 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 113 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 114 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00796  
+With 115 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00797  
+With 116 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 117 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 118 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 119 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 120 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 121 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0079  
+With 122 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00792  
+With 123 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00792  
+With 124 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00796  
+With 125 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00789  
+With 126 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00786  
+With 127 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00783  
+With 128 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00784  
+With 129 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 130 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00787  
+With 131 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00786  
+With 132 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 133 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 134 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 135 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 136 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00783  
+With 137 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00783  
+With 138 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 139 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00784  
+With 140 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 141 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 142 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 143 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 144 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00777  
+With 145 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00775  
+With 146 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00765  
+With 147 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00766  
+With 148 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 149 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00774  
+With 150 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0078  
+With 151 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 152 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 153 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 154 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 155 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00775  
+With 156 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0077  
+With 157 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 158 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0078  
+With 159 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00775  
+With 160 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00761  
+With 161 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0076  
+With 162 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00759  
+With 163 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0076  
+With 164 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00766  
+With 165 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 166 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 167 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 168 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 169 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00763  
+With 170 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00763  
+With 171 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00765  
+With 172 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 173 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 174 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00771  
+With 175 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 176 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00777  
+With 177 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 178 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 179 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 180 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00774  
+With 181 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00774  
+With 182 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 183 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 184 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 185 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 186 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00777  
+With 187 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 188 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00791  
+With 189 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00791  
+With 190 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 191 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 192 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 193 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00778  
+With 194 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 195 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00776  
+With 196 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 197 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 198 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 199 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 200 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 201 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 202 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00771  
+With 203 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00764  
+With 204 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00764  
+With 205 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00764  
+With 206 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00767  
+With 207 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 208 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 209 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00768  
+With 210 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00759  
+With 211 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00762  
+With 212 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00761  
+With 213 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00761  
+With 214 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00761  
+With 215 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00759  
+With 216 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 217 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 218 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00757  
+With 219 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00759  
+With 220 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00758  
+With 221 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00765  
+With 222 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00765  
+With 223 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0077  
+With 224 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00772  
+With 225 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00779  
+With 226 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0078  
+With 227 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 228 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 229 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00796  
+With 230 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 231 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 232 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00813  
+With 233 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00814  
+With 234 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00813  
+With 235 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00815  
+With 236 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 237 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00836  
+With 238 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00835  
+With 239 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00839  
+With 240 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 241 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00845  
+With 242 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 243 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 244 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 245 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 246 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 247 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 248 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00874  
+With 249 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 250 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00859  
+With 251 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 252 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 253 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 254 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 255 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 256 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 257 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 258 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 259 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 260 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00898  
+With 261 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.009  
+With 262 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 263 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.009  
+With 264 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 265 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0091  
+With 266 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00924  
+With 267 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00931  
+With 268 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00941  
+With 269 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 270 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 271 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00944  
+With 272 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00946  
+Re-running at optimal choice of numdims, 168 
+> 
+> kpop_demos_svyd <- svydesign(~1, data = pew, 
++                              weights = kbal_demos_est$w[kbal_data_sampled ==1])
+> 
+> kpop_demos <- svymean(~outcome, kpop_demos_svyd, na.rm = TRUE)*100
+> numdims_demos = kbal_demos_est$numdims
+> l1_demos = ifelse(!is.null(kbal_demos_est$L1_opt), kbal_demos_est$L1_opt, NA)
+> 
+> if(is.null(numdims_demos)) {
++     numdims_demos = c(NA) 
++     kpop_demos_se <- data.frame(SE_fixed = NA, 
++                                 SE_quasi = NA, 
++                                 SE_linear = NA, 
++                                 SE_chad = NA)
++ } else {
++     V <-  data.frame(kbal_dims = kbal_demos_est$svdK$v[, c(1:kbal_demos_est$numdims)])
++     X <- as.matrix(cbind(kbal_demos_est$appended_constraint_cols[kbal_data_sampled==1, ], V))
++     
++     cv_fit <- cv.glmnet(X, kpop_demos_svyd$variables$outcome, alpha = 0, lambda = lambdas,
++                         penalty.factor = c(rep(0, ncol(kbal_demos_est$appended_constraint_cols)), rep(1, kbal_demos_est$numdims)))
++     
++     lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
++     residuals =  kpop_demos_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
++                                                              s = lambda_pass, 
++                                                              newx = X)
++     res_kpop_demos = data.frame(min = min(residuals), 
++                                 perc_25 = quantile(residuals, .25), 
++                                 mean = mean(residuals),
++                                 perc_75 = quantile(residuals, .75),
++                                 var = var(residuals))
++     
++     kpop_demos_se <- tryCatch(calc_SEs(Y = kpop_demos_svyd$variables$outcome,
++                                        residuals = residuals,
++                                        pop_size = nrow(cces),
++                                        sample_size = nrow(pew),
++                                        weights = weights(kpop_demos_svyd)), 
++                               error = function(e) NA)
++     if(length(kpop_demos_se) == 1) {
++         kpop_demos_se <- data.frame(SE_fixed = NA, 
++                                     SE_quasi = NA, 
++                                     SE_linear = NA, 
++                                     SE_chad = NA)
++     }
++     # names(kpop_demos_se) = tryCatch(paste0("kpop_demos_", names(kpop_demos_se)),
++     #                                 error = function(e) NA)
++     rownames(kpop_demos_se) = "kpop_demos"
++ }
+> biasbound_r_demos = kbal_demos_est$biasbound_ratio
+> biasbound_demos = kbal_demos_est$biasbound_opt
+> 
+> rm(kbal_demos_est)
+> 
+> 
+> #########KPOP demos + educ constraint method:
+> kbal_demos_wedu_est <- kbal(K.svd = svdK,
++                             allx=kbal_data,
++                             cat_data = TRUE,
++                             sampled = kbal_data_sampled,
++                             ebal.tol = tolerance,
++                             ebal.maxit = maxit,
++                             minnumdims = min_num_dims,
++                             maxnumdims = max_num_dims,
++                             population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++                             scale_data = FALSE,
++                             drop_MC = FALSE,
++                             incrementby = increment,
++                             #scaling these
++                             constraint = rake_demos_wedu_constraint,
++                             scale_constraint = TRUE,
++                             meanfirst = FALSE,
++                             sampledinpop = FALSE)
+Warning in kbal(K.svd = svdK, allx = kbal_data, cat_data = TRUE, sampled = kbal_data_sampled,  :
+  "cat_data" TRUE only used in the construction of the kernel matrix "K" and is not used when "K" or "K.svd" is already user-supplied.
+
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With 1 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02926  
+With 2 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02636  
+With 3 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02598  
+With 4 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02175  
+With 5 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.02058  
+With 6 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0196  
+With 7 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01482  
+With 8 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.015  
+With 9 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01312  
+With 10 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01283  
+With 11 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01199  
+With 12 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01196  
+With 13 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01193  
+With 14 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01197  
+With 15 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01121  
+With 16 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01137  
+With 17 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01138  
+With 18 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0101  
+With 19 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00959  
+With 20 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00956  
+With 21 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00955  
+With 22 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00949  
+With 23 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00944  
+With 24 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 25 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00936  
+With 26 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00927  
+With 27 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00923  
+With 28 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 29 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00875  
+With 30 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00893  
+With 31 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00887  
+With 32 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00887  
+With 33 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 34 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 35 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 36 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 37 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 38 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 39 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 40 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 41 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 42 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00857  
+With 43 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00852  
+With 44 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 45 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00843  
+With 46 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00839  
+With 47 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00834  
+With 48 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00835  
+With 49 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00835  
+With 50 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00834  
+With 51 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00836  
+With 52 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00834  
+With 53 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 54 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 55 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 56 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 57 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00851  
+With 58 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00861  
+With 59 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 60 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 61 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00851  
+With 62 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00851  
+With 63 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 64 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 65 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 66 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00861  
+With 67 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 68 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00863  
+With 69 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00868  
+With 70 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 71 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 72 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00872  
+With 73 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00883  
+With 74 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00886  
+With 75 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00899  
+With 76 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 77 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 78 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00886  
+With 79 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00885  
+With 80 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00886  
+With 81 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00887  
+With 82 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0089  
+With 83 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00874  
+With 84 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00874  
+With 85 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00876  
+With 86 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00879  
+With 87 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 88 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00873  
+With 89 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00864  
+With 90 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00863  
+With 91 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00863  
+With 92 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00851  
+With 93 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00849  
+With 94 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 95 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00848  
+With 96 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 97 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00841  
+With 98 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 99 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00845  
+With 100 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00845  
+With 101 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00828  
+With 102 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00829  
+With 103 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00827  
+With 104 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00829  
+With 105 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00829  
+With 106 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00825  
+With 107 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00824  
+With 108 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00822  
+With 109 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00825  
+With 110 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00829  
+With 111 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00828  
+With 112 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00828  
+With 113 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00828  
+With 114 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00823  
+With 115 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00823  
+With 116 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00822  
+With 117 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00821  
+With 118 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0082  
+With 119 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00819  
+With 120 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00819  
+With 121 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 122 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 123 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 124 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00822  
+With 125 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00817  
+With 126 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 127 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 128 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 129 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00813  
+With 130 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00815  
+With 131 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 132 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 133 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00815  
+With 134 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00816  
+With 135 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00815  
+With 136 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00817  
+With 137 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00817  
+With 138 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00818  
+With 139 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0082  
+With 140 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00812  
+With 141 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00817  
+With 142 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 143 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00807  
+With 144 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00813  
+With 145 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00807  
+With 146 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.008  
+With 147 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00799  
+With 148 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.008  
+With 149 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0081  
+With 150 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 151 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00811  
+With 152 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00808  
+With 153 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00808  
+With 154 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 155 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 156 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00804  
+With 157 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00804  
+With 158 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 159 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 160 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00784  
+With 161 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00784  
+With 162 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 163 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00787  
+With 164 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00792  
+With 165 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00788  
+With 166 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00788  
+With 167 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00788  
+With 168 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00788  
+With 169 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0079  
+With 170 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00791  
+With 171 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00791  
+With 172 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 173 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00795  
+With 174 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00798  
+With 175 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00799  
+With 176 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00803  
+With 177 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 178 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 179 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 180 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 181 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.008  
+With 182 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.008  
+With 183 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 184 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 185 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 186 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00799  
+With 187 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 188 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00819  
+With 189 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00819  
+With 190 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 191 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 192 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 193 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00807  
+With 194 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 195 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 196 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 197 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 198 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 199 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 200 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 201 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00805  
+With 202 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00804  
+With 203 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 204 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 205 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 206 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 207 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00807  
+With 208 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00806  
+With 209 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00807  
+With 210 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00789  
+With 211 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0079  
+With 212 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00786  
+With 213 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00786  
+With 214 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 215 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 216 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00781  
+With 217 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 218 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00782  
+With 219 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00783  
+With 220 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0078  
+With 221 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00783  
+With 222 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00784  
+With 223 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00785  
+With 224 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00786  
+With 225 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00796  
+With 226 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00799  
+With 227 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00801  
+With 228 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00802  
+With 229 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00812  
+With 230 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00817  
+With 231 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00835  
+With 232 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00842  
+With 233 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00844  
+With 234 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00843  
+With 235 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 236 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 237 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 238 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 239 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00859  
+With 240 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00859  
+With 241 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 242 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 243 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00854  
+With 244 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 245 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00865  
+With 246 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00868  
+With 247 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00871  
+With 248 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00882  
+With 249 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00866  
+With 250 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00867  
+With 251 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00865  
+With 252 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00883  
+With 253 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 254 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00893  
+With 255 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 256 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00907  
+With 257 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00907  
+With 258 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00896  
+With 259 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.009  
+With 260 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 261 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00907  
+With 262 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00906  
+With 263 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 264 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00905  
+With 265 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 266 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 267 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 268 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 269 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 270 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00937  
+With 271 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00935  
+With 272 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 273 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00931  
+With 274 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00945  
+With 275 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 276 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00945  
+With 277 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00955  
+With 278 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00951  
+With 279 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00951  
+With 280 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00948  
+With 281 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00953  
+With 282 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00975  
+With 283 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00978  
+Re-running at optimal choice of numdims, 220 
+> 
+> kpop_demos_wedu_svyd <- svydesign(~1, data = pew, 
++                              weights = kbal_demos_wedu_est$w[kbal_data_sampled ==1])
+> kpop_demos_wedu <- svymean(~outcome, kpop_demos_wedu_svyd, na.rm = TRUE)*100
+> numdims_demos_wedu = kbal_demos_wedu_est$numdims
+> l1_demos_weduc = ifelse(!is.null(kbal_demos_wedu_est$L1_opt), kbal_demos_wedu_est$L1_opt, NA)
+> 
+> if(is.null(numdims_demos_wedu)) {
++     numdims_demos_wedu = c(NA)
++     kpop_demos_wedu_se <- data.frame(SE_fixed = NA, 
++                                      SE_quasi = NA, 
++                                      SE_linear = NA, 
++                                      SE_chad = NA)
++ } else {
++     V <-  data.frame(kbal_dims = kbal_demos_wedu_est$svdK$v[, c(1:kbal_demos_wedu_est$numdims)])
++     X <- as.matrix(cbind(kbal_demos_wedu_est$appended_constraint_cols[kbal_data_sampled==1, ], V))
++     
++     cv_fit <- cv.glmnet(X, kpop_demos_wedu_svyd$variables$outcome, alpha = 0, lambda = lambdas,
++                         penalty.factor = c(rep(0, ncol(kbal_demos_wedu_est$appended_constraint_cols)),
++                                            rep(1, kbal_demos_wedu_est$numdims)))
++     
++     lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
++     residuals =  kpop_demos_wedu_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
++                                                                   s = lambda_pass, 
++                                                                   newx = X)
++     res_kpop_demos_wedu = data.frame(min = min(residuals), 
++                                      perc_25 = quantile(residuals, .25), 
++                                      mean = mean(residuals),
++                                      perc_75 = quantile(residuals, .75),
++                                      var = var(residuals))
++     kpop_demos_wedu_se <- tryCatch(calc_SEs(Y = kpop_demos_wedu_svyd$variables$outcome,
++                                             residuals = residuals,
++                                             pop_size = nrow(cces),
++                                             sample_size = nrow(pew),
++                                             weights = weights(kpop_demos_wedu_svyd)), 
++                                    error = function(e) NA)
++     if(length(kpop_demos_wedu_se) == 1) {
++         kpop_demos_wedu_se <- data.frame(SE_fixed = NA, 
++                                          SE_quasi = NA, 
++                                          SE_linear = NA, 
++                                          SE_chad = NA)
++     }
++     # names(kpop_demos_wedu_se) = tryCatch(paste0("kpop_demos_wedu_", names(kpop_demos_wedu_se)),
++     #                                      error = function(e) NA)
++     rownames(kpop_demos_wedu_se) = "kpop_demos_wedu"
++     
++ }
+> biasbound_r_demos_wedu = kbal_demos_wedu_est$biasbound_ratio
+> biasbound_demos_wedu = kbal_demos_wedu_est$biasbound_opt
+> 
+> rm(kbal_demos_wedu_est)
+> 
+> 
+> #########KPOP + all constraint method:
+> kbal_all_est <- kbal(K.svd = svdK,
++                      allx=kbal_data,
++                      #cat_data = TRUE,
++                      sampled = kbal_data_sampled,
++                      ebal.tol = tolerance,
++                      ebal.maxit = maxit,
++                      minnumdims = min_num_dims,
++                      maxnumdims = max_num_dims,
++                      population.w = if(POPW) {cces$commonweight_vv_post} else {NULL},
++                      scale_data = FALSE,
++                      drop_MC = FALSE,
++                      incrementby = increment,
++                      #scaling these
++                      constraint = rake_all_constraint,
++                      scale_constraint = TRUE,
++                      meanfirst = FALSE,
++                      sampledinpop = FALSE)
+Without balancing, biasbound (norm=1) is 0.04462 and the L1 discrepancy is 0.032 
+With 1 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00888  
+With 2 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 3 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00881  
+With 4 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00889  
+With 5 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00893  
+With 6 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 7 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00883  
+With 8 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00887  
+With 9 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 10 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00894  
+With 11 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00907  
+With 12 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 13 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00917  
+With 14 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00918  
+With 15 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 16 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 17 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 18 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 19 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 20 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00916  
+With 21 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 22 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 23 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00912  
+With 24 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 25 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00913  
+With 26 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 27 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 28 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00916  
+With 29 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 30 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 31 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 32 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 33 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 34 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00901  
+With 35 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00876  
+With 36 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 37 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 38 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 39 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 40 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00879  
+With 41 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00879  
+With 42 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 43 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 44 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0088  
+With 45 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00871  
+With 46 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00866  
+With 47 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 48 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 49 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 50 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00862  
+With 51 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 52 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00853  
+With 53 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00858  
+With 54 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0086  
+With 55 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00861  
+With 56 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00868  
+With 57 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0087  
+With 58 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 59 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00876  
+With 60 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 61 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00878  
+With 62 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00877  
+With 63 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00884  
+With 64 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00892  
+With 65 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00891  
+With 66 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 67 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 68 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00897  
+With 69 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00904  
+With 70 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00917  
+With 71 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00914  
+With 72 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00902  
+With 73 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00903  
+With 74 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00914  
+With 75 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 76 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 77 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00923  
+With 78 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 79 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00923  
+With 80 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00926  
+With 81 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00926  
+With 82 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00931  
+With 83 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0093  
+With 84 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 85 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00932  
+With 86 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 87 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 88 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00936  
+With 89 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0092  
+With 90 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00919  
+With 91 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00919  
+With 92 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00935  
+With 93 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00935  
+With 94 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 95 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 96 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00929  
+With 97 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00927  
+With 98 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00927  
+With 99 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00926  
+With 100 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00925  
+With 101 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0092  
+With 102 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 103 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00925  
+With 104 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00928  
+With 105 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00928  
+With 106 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00922  
+With 107 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 108 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 109 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00921  
+With 110 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00924  
+With 111 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00936  
+With 112 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00928  
+With 113 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 114 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 115 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 116 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 117 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 118 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00937  
+With 119 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 120 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 121 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 122 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00939  
+With 123 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00934  
+With 124 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00946  
+With 125 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00944  
+With 126 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00945  
+With 127 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00941  
+With 128 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00947  
+With 129 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0095  
+With 130 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0095  
+With 131 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0095  
+With 132 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00948  
+With 133 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 134 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 135 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00942  
+With 136 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00943  
+With 137 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00944  
+With 138 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00957  
+With 139 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00958  
+With 140 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00956  
+With 141 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00971  
+With 142 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00963  
+With 143 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0097  
+With 144 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0099  
+With 145 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00985  
+With 146 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00975  
+With 147 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00975  
+With 148 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00978  
+With 149 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00981  
+With 150 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00979  
+With 151 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00984  
+With 152 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00986  
+With 153 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00987  
+With 154 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00994  
+With 155 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00996  
+With 156 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00991  
+With 157 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0099  
+With 158 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01004  
+With 159 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00996  
+With 160 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00994  
+With 161 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00998  
+With 162 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01001  
+With 163 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01008  
+With 164 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0101  
+With 165 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01008  
+With 166 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0101  
+With 167 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01009  
+With 168 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01001  
+With 169 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01003  
+With 170 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01001  
+With 171 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01003  
+With 172 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01003  
+With 173 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01004  
+With 174 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01006  
+With 175 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01006  
+With 176 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01007  
+With 177 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01007  
+With 178 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01008  
+With 179 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01011  
+With 180 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01012  
+With 181 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01012  
+With 182 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01019  
+With 183 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01017  
+With 184 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01023  
+With 185 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01022  
+With 186 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01018  
+With 187 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01017  
+With 188 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01021  
+With 189 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01011  
+With 190 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01006  
+With 191 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01008  
+With 192 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01005  
+With 193 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01009  
+With 194 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00992  
+With 195 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00993  
+With 196 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00992  
+With 197 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00996  
+With 198 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00996  
+With 199 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00997  
+With 200 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00994  
+With 201 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.00991  
+With 202 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01001  
+With 203 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01001  
+With 204 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01004  
+With 205 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01016  
+With 206 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01017  
+With 207 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0101  
+With 208 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01008  
+With 209 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0101  
+With 210 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01007  
+With 211 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01015  
+With 212 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01019  
+With 213 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01019  
+With 214 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01025  
+With 215 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01026  
+With 216 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01024  
+With 217 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0102  
+With 218 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01023  
+With 219 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.0102  
+With 220 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01023  
+With 221 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01023  
+With 222 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01024  
+With 223 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01025  
+With 224 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01028  
+With 225 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01059  
+With 226 dimensions of K, ebalance convergence is TRUE yielding biasbound (norm=1) of 0.01071  
+Re-running at optimal choice of numdims, 52 
+> 
+> kpop_all_svyd <- svydesign(~1, data = pew, 
++                            weights = kbal_all_est$w[kbal_data_sampled ==1])
+> kpop_all <- svymean(~outcome, kpop_all_svyd, na.rm = TRUE)*100
+> numdims_all = kbal_all_est$numdims
+> l1_all = ifelse(!is.null(kbal_all_est$L1_opt),  kbal_all_est$L1_opt, NA)
+> 
+> if(is.null(numdims_all)) {
++     numdims_all = c(NA)
++     numdims_all_se <- data.frame(SE_fixed = NA, 
++                                  SE_quasi = NA, 
++                                  SE_linear = NA, 
++                                  SE_chad = NA)
++ } else {
++     V <-  data.frame(kbal_dims = kbal_all_est$svdK$v[, c(1:kbal_all_est$numdims)])
++     X <- as.matrix(cbind(kbal_all_est$appended_constraint_cols[kbal_data_sampled==1, ], V))
++     
++     cv_fit <- cv.glmnet(X, kpop_all_svyd$variables$outcome, alpha = 0, lambda = lambdas,
++                         penalty.factor = c(rep(0, ncol(kbal_all_est$appended_constraint_cols)),
++                                            rep(1, kbal_all_est$numdims)))
++     
++     lambda_pass = if(lambda_min) { cv_fit$lambda.min} else {cv_fit$lambda.1se}
++     residuals =  kpop_all_svyd$variables$outcome - predict(cv_fit$glmnet.fit,
++                                                            s = lambda_pass, 
++                                                            newx = X)
++     res_kpop_all = data.frame(min = min(residuals), 
++                               perc_25 = quantile(residuals, .25), 
++                               mean = mean(residuals),
++                               perc_75 = quantile(residuals, .75),
++                               var = var(residuals))
++     kpop_all_se <- tryCatch(calc_SEs(Y = kpop_all_svyd$variables$outcome,
++                                      residuals = residuals,
++                                      pop_size = nrow(cces),
++                                      sample_size = nrow(pew),
++                                      weights = weights(kpop_all_svyd)), 
++                             error = function(e) NA)
++     if(length(kpop_all_se) == 1) {
++         kpop_all_se <- data.frame(SE_fixed = NA, 
++                                          SE_quasi = NA, 
++                                          SE_linear = NA, 
++                                          SE_chad = NA)
++     }
++     # names(kpop_all_se) = tryCatch(paste0("kpop_all_", names(kpop_all_se)),
++     #                               error = function(e) NA)
++     rownames(kpop_all_se) = "kpop_all"
++     
++ }
+> 
+> biasbound_r_all = kbal_all_est$biasbound_ratio
+> biasbound_all = kbal_all_est$biasbound_opt
+> rm(kbal_all_est)
+> 
+> rm(svdK)
+> 
+> 
+> 
+> ##### return
+> out = list()
+> b_out = b_kpop
+> 
+> out$est = data.frame(b_out,
++                      tolerance = tolerance, 
++                      maxit = maxit,
++                      POPW = POPW,
++                       kpop = kpop,
++                       kpop_mf = kpop_mf,
++                       kpop_conv = kpop_conv,
++                       kpop_demos = kpop_demos,
++                       kpop_demos_wedu = kpop_demos_wedu,
++                       kpop_all = kpop_all,
++                       bb = biasbound,
++                       bbr = biasbound_r,
++                       bb_conv = biasbound_conv,
++                       bbr_conv = biasbound_r_conv,
++                       bb_mf = biasbound_mf,
++                       bbr_mf = biasbound_r_mf,
++                       bb_demos = biasbound_demos,
++                       bbr_demos = biasbound_r_demos,
++                       bb_demos_wedu = biasbound_demos_wedu,
++                       bbr_demos_wedu = biasbound_r_demos_wedu,
++                       bb_all = biasbound_all,
++                       bbr_all = biasbound_r_all,
++                       numdims,
++                       numdims_conv,
++                       mfnumdims, 
++                       mf_appended_dims, 
++                       numdims_demos,
++                       numdims_demos_wedu,
++                       numdims_all,
++                       l1_orig ,
++                       l1,
++                       l1_conv,
++                       l1_mf,
++                       l1_demos,
++                       l1_demos_weduc,
++                       l1_all)
+> 
+> #Standard Errors:
+> out$SEs = rbind(kpop_se,
++                      kpop_conv_se,
++                      kpop_mf_se,
++                      kpop_demos_se,
++                      kpop_demos_wedu_se,
++                      kpop_all_se)
+> 
+> #weights
+> out$weights = list(b = b_out,
++                    kpop_w = weights(kpop_svyd),
++                    kpop_w_conv = weights(kpop_conv_svyd),
++                    kpop_mf_w = weights(kpop_mf_svyd), 
++                    kpop_demos_w = weights(kpop_demos_svyd),
++                    kpop_demos_wedu_w = weights(kpop_demos_wedu_svyd),
++                    kpop_all_w = weights(kpop_all_svyd))
+> 
+> #residuals
+> out$residuals = rbind(b = b_out,
++                       kpop_res = res_kpop,
++                       kpop_w_conv = res_kpop_conv,
++                       kpop_mf_w = res_kpop_mf,
++                       kpop_demos_w = res_kpop_demos,
++                       kpop_demos_wedu_w = res_kpop_demos_wedu,
++                       kpop_all_w = res_kpop_all
++ )
+> 
+> 
+> 
+> 
+> if(SAVE) {
++     if(TEST) {
++         path = "/Users/Ciara_1/Dropbox/kpop/2023/application/weights/TEST_"
++         out$test_sample = list(rs_cces = rs_cces, 
++                           rs_pew = rs_pew)
++     } else {
++         path = "/Users/Ciara_1/Dropbox/kpop/2023/application/weights/"
++     }
++     save(out, tolerance, maxit, POPW,min_num_dims, max_num_dims, increment,TEST,
++          file = paste0(path, "app_update_raw", 
++                        Sys.Date(), ".Rdata"))
++ }
+>  
+> 
+> proc.time()
+     user    system   elapsed 
+ 4609.053   308.325 17102.707 

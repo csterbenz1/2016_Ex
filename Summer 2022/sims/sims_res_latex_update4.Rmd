@@ -1890,8 +1890,246 @@ gg_out_r5_inter
 
 
 
+\clearpage
+### Closer Look at Standard Errors - Model 3: Non-linear + $\mathbf{R^2=.5}$ (Born w/Interaction)
 
 
+```{r la_se, echo = F}
+##### LA SEs
+load(r5_nonlin_inter_file)
+outcome_obj = r5_nonlin_inter
+good = which(lapply(sims, function (x) return(class(x))) == "list")
+#1. look at SEs:
+est <- lapply(sims, `[[`, 1) %>% bind_rows()
+SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
+methods = "rake|kpop|unweighted"
+SEs = SEs[grepl(methods, colnames(SEs))]
+r5_emp_SEs = suppressWarnings(empirical_SEs(sims = sims[good], na_rm = T))
+
+SE_fixed = SEs[grepl("SE_fixed$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_fixed") %>% mutate(estimator = gsub("_SE_fixed", "", estimator))
+SE_linear = SEs[grepl("SE_linear$", colnames(SEs))] %>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_linear") %>% mutate(estimator = gsub("_SE_linear", "", estimator))
+SE_quasi = SEs[grepl("SE_quasi$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_quasi") %>% mutate(estimator = gsub("_SE_quasi", "", estimator))
+SE_chad= SEs[grepl("SE_chad$", colnames(SEs))]%>% 
+    pivot_longer(everything(),names_to = "estimator", 
+                 values_to = "SE_chad") %>% mutate(estimator = gsub("_SE_chad", "", estimator))
+tot = cbind(SE_fixed, SE_linear[,2], SE_quasi[,2], SE_chad[,2])
+
+cols = grepl("kpop|unweighted|rake", colnames(est))
+SE_boot =  t(as.matrix(apply(est, 2, sd)))
+SE_boot = SE_boot[, cols]
+Boot = data.frame(estimator=names(SE_boot),
+                  SE_Boot = c(SE_boot))
+method ="kpop_all|mf|truth"
+sub = tot %>% filter(grepl(method, estimator) | estimator == "kpop")
+sub2 = sub %>% pivot_longer(cols= c(2:5), names_to = "SE_type") %>% rename(SE = value)
+
+gg_t2 = ggplot(sub2) + 
+    geom_density(aes(x = SE, color = SE_type, fill = SE_type ), alpha = .2) +  
+    geom_vline(aes(xintercept =SE_Boot),
+               data = Boot %>% filter(grepl(method, estimator)| estimator == "kpop")) +
+    annotate(geom = "label",
+             x= .005,
+             y=Inf, vjust = 1.4,
+             color = "Black",
+             parse = T,
+             label =  "sd(Y_hat)") + 
+    theme_bw()  + 
+    xlab("SE Estimate") + 
+    ggtitle("Distribution of SEs by Method and SE Estimator") + 
+    facet_grid(cols = vars(estimator))
+
+
+
+######## Subset Big and Small SEs
+kpop_all_SE = SEs[, grepl("kpop_mf", colnames(SEs))]
+#lets get those in the top 75% percentile
+#start by arranging this will be a bitch if we dont do it by column
+kpop_mf_chad = kpop_all_SE$kpop_mf_SE_chad %>% sort()
+big_SE = which(kpop_all_SE$kpop_mf_SE_chad %in% kpop_mf_chad[round(length(kpop_mf_chad)*.75):length(good)])
+#subset sims by 75%+ SEs vs rest
+b_SE = sims[big_SE]
+s_SE = sims[-big_SE]
+
+
+
+########## Look at samples
+samp_check <- lapply(b_SE, `[[`, 5)
+samp_check = samp_check %>% bind_rows()
+s_samp_check <- lapply(s_SE, `[[`, 5)
+s_samp_check= s_samp_check %>% bind_rows()
+# <= 5%
+#cat("How many samples have strata in outcome/selection model with less than 5% units?\n Below is SEs in the top 75 percentile versus the rest")
+samp = cbind(top_75  = summary(samp_check$check.leq_5pp), lower_75 = summary(s_samp_check$check.leq_5pp))
+
+
+
+##### numdims:
+big_est = est[big_SE,]
+s_est = est[-big_SE,]
+#interesting on avg the bigger SEs have slkightlyu fewer numdims and lower variance in the choice
+#that is the polar opposite of what id expect....bc if the weights have more variance, presumably we have more numdims?
+#but it's the opposite, maybe weightsare  more constrained with more numdims> 
+#cat("What about the average dimensions of K selected?")
+k_avg = cbind(top_75_avg = colMeans(big_est[,grepl("numdims", colnames(est))]), lower_75_avg = colMeans(s_est[,grepl("numdims", colnames(est))]))
+#cat("What about the sd in this choice of dimensions of K selected?")
+k_sd = cbind(top_75_sd = apply(big_est[,grepl("numdims", colnames(est))],2, sd),
+      lower_75_sd = apply(s_est[,grepl("numdims", colnames(est))], 2, sd))
+
+
+
+########## numdims 
+#3. look at var(w) and max and min weights 
+weights = lapply(sims, `[[`, 3) #%>% bind_rows()
+b_weights = weights[big_SE]
+s_weights = weights[-big_SE]
+
+
+#mean summary stats
+t = lapply(b_weights, function(x) data.frame(apply(x, 2, summary)))
+t = t %>% bind_rows()
+min = colMeans(t[grepl("Min", rownames(t)),])
+max = colMeans(t[grepl("Max", rownames(t)),])
+mean = colMeans(t[grepl("Mean", rownames(t)),])
+perc_25 = colMeans(t[grepl("1st", rownames(t)),])
+perc_75 = colMeans(t[grepl("3rd", rownames(t)),])    
+avg_w = rbind(min = min, perc_25 = perc_25, mean = mean, perc_75 = perc_75, max = max)
+
+t = lapply(s_weights, function(x) data.frame(apply(x, 2, summary)))
+t = t %>% bind_rows()
+min = colMeans(t[grepl("Min", rownames(t)),])
+max = colMeans(t[grepl("Max", rownames(t)),])
+mean = colMeans(t[grepl("Mean", rownames(t)),])
+perc_25 = colMeans(t[grepl("1st", rownames(t)),])
+perc_75 = colMeans(t[grepl("3rd", rownames(t)),])    
+avg_w_s = rbind(min = min, perc_25 = perc_25, mean = mean, perc_75 = perc_75, max = max)
+
+
+
+#rounding helps: so min and 25% are slightly lower, but notable that max is in the tenths here
+#round(t(avg_w) - t(avg_w_s),3)#
+
+#lol ok but like we probably just want sd?? lol, indeed look slike sd of weights is bigger for big SEs
+t = lapply(b_weights, function(x) apply(x, 2, sd)) %>% bind_rows()
+s = lapply(s_weights, function(x) apply(x, 2, sd)) %>% bind_rows()
+#cat("Do the larger SEs have weights with, on average, greater variance? Yes!")
+var_w = round(t(rbind(var_lower_75 = colMeans(s)[-1], var_top_75 = colMeans(t)[-1], 
+              Diff = colMeans(t)[-1] - colMeans(s)[-1])),3)
+
+t = b_weights %>% bind_rows()
+s = s_weights %>% bind_rows()
+t = t[, -1]
+s = s[,-1]
+t = t %>% pivot_longer(cols= c(1:7), names_to = "Method") %>% rename(weight = value)
+s = s %>% pivot_longer(cols= c(1:7), names_to = "Method") %>% rename(weight = value)
+ggdat = rbind(t,s) %>% mutate(SE_percentile = c(rep("Top 75%", nrow(t)), rep("Bottom 75%", nrow(s))))
+#ok so there's some HUGE weights in kpop_reduc, let's get rid of those bc we dont really care about this method
+# logi = ggdat$weight >= max(ggdat$weight) - 10
+# # sum(logi)
+# # ggdat[logi, ]
+# ggdat = ggdat %>% filter(Method != "kpop_w_reduc")
+# nrow(ggdat)
+gg_allweights = ggplot(ggdat) + 
+    geom_density(aes(x = weight, color = Method, fill = Method), alpha = .2)+ 
+    theme_bw() + 
+    ggtitle("Distribution of All Weights across sims by SE percentile and Method") + 
+    facet_wrap(~SE_percentile)
+
+
+gg_allweights_zoom = ggplot(ggdat) + 
+    geom_density(aes(x = weight, color = Method, fill = Method), alpha = .2)+ 
+    theme_bw() + 
+    xlim(0, 3) + 
+    ggtitle("Distribution of All Weights across sims by SE percentile and Method (xlim(0,3))") + 
+    facet_wrap(~SE_percentile)
+
+
+t = lapply(b_weights, function(x) apply(x, 2, max)) %>% bind_rows()
+s = lapply(s_weights, function(x) apply(x, 2, max)) %>% bind_rows()
+t = t[, -1]
+s = s[,-1]
+t = t %>% pivot_longer(cols= c(1:7), names_to = "Method") %>% rename(max_weight = value)
+s = s %>% pivot_longer(cols= c(1:7), names_to = "Method") %>% rename(max_weight = value)
+ggdat = rbind(t,s) %>% mutate(SE_percentile = c(rep("Top 75%", nrow(t)), rep("Bottom 75%", nrow(s))))
+gg_max_weights = ggplot(ggdat) + 
+    geom_density(aes(x = max_weight, color = Method, fill = Method), alpha = .2)+ 
+    theme_bw() + 
+    ggtitle("Distribution of Max Weights across sims by SE percentile and Method") + 
+    facet_wrap(~SE_percentile)
+#ok this looks the same... 
+avg_w = avg_w[, -1]
+avg_w_s = avg_w_s[, -1]
+```
+
+#### Sample:
+
+How many samples have strata in outcome/selection model with less than 5% units? Below is SEs in the top 75 percentile versus the rest.
+
+We see that, yes the larger SEs have samples which have slightly more strata with 5% or fewer units in them, however, the difference is slight. We don't appear to be getting crazy wonky samples. Notably no sample has a strata with 1% or fewer  sampled units, sso there are no extremely "bad" samples.
+
+```{r samp_se, echo = F}
+kable(samp,3, format = "latex", booktabs = T,
+                       caption = paste("Distribution of Strata containing less than 5 Percent of Sample Units by SE Percentile: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") )%>% kable_styling(latex_options = "hold_position")
+```
+
+\clearpage
+#### Dimensions of K
+
+What about the dimensions of K that are balanced on? Interestingly we see, that the simulations with larger SEs balance on fewer dimensions of K on average, and have a lower variance in this selection. This is slightly counter-intuitive to me. I would have expected large SEs to correspond with high variance weights that are a result from balancing on a larger, and generally higher range of dimensions of K. Perhaps.however, instead the weights, being less constrained end up with more variance.
+
+```{r k_se, echo = F}
+kable(k_avg,3, format = "latex", booktabs = T,
+                       caption = paste("Avgerage Dimensions of K by SE Percentile: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") )%>% kable_styling(latex_options = "hold_position")
+kable(k_sd,3, format = "latex", booktabs = T,
+                       caption = paste("SD of Dimensions of K by SE Percentile: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") )%>% kable_styling(latex_options = "hold_position")
+```
+
+
+#### Weights
+
+How do the weights look? Indeed larger SEs correspond to weights with generally larger variance as we expect. Looking at the other moments, as we would expect for larger variances, we see that they also have slightly higher max weights and also lower min and 25th percentile weights. Interestingly, however, they have almost the same, even slightly smaller, 75 percentile weights.
+
+```{r weights_se, echo = F}
+kable(round(t(avg_w),3), format = "latex", booktabs = T,
+                       caption = paste("Avg Moments of Top 75 Percentile Weights: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") )%>%
+  kable_styling(latex_options = "hold_position")
+kable(round(t(avg_w_s),3), format = "latex", booktabs = T,
+                       caption = paste("Avg Moments of Bottom 75 Percentile Weights: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") ) %>%
+  kable_styling(latex_options = "hold_position")
+
+#bigger max, smaller min, smaller 25% and 75% 
+#interesting that the larger weights have a larger 75%, though its in the hundreths so its fairly similar
+kable(round(t(avg_w) - t(avg_w_s),3), format = "latex", booktabs = T,
+                       caption = paste("Avg Moments Difference Top 75 Percentile - Bottom: Linear=",outcome_obj$linear," R2=",
+                      round(outcome_obj$R2,2), "Outcome Model") ) %>% kable_styling(latex_options = "hold_position")
+
+```
+
+\clearpage
+
+#### Graphically...
+
+Below is the original plot showing a longer right tail of SEs. The other plots are less informative. Additionally the distribution of all weights across simulation subsetted by whether they yielded SE in the top 25 percentile or not. As we can see in both there are some very large weights, but they are rare and they occur in samples that yield SEs in the top 25th percent and not. Zooming in a bit to a smaller range, we see again that the distribution of the weights looks roughly similar for this SE percentile cutoff.
+Taking a closer look at the large weights specifically, looking at the distirbution of max weights, again, we're not seeing anything all too different between samples taht yield SEs in the top 25 percentile and not.
+\clearpage
+
+```{r se_plot, echo = F, fig.width=12, fig.height=8}
+gg_t2
+gg_allweights
+gg_allweights_zoom
+gg_max_weights
+
+```
 
 
 

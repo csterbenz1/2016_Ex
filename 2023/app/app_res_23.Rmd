@@ -28,6 +28,8 @@ weights_file = "bmaxvar_cat_nodiag_lasso061021_wTRUE_m500_t1e-06_2021-07-07.Rdat
 #no popw (note that estimates are w popw tho oops, weights are without however)
 #weights_file = "app_update_raw2023-04-06_noPOPW.Rdata"
 weights_file = "app_update_raw2023-04-06.Rdata"
+#moving to aMF for everthing
+weights_file = "app_update_june2023-06-28.Rdata"
 POPW = TRUE
 TEST = FALSE
 ```
@@ -152,6 +154,18 @@ formula_ps_all <- ~recode_age_bucket +
     recode_income_5way +
     recode_born +
     recode_educ
+
+
+formula_ps_all <- ~recode_age_3way +
+    recode_female +
+    recode_race +
+    recode_region +
+    recode_pid_3way +
+    recode_income_3way +
+    recode_born +
+    recode_educ
+
+
 
 #fully all available vars: (same as rake all)
 #this has coarsening of relig (12) and attndcgh (9) and income (9), and ofc age already which no specification uses 
@@ -397,6 +411,11 @@ dist_w
 #ggsave(dist_w, file = "/Users/Ciara_1/Dropbox/kpop/2023/application/plots/dist_w_full.pdf", height = 6, width = 10)
 #ggsave(dist_w, file = "/Users/Ciara_1/Dropbox/kpop/2023/application/plots/dist_w_close.pdf", height = 6, width = 10)
 
+
+###quickly look at the correlation bewteen weights and the outcome to see how the var is so reduced?
+sort(apply(weights_bmaxvar, 2, function(x) cor(na.omit(x), pew$diff_cces_on_pew[!is.na(x)] ) ))
+#ok no this makes no sense bc rake_demos has highest corr and it's se is kinda large so...
+#test$comp_df_diff_all %>% select(source, plot_SE) %>% arrange(plot_SE)
 
 ```
 
@@ -1657,7 +1676,7 @@ test = main_res_plot(weights_file = weights_file,
                                               "rake demos_noeduc", "rake demos_weduc", "rake all_vars",
                                              #"post stratification", 
                                               "post strat_reduc",
-                                            # "post strat_all",
+                                             "post strat_all",
                                              "rake retrospective"),
                     specify_kpop = c("kpop", 
                                      #"kpop conv", 
@@ -1706,6 +1725,9 @@ test$kable_diff_allSEs
 #test$comp_df_real_diff
 #svycontrast(svymean(~recode_vote_2016, svydesign(~1, weights = ~1, data = cces)), vote_diff)*100
 
+
+
+
 ```
 
 
@@ -1719,3 +1741,85 @@ test$plot_diff_allSEs
 
 ```
 
+
+
+
+
+
+```{r K_scree}
+############# K Scree plots
+load("/Users/Ciara_1/Dropbox/kpop/2023/application/weights/DEBUG_full_kbal_obj_2023-04-06.Rdata")
+
+# K <- makeK(kbal_est$onehot_data, b=2,
+#            useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#            linkernel = FALSE, scale = FALSE)
+# raw_counts <- -log(K)
+# b_mean <- mean(as.vector(raw_counts))
+# K_bmean<- makeK(kbal_est$onehot_data, b=b_mean, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# K_large <- makeK(kbal_est$onehot_data, b=2*kbal_est$b, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# K_wut <- makeK(kbal_est$onehot_data, b=kbal_est$b, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# K_small<- makeK(kbal_est$onehot_data, b=0.5*kbal_est$b, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# 
+# kbal_est$K[1:3, 1:3]
+# #but these raw counts are already over 2
+# exp(-raw_counts[1:3, 1:3]/(kbal_est$b))
+# 
+# K_large[1:3, 1:3]
+# #see so multiplying by two we get back to the default
+# exp(-raw_counts[1:3,1:3]*2/kbal_est$b)
+# K_wut[1:3,1:3]
+# #ok well def the kbal_est one def has larger var so it's reight
+# #so we currently build the K internall with cat data where we multiply the b we pass out by 2
+# var(as.vector(K_wut))
+# var(as.vector(kbal_est$K))
+
+#k so it's right and for the scree opklot lets do bmaxvar/2 bmaxvar*2
+#that is 
+kbal_est$K[1:3,1:3]
+K_large <- makeK(kbal_est$onehot_data, b=4*kbal_est$b, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+                   linkernel = FALSE, scale = FALSE)
+#the svd is the above with b=2*kbal_est$b
+#then small is
+K_small <- makeK(kbal_est$onehot_data, b=kbal_est$b, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+                   linkernel = FALSE, scale = FALSE)
+
+K_v_small <- makeK(kbal_est$onehot_data, b=kbal_est$b*0.5, useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+                   linkernel = FALSE, scale = FALSE)
+
+K_large[1:3,1:3]
+kbal_est$K[1:3,1:3]
+K_small[1:3, 1:3]
+K_v_small[1:3, 1:3]
+
+K_small_svd <- svd(K_small)
+K_large_svd <- svd(K_large)
+K_v_small_svd <- svd(K_v_small)
+
+ggdata <- data.frame(b = c( rep("2.33 = argmax V(K)*1/4", 2052),
+                            rep("5.66 = argmax V(K)*1/2", 2052),
+                            rep("11.3 = argmax V(K)", 2052),
+                            rep("22.64 = argmax V(K)*2", 2052)),
+                     d = c(K_v_small_svd$d/K_v_small_svd$d[1],
+                           K_small_svd$d/K_small_svd$d[1],
+                           kbal_est$svdK$d/kbal_est$svdK$d[1],
+                           K_large_svd$d/ K_large_svd$d[1]),
+                     index = rep(c(1:2052), 4))
+
+ggplot(ggdata) +
+  geom_line(aes(y = d, x = index, color = as.factor(b))) +
+  xlim(0,50) +
+ # ylim(0,1) +
+  ylab("Singular Values (Scaled)") +
+  xlab("Singular Vector") +
+  scale_color_discrete(name = "b", breaks = c("2.33 = argmax V(K)*1/4",
+                                              "5.66 = argmax V(K)*1/2",
+                                              "11.3 = argmax V(K)", 
+                                              "22.64 = argmax V(K)*2")) +
+  theme_bw()
+ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/screeplot_scaled_variousb.pdf", height = 4, width = 6)
+
+```

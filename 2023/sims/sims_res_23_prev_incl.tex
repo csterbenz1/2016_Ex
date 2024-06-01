@@ -1,0 +1,393 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={kpop Simulation Results},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{kpop Simulation Results}
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+\maketitle
+
+\section{Simulation Details}
+\label{app:simulations}
+
+In Section \ref{subsec:sim_intro} we briefly described our simulation
+study. While \textit{kpop} achieves good balance and low bias estimates
+in our application, we employ a simulation setting to more fully
+investigate performance on both bias and variability. To construct a
+realistic simulation, we employ the same setting above, but specify the
+selection and outcome models to have direct control over the mechanism
+of bias.
+
+\hypertarget{probability-sample-selection-model}{%
+\section{Probability Sample Selection
+Model:}\label{probability-sample-selection-model}}
+
+First, we specify a simplistic but non-linear selection model as
+follows:
+
+\begin{align*}
+p(S=1) &= logit^{-1}\Big( PID(3way) + Age(4way)+ Gender + educ(3way) + Race(4way) \\ 
+&+ BornAgain + PID(3way)*Age(4way) + BornAgain*Age(4way)\Big)
+\end{align*}
+
+Coefficients are chosen to be roughly similar to a fitted model to pew
+that yields a sample size around 500. Namely:
+
+\begin{table}[!h]
+
+\caption{\label{tab:r5_nonlin}Non-Linear Selection Model}
+\centering
+\begin{tabular}[t]{lr}
+\toprule
+  & Coefficient Value\\
+\midrule
+(Intercept) & -2.00\\
+pid\_3wayInd & 2.00\\
+pid\_3wayRep & 2.00\\
+femaleMale & 0.50\\
+age\_bucket36 to 50 & 0.15\\
+\addlinespace
+age\_bucket51 to 64 & 0.20\\
+age\_bucket65+ & 0.20\\
+educ\_3wayCollege & 0.70\\
+educ\_3wayPost-grad & -1.00\\
+raceHispanic & 0.50\\
+\addlinespace
+raceOther & 0.30\\
+raceWhite & 0.70\\
+bornYes & 2.00\\
+age\_bucket36 to 50:recode\_bornYes & 1.00\\
+age\_bucket51 to 64:recode\_bornYes & 1.50\\
+\addlinespace
+age\_bucket65+:recode\_bornYes & 2.00\\
+pid\_3wayInd:recode\_age\_bucket36 to 50 & 0.30\\
+pid\_3wayRep:recode\_age\_bucket36 to 50 & 0.50\\
+pid\_3wayInd:recode\_age\_bucket51 to 64 & 1.00\\
+pid\_3wayRep:recode\_age\_bucket51 to 64 & 1.00\\
+\addlinespace
+pid\_3wayInd:recode\_age\_bucket65+ & -0.20\\
+pid\_3wayRep:recode\_age\_bucket65+ & 2.00\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This yields the following sampling probabilities:
+
+\begin{table}[!h]
+
+\caption{\label{tab:r5_nonlin}Sample Inclusion Probabilities}
+\centering
+\begin{tabular}[t]{lr}
+\toprule
+  & Selection Probability\\
+\midrule
+Min & 0.0008\\
+25\% & 0.0065\\
+Mean & 0.0134\\
+75\% & 0.0158\\
+Max & 0.0167\\
+\addlinespace
+Sum & 513.1844\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\hypertarget{outcome-model}{%
+\section{Outcome Model:}\label{outcome-model}}
+
+To keep things straight forward, the outcome model is identical to the
+selection model. In other words, again we have:
+
+\begin{align*}
+p(Vote=D) &= PID(3way) + Age(4way)+ Gender + educ(3way) + Race(4way) \\
+&+ BornAgain + PID(3way)*Age(4way) + BornAgain*Age(4way)
+\end{align*}
+
+We add normally distributed noise to this outcome with mean zero and
+standard deviation \(\sigma = sd(Y)*1\), yielding an \(R^2\approx.5\).
+To yield negative bias, the coefficients in the outcome model start as
+the inverse of the coefficients in the selection model, then through an
+automated procedure they are adjusted until they produce \(\hat{y}\)'s
+that lie within a probability range. This yields a population target in
+percentage points of \(\bar{Y} =49.14\%\). The correlation between
+selection probability and the probability of voting democratic is
+\(\approx -0.6\). This induces a bias in the unweighted sample around
+-3.5\%.
+
+\begin{table}[!h]
+
+\caption{\label{tab:r5_nonlin}Non-Linear Selection Mode with R2= 0.5 Outcome Model}
+\centering
+\begin{tabular}[t]{lr}
+\toprule
+  & Coefficient Value\\
+\midrule
+(Intercept) & 0.6250\\
+pid\_3wayInd & -0.0750\\
+pid\_3wayRep & -0.0750\\
+femaleMale & -0.0188\\
+age\_bucket36 to 50 & -0.0056\\
+\addlinespace
+age\_bucket51 to 64 & -0.0075\\
+age\_bucket65+ & -0.0075\\
+educ\_3wayCollege & -0.0262\\
+educ\_3wayPost-grad & 0.0375\\
+raceHispanic & -0.0188\\
+\addlinespace
+raceOther & -0.0112\\
+raceWhite & -0.0262\\
+bornYes & -0.0750\\
+age\_bucket36 to 50:recode\_bornYes & -0.0375\\
+age\_bucket51 to 64:recode\_bornYes & -0.0562\\
+\addlinespace
+age\_bucket65+:recode\_bornYes & -0.0750\\
+pid\_3wayInd:recode\_age\_bucket36 to 50 & -0.0112\\
+pid\_3wayRep:recode\_age\_bucket36 to 50 & -0.0188\\
+pid\_3wayInd:recode\_age\_bucket51 to 64 & -0.0375\\
+pid\_3wayRep:recode\_age\_bucket51 to 64 & -0.0375\\
+\addlinespace
+pid\_3wayInd:recode\_age\_bucket65+ & 0.0075\\
+pid\_3wayRep:recode\_age\_bucket65+ & -0.0750\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\hypertarget{results}{%
+\section{Results:}\label{results}}
+
+We compare \textit{kpop} and \textit{kpop mf} against the same set of
+mean calibration specifications discussed at length in the application
+in section \ref{subsec:appmethods}. This including raking demographics,
+demographics with education and raking on all variables. We also compare
+performance against post stratification, stratifying on the true sample
+selection model. Notably, even though our model is fairly simplistic,
+the complexity of the full cross-sectional strata is such that empty
+cells post a challenge for post-stratification. On average,
+post-stratification must drop around 22\% of population units due to
+missing strata in the sample. Finally, we include mean calibration on
+the true selection model which meats the (link) linear ignorability
+assumption as well as the canonical Horvitz-Thompson estimator.
+
+\hypertarget{bias-and-mse}{%
+\subsection{Bias and MSE}\label{bias-and-mse}}
+
+The resulting bias across a full range of methods is displayed in the
+table below.
+
+\begin{table}[!h]
+
+\caption{\label{tab:non_lin_res_race_r55_inter}Simulation Results (arranged by MSE)}
+\centering
+\begin{tabular}[t]{lrrr}
+\toprule
+  & Bias (p.p.) & MSE & Abs Bias Reduction\\
+\midrule
+Unweighted & -3.509 & 12.587 & 0.000\\
+mean calibration (demos) & -1.607 & 2.856 & 0.542\\
+mean calibration (demos+edu) & -1.291 & 1.943 & 0.632\\
+mean calibration (all) & -0.029 & 0.224 & 0.992\\
+kpop & -0.289 & 0.365 & 0.918\\
+\addlinespace
+kpop+mf (demos) & -0.162 & 0.274 & 0.954\\
+kpop+mf (demos+edu) & -0.156 & 0.266 & 0.956\\
+kpop+mf (all) & 0.003 & 0.239 & 0.999\\
+Horvitz-Thompson (true) & -0.073 & 9.127 & 0.979\\
+post-stratification (true) & -1.127 & 1.577 & 0.679\\
+\addlinespace
+mean calibration (true) & -0.012 & 0.211 & 0.997\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\hypertarget{box-plot-of-estimates-by-method}{%
+\subsubsection{Box Plot of Estimates by
+Method}\label{box-plot-of-estimates-by-method}}
+
+To see these results visually, we can examine a box plot.
+
+\includegraphics{sims_res_23_prev_incl_files/figure-latex/unnamed-chunk-6-1.pdf}
+
+\hypertarget{standard-errors}{%
+\subsection{\texorpdfstring{Standard Errors
+\label{sims:SEs}}{Standard Errors }}\label{standard-errors}}
+
+The following table present both the empirical standard errors across a
+number of estimators that are reviewed and can be easily referenced in
+Kott, Phillip S. ``Calibration weighting in survey sampling.'' Wiley
+Interdisciplinary Reviews: Computational Statistics 8.1 (2016): 39-53.
+These include including SEs that assume fixed weights, SEs that us
+linearization variance estimation (eqn 15), and SEs that assume a
+quasi-probability sampling process (eqn 14).
+
+\begin{table}[!h]
+
+\caption{\label{tab:SEs}Empirical SE Results \textbf{in Percent} for kpop Methods 1000 sims $R^2$ on Outcome =  0.497}
+\centering
+\begin{tabular}[t]{lrrrr}
+\toprule
+  & kpop & \makecell[c]{kpop+mf\\(demos)} & \makecell[r]{kpop+mf\\(d+edu)} & \makecell[l]{kpop+mf\\(all)}\\
+\midrule
+SE fixed & 0.532 & 0.531 & 0.527 & 0.524\\
+SE linear & 0.518 & 0.515 & 0.497 & 0.476\\
+SE quasi & 0.518 & 0.514 & 0.495 & 0.473\\
+sd(y hat) & 0.531 & 0.498 & 0.492 & 0.490\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Next, we evaluate the coverage of these various SE estimators and see
+all have about nominal or higher coverage.
+
+\begin{table}[!h]
+
+\caption{\label{tab:coverage}Bias-Adjusted SE Coverage Results for kpop Methods 1000 sims $R^2$ on Outcome =  0.497}
+\centering
+\begin{tabular}[t]{lrrrr}
+\toprule
+  & kpop & \makecell[c]{kpop+mf\\(demos)} & \makecell[r]{kpop+mf\\(d+edu)} & \makecell[l]{kpop+mf\\(all)}\\
+\midrule
+SE fixed & 0.957 & 0.958 & 0.959 & 0.966\\
+SE linear & 0.951 & 0.950 & 0.945 & 0.949\\
+SE quasi & 0.952 & 0.950 & 0.945 & 0.949\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\hypertarget{weights-diagnostics}{%
+\subsection{Weights Diagnostics}\label{weights-diagnostics}}
+
+The following table shows the average moments of the weights by method
+across 1000 simulations. Note that \textit{"Effective SS"} refers to the
+effective sample size calculated using Kish's expression
+\(\frac{\left(\sum_i w_i\right)^2}{\sum_i w_i^2}\), but is not well
+referenced against a set sample size since we this varied across
+simulutions because we used bernoulli draws. The average sample size
+should be \(\sum(p(S=1))\) (printed below).
+\textit{"No. Units to 90\% Sum of Total"} is the number of units
+required to sum to \(90%
+\) of the total sum of the weights when weights are ordered from largest
+to smallest. In other words, summing from the largest weights to the
+smallest, we require this number of units to get to \(90%
+\) of the total sum of the weights.
+
+\begin{table}[!h]
+
+\caption{\label{tab:weights}Average Moments of Weights by kpop Method across 1000 simulations}
+\centering
+\begin{tabular}[t]{lrrrrrr}
+\toprule
+Estimator & Variance & Max & Min & IQR & \makecell[r]{Effective SS\\(Kish)} & \makecell[l]{No. Units to 90\%\\Sum of Total}\\
+\midrule
+kpop & 0.583 & 5.969 & 0.167 & 0.692 & 329.095 & 379.443\\
+kpop+mf (all) & 0.499 & 5.268 & 0.125 & 0.709 & 343.554 & 381.592\\
+kpop+mf (d+edu) & 0.500 & 5.817 & 0.174 & 0.642 & 345.008 & 389.062\\
+kpop+mf (demos) & 0.613 & 6.625 & 0.138 & 0.660 & 322.200 & 381.177\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\hypertarget{dimensions-of-k}{%
+\subsection{Dimensions of K}\label{dimensions-of-k}}
+
+\begin{table}[!h]
+
+\caption{\label{tab:unnamed-chunk-8}Average Dimensions of K w/ R2= 0.5 Outcome Model}
+\centering
+\begin{tabular}[t]{lrr}
+\toprule
+  & Average & SD\\
+\midrule
+kpop & 47.260 & 23.631\\
+kpop+mf (all) & 1.255 & 1.123\\
+kpop+mf (demos) & 28.095 & 12.677\\
+kpop+mf (demos+edu) & 15.600 & 8.427\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

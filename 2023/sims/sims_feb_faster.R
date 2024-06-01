@@ -1,6 +1,7 @@
 ### Packages
 library(MASS)
-library(tidyverse)
+library(dplyr)
+library(ggplot2)
 library(survey)
 #devtools::install_github("csterbenz1/KBAL", ref = "cat_kernel")
 library(kbal)
@@ -35,7 +36,7 @@ maxit = 500
 increment = 5
 min_num_dims = NULL
 max_num_dims = NULL
-eval_kpop = T
+eval_kpop = TRUE
 SAVE = TRUE #save .Rdata results?
 #Need to adjust accordingly to machine for adequate number of sims
 #for cluster
@@ -57,7 +58,7 @@ bern = FALSE
 #if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
 noise = 1 
 #if coverage_eval= T: adjusts sample size by dividing p(S) by scalar pS_denom (i.e. pS = plogis(XBeta)/pS_denom)
-pS_denom = 60
+pS_denom = 30
 #use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
 manual_lambda = FALSE 
 #T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
@@ -470,7 +471,6 @@ if(!coverage_eval) {
         
         xbeta = cces_expanded %*% coefs
         p_include = plogis(xbeta)
-        pS_denom = 60
         p_include = p_include/pS_denom
         sum(p_include)
         
@@ -726,11 +726,11 @@ calc_SEs <- function(Y, residuals, pop_size, weights, sample_size) {
 }
 
 
-# if(detectCores() < 20) {
-#     nsims = 500
-#     eval_kpop = F
-#     SAVE = F
-# }
+if(detectCores() < 20) {
+    nsims = 10
+    eval_kpop = T
+    SAVE = F
+}
 #double check params are as expected:
 nsims
 sum(p_include)

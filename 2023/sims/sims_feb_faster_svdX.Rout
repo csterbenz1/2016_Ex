@@ -1,0 +1,770 @@
+
+R version 3.6.0 (2019-04-26) -- "Planting of a Tree"
+Copyright (C) 2019 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin15.6.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> ### Packages
+> library(MASS)
+Warning message:
+package ‘MASS’ was built under R version 3.6.2 
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following object is masked from ‘package:MASS’:
+
+    select
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(ggplot2)
+Warning message:
+package ‘ggplot2’ was built under R version 3.6.2 
+> library(survey)
+Loading required package: grid
+Loading required package: Matrix
+Loading required package: survival
+
+Attaching package: ‘survey’
+
+The following object is masked from ‘package:graphics’:
+
+    dotchart
+
+Warning message:
+package ‘Matrix’ was built under R version 3.6.2 
+> #devtools::install_github("csterbenz1/KBAL", ref = "cat_kernel")
+> library(kbal)
+> library(parallel)
+> library(knitr)
+Warning message:
+package ‘knitr’ was built under R version 3.6.2 
+> library(glmnet)
+Loaded glmnet 4.1-1
+Warning message:
+package ‘glmnet’ was built under R version 3.6.2 
+> library(tictoc)
+Warning message:
+package ‘tictoc’ was built under R version 3.6.2 
+> 
+> ###### SET PARAMS  ###############
+> set.seed(9345876)
+> 
+> # if(detectCores() > 10) {
+> #   path_data = "/home/csterbenz/Data/"
+> #   cores_saved = 10
+> #   eval_kpop = T
+> # } else if(detectCores() != 4) {
+> #   path_data= "/Users/Ciara_1/Dropbox/kpop/Updated/application/data/"
+> #   cores_saved = 3
+> # } else {
+> #     path_data= "/Users/Ciara/Dropbox/kpop/Updated/application/data/"
+> #     cores_saved = 2
+> # }
+> path_data= "/Users/Ciara_1/Dropbox/kpop/Updated/application/data/"
+> cores_saved = 2
+> 
+> 
+> options(dplyr.print_max = 1e9)
+> #fit kpop and others to cces with populations weights?
+> POPW = FALSE
+> # to run with a linear kernel so it's way faster; UPDATE: errors catch this as mistake and prevent
+> TEST = FALSE 
+> #ebal tolerance and max iterations for kpop
+> tolerance = 1e-4
+> maxit = 500
+> #adjust these both for runtime
+> increment = 5
+> min_num_dims = NULL
+> max_num_dims = NULL
+> eval_kpop = T
+> SAVE = TRUE #save .Rdata results?
+> #Need to adjust accordingly to machine for adequate number of sims
+> #for cluster
+> #nsims = (detectCores()-cores_saved)*14*2
+> #First test with 10 sims
+> #test runtime w/  1 iteration per core
+> #nsims = (detectCores()-cores_saved)*1
+> #full run nsims approx 1000
+> # nsims = (detectCores()-cores_saved)*60
+> nsims = 1000
+> 
+> ##### Central Params to adjust
+> #T=selection and outcome model are identical and directly specified w OLS with noise added after the fact;F= legacy; selection model is specified and regularized w/ lasso; outcome is previously run lasso model of cces three way vote choice fitted values = p(D) - p(R) 
+> coverage_eval = TRUE 
+> #if coverage_eval=T: use linear or nonlinear model  
+> linear_model = FALSE 
+> #if coverage_eval=T: add bernoulli noise by drawing binary from p(S=1)?
+> bern = FALSE 
+> #if coverage_eval=T: sd(y)*noise; 1-> r^2 = .5; sqrt(2) -> r^2 = .33; 1/2*sqrt(2) -> r^2 = .66;
+> noise = 1 
+> #if coverage_eval= T: adjusts sample size by dividing p(S) by scalar pS_denom (i.e. pS = plogis(XBeta)/pS_denom)
+> pS_denom = 60
+> #use the manually specified range of lambdas in the ridge residualization or allow glmnet to choose internally?
+> manual_lambda = FALSE 
+> #T=lambda as that which minimizes cverror in residualization; F= 1 sd from min choice
+> lambda_min = FALSE 
+> 
+> #if coverage_eval=F: Legacy arg for coverage_eval = F that adj sample size as p(S)*(n_sample/sum(p(S)) + intercept_shift
+> n_sample = 500 
+> #if coverage_eval=F: Legacy arg for coverage_eval = F that flips selection model
+> simple_selection_model = TRUE 
+> 
+> 
+> ###################### Formulas ################
+> formula_rake_demos_noeduc <- ~recode_age_bucket + recode_female + recode_race +
++   recode_region + recode_pid_3way
+> 
+> #updated to include 6 way edu
+> formula_rake_demos_weduc <- ~recode_age_bucket + recode_female +
++   recode_race + recode_region + recode_educ + recode_pid_3way
+> 
+> formula_rake_all_vars <- ~recode_age_bucket + recode_female +
++   recode_race + recode_region + recode_pid_3way + recode_educ +
++   recode_income_5way + recode_relig_6way + recode_born + recode_attndch_4way
+> 
+> formula_ps <- ~recode_age_3way + recode_female + recode_race +
++   recode_region + recode_educ_wh_3way + recode_pid_3way
+> 
+> # if(coverage_eval &!linear_model) {
+> #     formula_ps <- ~recode_age_3way + recode_female + recode_pid_3way
+> # } else if(coverage_eval) {
+> #     formula_ps <- ~recode_age_3way + recode_pid_3way
+> # }
+> 
+> formula_ps_reduc <- ~recode_age_3way + recode_female +
++   recode_race + recode_region + recode_pid_3way  +
++   recode_income_3way + recode_born + recode_educ_wh_3way
+> 
+> # #let's coarsen income and religion and attend church for all:
+> formula_ps_all <- ~recode_age_3way + recode_female +
++   recode_race + recode_region + recode_pid_3way + recode_educ_3way +
++   recode_income_3way + recode_relig_6way + recode_born + recode_attndch_bin
+> 
+> create_targets <- function (target_design, target_formula) {
++   target_mf <- model.frame(target_formula, model.frame(target_design))
++   target_mm <- model.matrix(target_formula, target_mf)
++   wts <- weights(target_design)
++ 
++   return(colSums(target_mm * wts) / sum(wts))
++ }
+> 
+> manual_rescale <- function(dat, a =0, b= 1) {
++     rescaled = (b-a)*( dat - min(dat))/(max(dat) - min(dat)) + a
++     return(rescaled)
++ }
+> 
+> ### Post-stratification function
+> ## For now assumes that strata variable is already created and in
+> ## the data set and called "strata"
+> postStrat <- function(survey, pop_counts, pop_w_col, strata_pass, warn = T) {
++   survey_counts <- survey %>%
++     group_by(!!as.symbol(strata_pass)) %>%
++     summarize(n = n()) %>%
++     ungroup() %>%
++     mutate(w_survey = n / sum(n))
++ 
++   pop_counts <- pop_counts %>%
++     rename(w_pop = matches(pop_w_col))
++   
++   if(warn == T & nrow(survey_counts) !=  nrow(pop_counts)) {
++       missing_strat = pop_counts[! (( pop_counts[, strata_pass]%>% pull()) %in% (survey_counts[, strata_pass]%>% pull() )), strata_pass]
++       warning(paste("Strata in Pop not found in Sample. Dropping", 
++                     sum(pop_counts[(pop_counts[, strata_pass] %>% pull()) %in% 
++                                        (missing_strat %>% pull()),"n" ]), 
++                     "empty cells\n"), immediate.  =T )
++   } 
++   post_strat <- pop_counts %>%
++     left_join(survey_counts, by = strata_pass) %>%
++     filter(!is.na(w_survey)) %>%
++     ## Normalizes back to 1 after dropping
++     ## empty cells
++     mutate(w_pop = w_pop * 1/sum(w_pop),
++            w = w_pop / w_survey) %>%
++     dplyr::select(!!as.symbol(strata_pass), w)
++ 
++   survey <- survey %>%
++     left_join(post_strat)
++ 
++   return(survey)
++ }
+> 
+> check_sample <- function(sample, selection_model) {
++     check = model.matrix(selection_model, data = sample)
++     check = colSums(check)
++     fail = check[which(check ==0)]
++     fail_bin = length(check[which(check ==0)]) > 0 
++     check_prop = check/nrow(sample)
++     
++     return(list(samp_prop = check_prop,
++                 fail  = fail, 
++                 fail_bin = fail_bin,
++                 counts = check))
++ }
+> 
+> check_sample_outcome <- function(sample, selection_model, interaction_cols, interaction_cols_2 = NULL) {
++     
++     vars = all.vars(selection_model)
++     var = NULL
++     counts = NULL
++     prop = NULL
++     u_outcome = NULL
++     #uninteracted variables
++     for(i in 1:length(vars)) {
++         t = sample %>% group_by_at(vars[i]) %>%
++             summarise(n = n(), 
++                       avg_outcome = mean(outcome)) %>%
++             mutate(prop = round(n/nrow(sample),4))
++         var = c(var, as.character(t[,1] %>% pull()))
++         counts = c(counts, t$n)
++         prop = c(prop,  t$prop)
++         u_outcome = c(u_outcome, t$avg_outcome)
++     }
++     #interactions
++     t = suppressMessages(sample %>% group_by_at(interaction_cols) %>% 
++         summarise(n = n(),
++                   avg_outcome = mean(outcome)) %>%
++         mutate(prop = round(n/nrow(sample), 4)))
++     interaction = apply(t, 1,  function(r) paste(r[1],r[2], collapse = "_"))
++     counts = data.frame(var  = c(var, interaction),
++                n = c(counts, t$n), 
++                prop = c(prop, t$prop),
++                avg_outcome = c(u_outcome, t$avg_outcome))
++     
++     if(!is.null(interaction_cols_2)) {
++         t2 = suppressMessages(sample %>% group_by_at(interaction_cols_2) %>% 
++                                  summarise(n = n(),
++                                            avg_outcome = mean(outcome)) %>%
++                                  mutate(prop = round(n/nrow(sample), 4)))
++         interaction = apply(t2, 1,  function(r) paste(r[1],r[2], collapse = "_"))
++         append = cbind(data.frame(var = interaction), t2[, - c(1,2)])
++         counts = rbind(counts, append)
++     }
++     
++     fail = sum(counts$n == 0)
++     bad = sum(counts$prop <= 0.05)
++     bad_strata = data.frame(strata = as.character(counts$var[counts$prop <= 0.05]), prop = counts$prop[counts$prop <= 0.05])
++     v_bad = sum(counts$prop <= 0.01)
++     v_bad_strata = data.frame(strata = as.character(counts$var[counts$prop <= 0.01]), prop = counts$prop[counts$prop <= 0.01])
++     counts$var[counts$prop <= 0.01]
++     
++     counts = counts %>% mutate(leq_5pp = as.numeric(prop <= 0.05),
++                                leq_1pp = as.numeric(prop <= 0.01))
++     
++    
++     return(list(counts = counts,
++                 fail = fail, 
++                 bad = bad, 
++                 v_bad = v_bad, 
++                 bad_strata = bad_strata,
++                 v_bad_strata = v_bad_strata))
++ }
+> 
+> check_outcome <- function(outcome) {
++     beyond_support = (min(outcome) <0 | max(outcome) > 1)
++     return(beyond_support)
++ }
+> 
+> bound_outcome <- function(outcome, coefs, increment = 1, increment_intercept = .01, noise, cces_expanded, silent = T) {
++     denom = 10
++     fail = check_outcome(outcome)
++     while(fail) {
++         denom = denom + increment
++         if(!silent) { cat(denom, ": ") }
++         coefs_use = coefs/denom
++         outcome = cces_expanded %*% coefs_use
++         
++         outcome = outcome + rnorm(nrow(cces_expanded), mean = 0, sd = sd(outcome)*noise)
++         summary(outcome)
++         if(max(outcome) <=1 & min(outcome) <0 ) {
++             coefs[1] = coefs[1] + increment_intercept
++             if(!silent) { cat("\nmoving intercept up", coefs[1],  "\n") }
++             denom = denom - increment
++         }
++         if(max(outcome) >1 & min(outcome) >=0 ) {
++             coefs[1] = coefs[1] - increment_intercept
++             if(!silent) { cat("\nmoving intercept down", coefs[1],  "\n") }
++             denom = denom - increment
++         }
++         fail = check_outcome(outcome)
++         if(!silent) { cat(round(min(outcome),2), round(max(outcome),2),  "\n") }
++     }
++     if(!silent) { cat(paste("Min denom:", denom)) }
++     return(list(outcome = outcome, coefs = coefs_use, denom = denom))
++     
++ }
+> 
+> 
+> ############# Load Data #####################
+> #these data have been cleaned already see app_modeled for how it was done
+> ## Load Pew
+> pew <- readRDS(paste0(path_data, "pew_lasso_061021.rds"))
+> pew$recode_age_bucket = as.character(pew$recode_age_bucket)
+> pew$recode_age_3way= as.character(pew$recode_age_3way)
+> ### Load Target Data
+> cces <- readRDS(paste0(path_data, "cces_lasso_061021.rds"))
+> cces$recode_age_bucket = as.character(cces$recode_age_bucket)
+> cces$recode_age_3way= as.character(cces$recode_age_3way)
+> 
+> cces <- cces %>% mutate(recode_agesq = recode_age^2/ mean(recode_age^2),
++                         recode_agecubed = recode_age^3/ mean(recode_age^3))
+> 
+>  ##################### LASSO: Selection #############################
+> 
+> 
+> #income, religion, pid x race
+> if(!coverage_eval) {
++ 
++     if(simple_selection_model) {
++         #first attempt to make this worse
++         # selection_model = as.formula(~recode_pid_3way:poly(recode_age, 2) +
++         #                                  recode_female:recode_pid_3way)
++         #first attempt to make this worse
++         #center age then square
++         pew = pew %>% mutate(centered_age = scale(recode_age, scale = F))
++         cces = cces %>% mutate(centered_age = scale(recode_age, scale = F))
++ 
++         selection_model = as.formula(~recode_pid_3way*poly(centered_age, 2) +
++                                          #recode_age:recode_pid_3way +
++                                          recode_female*recode_pid_3way)
++ 
++         #selection_model = as.formula(~recode_pid_3way + recode_age_bucket + recode_female)
++ 
++     } else {
++         selection_model = as.formula(~recode_female:recode_pid_3way +
++                                          recode_age:recode_pid_3way +
++                                          #adds a bit mroe bias to edu+d
++                                          recode_pid_race +
++                                          recode_race_reg_wh_educ +
++                                          recode_educ_wh_3way +
++                                          poly(recode_age, 3))
++     }
++     # Stack data with S = 1 indicating Pew
++     stack_data <- data.frame(bind_rows(pew, cces),
++                              S = c(rep(1, nrow(pew)), rep(0, nrow(cces))))
++ 
++ 
++     mod <- model.matrix(selection_model, data = stack_data)
++     nrow(mod)
++     ## Remove columns where Pew missing strata
++     ncol(mod)
++     mod <- mod[, apply(mod[stack_data$S == 1, ], 2, sum) != 0]
++     ## Remove columns where CCES missing Strata
++     mod <- mod[, apply(mod[stack_data$S == 0, ], 2, sum) != 0]
++     ncol(mod)
++     lasso_lambda <- cv.glmnet(x= mod[,-1],
++                               y = as.matrix(stack_data$S),
++                               alpha = 1,
++                               family = "binomial",
++                               intercept = TRUE)
++     lasso_lambda$lambda.min
++     lasso_include <- glmnet(x= mod[,-1],
++                             y = as.matrix(stack_data$S),
++                             alpha = 1,
++                             lambda = lasso_lambda$lambda.min,
++                             weights = if(POPW){ c(rep(1, nrow(pew)),
++                                                   cces$commonweight_vv_post)} else {NULL},
++                             family = "binomial",
++                             intercept = TRUE)
++ 
++     lasso_include_coefs <- coef(lasso_include)
++     res <- as.matrix(lasso_include_coefs)
++     #View(res)
++     ncol(mod)
++     sum(lasso_include_coefs == 0)
++ 
++     lasso_include_coefs
++     lasso_pinclude = predict(lasso_include,
++                              s= lasso_lambda$lambda.min,
++                              type = "response",
++                              newx = mod[stack_data$S == 0,-1])
++ 
++     p_include <- lasso_pinclude
++     sum(p_include)
++     cor(p_include, cces$outcome)
++     cor(p_include, cces$mod_cces_on_cces_pD)
++     cor(p_include, cces$mod_cces_on_cces_pR)
++ 
++     ########### Sampling Inclusion Results
++     summary(p_include)
++     sum(p_include)
++     mean(p_include)
++     p_include_raw = p_include
++ 
++ 
++     intercept_shift = 0
++     p_include = p_include*(n_sample/sum(p_include)) + intercept_shift
++     mean(p_include)
++     summary(p_include)
++     sum(p_include)
++ 
++     #################### Define Outcome #########
++     cces$outcome = cces$diff_cces_on_cces
++ } else {
++     if(linear_model) {
++         ########## DESIGN SELECTION MODEL: Specifying Coefs Directly
++         #coefs: pid, age, gender
++         selection_model = as.formula(~recode_pid_3way + recode_age_bucket + recode_female)
++         inter = NULL
++         cces_expanded = model.matrix(selection_model, data = cces)
++         #needs to be n x p X p x 1 -> coef matrix is p x 1
++         coefs = matrix(NA,nrow = ncol(cces_expanded), ncol =1 )
++         rownames(coefs) = colnames(cces_expanded)
++         coefs[,1] = c(-5.2, #intercept
++                       .1, #selection of indep pos
++                       .4, #selection of R pos
++                       .1, #36-50,
++                       .3, #51-64,
++                       .8, #65+,
++                       .4 #male pos
++         )
++         
++         xbeta = cces_expanded %*% coefs
++         p_include = plogis(xbeta)
++         sum(p_include)
++         summary(p_include)
++         
++         #################### DESIGN OUTCOME MODEL ##################
++         coefs_outcome = coefs
++         
++         coefs_outcome[,1] = c(6.1, #intercept
++                               -.3, #  indep pos #decreasing lowers mean, increases corr #try 1
++                               -1.1, #  R pos #empirically
++                               -.2 ,#36-50, #empirically in cces lean dem 50% #.55
++                               -.3, #51-64, #empirically lean rep slightly 50%
++                               -.7, #65+, #empirically lean rep 51%
++                               #base cat: 18-35 lean strongly dem 58%
++                               -.7 #male #empirically women lean dem 53%
++         )
++         coefs_outcome = coefs_outcome/10
++         
++         xbeta_outcome = cces_expanded %*% coefs_outcome
++         #cat(paste("Orig mean scaled outcome", round(mean(xbeta_outcome)*100, 3) , "\n"))
++         #summary(xbeta_outcome)
++         if(!bern) {
++             cat(paste("Adding sd(outcome)*",round(noise, 3), "\n"))   
++             xbeta_outcome = xbeta_outcome + rnorm(nrow(cces), mean = 0, sd = sd(xbeta_outcome)*noise)
++         }
++         
++         # summary(xbeta_outcome)
++         # cor(xbeta_outcome, p_include)
++         # cces[which(xbeta_outcome == min(xbeta_outcome)),
++         #      c("recode_pid_3way", "recode_age_bucket", "recode_female" )]
++         # cces[which(xbeta_outcome == max(xbeta_outcome)),
++         #      c("recode_pid_3way", "recode_age_bucket", "recode_female" )]
++         
++         #plot(density(xbeta_outcome))
++         #cat(paste("Mean outcome w/noise is", round(mean(xbeta_outcome)*100,3), "\n"))
++         if(bern) {
++             cat(paste("Adding bernoulli",round(noise, 3), "\n"))  
++             xbeta_outcome = rbinom(nrow(cces), 1, xbeta_outcome) 
++         }
++         cat(paste("Range of outcome w/noise is\n"))
++         cat(paste(summary(xbeta_outcome), "\n"))
++         if(min(xbeta_outcome) <0 | max(xbeta_outcome) > 1) {warning("outcome beyond prob support for some units when noise is added", immediate. = T)}
++         s = summary(lm(xbeta_outcome ~ recode_pid_3way + recode_age_bucket + recode_female,data = cces))
++         R2_outcome = s$adj.r.squared
++         cat(paste("R^2 outcome is", round(s$adj.r.squared,3), "\n"))
++         cat(paste("Mean scaled outcome (target) is", round(mean(xbeta_outcome)*100,3)))
++         cat(paste("\nCorr of sampling prob and outcome ", round(cor(xbeta_outcome, p_include),3)))
++         #bernoulli draw
++         
++         cces$outcome = xbeta_outcome
++     } else {
++         
++         selection_model = as.formula(~recode_pid_3way + recode_female + recode_age_bucket 
++                                      + recode_educ_3way 
++                                      + recode_race
++                                      + recode_born 
++                                      + recode_born:recode_age_bucket
++                                      + recode_pid_3way:recode_age_bucket
++         )
++         inter = c("recode_pid_3way", "recode_age_bucket")
++         inter_2 = c("recode_born", "recode_age_bucket")
++         cces_expanded = model.matrix(selection_model, data = cces)
++         coefs = matrix(NA,nrow = ncol(cces_expanded), ncol =1 )
++         rownames(coefs) = colnames(cces_expanded)
++         coefs
++         #(p(S)) for negative bias select non dem voters
++         coefs[,1] = c(-2, #intercept -5 w race
++                       2, #selection of indep pos
++                       2, #selection of R pos
++                       .5, #male
++                       .15, #36-50,
++                       .2, #51-64,
++                       .2, #65+,
++                       .7, #college
++                       -1 , #post-grad
++                       .5,#hispanic
++                       .3,#other
++                       .7,#white
++                        2, #bornagain
++                       1,#bornagain x 36-50
++                       1.5, #bornagain x 51-64
++                       2, #bornagain x 65+
++                       .3,#ind x 36-50
++                       .5, #rep x 36-50,
++                       1, #ind x 51-64,
++                       1, #rep x 51-64,
++                       -.2, #ind x 65+
++                       2 #rep x 65+
++         )
++         
++         xbeta = cces_expanded %*% coefs
++         p_include = plogis(xbeta)
++         p_include = p_include/pS_denom
++         sum(p_include)
++         
++         # LA:tinkering
++         # sample <- rbinom(nrow(cces), 1, p_include)
++         # sum(sample)
++         # survey_sim <- cces[sample == 1, ]
++         # 
++         # check_sample_outcome(survey_sim, selection_model, inter)
++         # #check_sample_outcome(survey_sim, selection_model, inter_2)
++         # n_distinct(cces$strata) - n_distinct(survey_sim$strata)
++         # dropped_strata = unique(cces$strata)[which(!(unique(cces$strata) %in%
++         #                                                  unique(survey_sim$strata)))]
++         # cces %>% filter(strata %in% dropped_strata) %>% count()
++         # 
++         # la = data.frame(pS = p_include, pid = cces$recode_pid_3way) %>%
++         #     group_by(pid) %>% summarise(max = round(max(pS)*100,2 ))
++         # # la
++         # #
++         # # check_sample_outcome(survey_sim,selection_model, inter)
++         # gg_dat = data.frame(Selection_Probability = p_include,
++         #                     Pid = cces$recode_pid_3way,
++         #                     Outcome_pD = NA)
++         # gg_p_include_pid = ggplot(gg_dat) +
++         #     geom_density(aes(x= Selection_Probability, color = Pid)) +
++         #     annotate(geom = "label", x=quantile(p_include,.25),y=Inf, vjust = 1,
++         #              color = "red",
++         #              label =  paste0("Dem Max P(S)= ", la[la$pid =="Dem", "max"], "%")) +
++         #     annotate(geom = "label",x=quantile(p_include,.25), y=Inf, vjust =3,
++         #              label= paste0("Ind Max P(S)= ", la[la$pid =="Ind", "max"], "%" ),
++         #              color = "green") +
++         #     annotate(geom = "label",x=quantile(p_include,.25), y=Inf, vjust = 5,
++         #              label= paste0("Rep Max P(S)= ", la[la$pid =="Rep", "max"], "%" ),
++         #              color = "blue") +
++         #     # geom_text(x=.10, y=250, label= paste0("Dem Max P(S)=", la[la$pid =="Dem", "max"] ),
++         #     #           color = "red") +
++         #     #  geom_text(x=.10, y=200, label= paste0("Ind Max P(S)=", la[la$pid =="Ind", "max"] ),
++         #     #           color = "green") +
++         #     #  geom_text(x=.10, y=150, label= paste0("Rep Max P(S)=", la[la$pid =="Rep", "max"] ),
++         #     #           color = "Blue") +
++         #     ggtitle("Distribution of Seleciton Probabilities by Party") +
++         #     theme_bw()
++         # gg_p_include_pid
++         # 
++         #most likely to select: rep, 65+, male, protestants
++         # cces[which(p_include == max(p_include)),
++         #      c("recode_pid_3way", "recode_age_bucket", "recode_female", "recode_relig_6way")]
++         # #summary(p_include)
++         
++         #################### DESIGN OUTCOME MODEL ##################
++         coefs_outcome = coefs
++         #p(D)
++         # coefs_outcome[,1] = c(37, #intercept
++         #                       -3,#-.5, #selection of indep pos
++         #                       -5,# -.8, #selection of R pos
++         #                       -.3, #male
++         #                       -.5, #36-50,
++         #                       -.1, #51-64,
++         #                       -.2, #65+,
++         #                       .8, #college
++         #                       .9,  #post-grad
++         #                       -.5,#hispanic
++         #                       -.7,#other
++         #                       -3,#white
++         #                        -5, #bornagain
++         #                       # -3,#bornagain x 36-50
++         #                       # -3.5, #bornagain x 51-64
++         #                       # -4, #bornagain x 65+
++         #                       -3,#ind x 36-50
++         #                       -4, #rep x 36-50,
++         #                       -5, #ind x 51-64,
++         #                       -6, #rep x 51-64,
++         #                       3.5, #ind x 65+
++         #                       -4.5 #rep x 65+
++         # )
++         #this -coefs method gets good bias on ps and other raking but rake all is p good :/
++         coefs_outcome = -coefs
++         cor(p_include, cces_expanded %*% coefs_outcome)
++         coefs_outcome = coefs_outcome*1.5
++         cor(p_include, cces_expanded %*% coefs_outcome)
++         coefs_outcome[1] = 25
++         cor(p_include, cces_expanded %*% coefs_outcome)
++         if(!bern) {
++             cat(paste("Adding sd(outcome)*",round(noise, 3), "\n")) 
++             set.seed(1383904)
++             bound = bound_outcome(outcome = cces_expanded %*% coefs_outcome,
++                                   coefs = coefs_outcome,
++                                   cces_expanded = cces_expanded,
++                                   noise = noise, silent = F)
++             coefs_outcome = bound$coefs
++             xbeta_outcome = bound$outcome
++             beyond_support = check_outcome(xbeta_outcome)
++         
++             if(min(xbeta_outcome) <0 | max(xbeta_outcome) > 1) {
++                 warning("Outcome beyond prob support for some units when noise is added",
++                                                                         immediate. = T)
++             }
++         } else {
++             cat(paste("Adding bernoulli noise",noise, "\n"))  
++             set.seed(1383904)
++             xbeta_outcome = rbinom(nrow(cces), 1, xbeta_outcome) 
++             cat(paste("Corr of S (one sample draw) and Y", round(cor(sample, xbeta_outcome),3)))
++         }
++         # summary(xbeta_outcome)
++         # cor(xbeta_outcome, p_include)
++         # cces[which(xbeta_outcome == min(xbeta_outcome)),
++         #      c("recode_pid_3way", "recode_age_bucket", "recode_female")]
++         # cces[which(xbeta_outcome == max(xbeta_outcome)),
++         #      c("recode_pid_3way", "recode_age_bucket", "recode_female")]
++         # 
++         #plot(density(xbeta_outcome))
++         #cat(paste("Mean outcome w/noise is", round(mean(xbeta_outcome)*100,3), "\n"))
++         
++         cat(paste("Range of outcome w/noise is\n"))
++         cat(paste(summary(xbeta_outcome), "\n"))
++         s = summary(lm(update(selection_model, xbeta_outcome ~ .),data = cces))
++         R2_outcome = s$adj.r.squared
++         cat(paste("R^2 outcome is", round(s$adj.r.squared,3), "\n"))
++         cat(paste("Mean scaled outcome (target) is", round(mean(xbeta_outcome)*100,3)))
++         cat(paste("\nCorr of sampling prob and outcome ", round(cor(xbeta_outcome, p_include),3)))
++         cces$outcome = xbeta_outcome
++         
++         # #LA: 
++         # gg_dat = data.frame(Selection_Probability = p_include,
++         #                     Pid = cces$recode_pid_3way,
++         #                     Outcome_pD = cces$outcome)
++         # gg_p_include_outcome = ggplot(gg_dat) +
++         #     geom_point(aes(x= Selection_Probability, y= Outcome_pD, color = Pid)) +
++         #     theme_bw()
++         # gg_p_include_outcome
++         
++     }
++     
++ }
+Adding sd(outcome)* 1 
+11 : -0.03 3.57 
+12 : -0.1 3.08 
+13 : -0.22 2.97 
+14 : -0.16 2.74 
+15 : -0.02 2.55 
+16 : -0.05 2.34 
+17 : -0.11 2.14 
+18 : -0.23 2.13 
+19 : -0.02 1.99 
+20 : 
+moving intercept down 24.99 
+0.01 1.99 
+20 : 
+moving intercept down 24.98 
+0.03 1.94 
+20 : -0.03 1.85 
+21 : 
+moving intercept down 24.97 
+0 1.79 
+21 : -0.01 1.85 
+22 : -0.1 1.76 
+23 : -0.06 1.58 
+24 : 0 1.63 
+25 : 
+moving intercept down 24.96 
+0.03 1.48 
+25 : 
+moving intercept down 24.95 
+0.01 1.53 
+25 : -0.06 1.51 
+26 : -0.04 1.46 
+27 : -0.07 1.48 
+28 : -0.04 1.36 
+29 : -0.05 1.41 
+30 : -0.06 1.31 
+31 : -0.1 1.22 
+32 : -0.01 1.16 
+33 : -0.04 1.21 
+34 : 
+moving intercept down 24.94 
+0.03 1.18 
+34 : 
+moving intercept down 24.93 
+0.01 1.11 
+34 : -0.13 1.1 
+35 : -0.03 1.11 
+36 : -0.09 1.03 
+37 : -0.09 1.01 
+38 : -0.07 1.02 
+39 : 
+moving intercept up 24.94 
+-0.01 0.96 
+39 : 
+moving intercept up 24.95 
+-0.03 0.97 
+39 : 
+moving intercept up 24.96 
+-0.05 0.99 
+39 : 
+moving intercept up 24.97 
+-0.01 0.96 
+39 : -0.08 1.01 
+40 : 
+moving intercept up 24.98 
+-0.07 0.96 
+40 : 
+moving intercept up 24.99 
+-0.02 0.94 
+40 : 
+moving intercept up 25 
+-0.03 0.93 
+40 : 0.03 0.95 
+Min denom: 40Range of outcome w/noise is
+Min.   :0.02652   
+ 1st Qu.:0.40756   
+ Median :0.49534   
+ Mean   :0.49143   
+ 3rd Qu.:0.57859   
+ Max.   :0.95386   
+R^2 outcome is 0.497 
+Mean scaled outcome (target) is 49.143
+Corr of sampling prob and outcome  -0.635> 
+> if(coverage_eval) {
++     formula_ps <- selection_model
++ } else {
++     formula_ps <- ~recode_age_3way + recode_pid_3way + recode_female
++ }
+> 
+> ######### Make STRATA variable in CCES and Pew ############
+> cces <- bind_cols(cces, cces %>%
++                       unite("strata", all.vars(formula_ps), remove = FALSE) %>%
++                       unite("strata_reduc", all.vars(formula_ps_reduc),
++                             remove = FALSE) %>%
++                       unite("strata_all", all.vars(formula_ps_all)) %>%
++                       dplyr::select(strata, strata_reduc, strata_all))
+Error in unite(., "strata_all", all.vars(formula_ps_all)) : 
+  could not find function "unite"
+Calls: bind_cols -> list2 -> %>% -> <Anonymous>
+Execution halted

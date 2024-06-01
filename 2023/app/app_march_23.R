@@ -213,7 +213,6 @@ if(DEBUG) {
                        Sys.Date(), ".Rdata"))
 }
 
-
 l1_orig = ifelse(!is.null(kbal_est$L1_orig),kbal_est$L1_orig, NA)
 l1 = ifelse(!is.null(kbal_est$L1_opt),kbal_est$L1_opt, NA)
 
@@ -689,8 +688,6 @@ out$residuals = rbind(b = b_out,
                       kpop_demos_wedu_w = res_kpop_demos_wedu,
                       kpop_all_w = res_kpop_all
 )
-
-
 
 
 if(SAVE) {

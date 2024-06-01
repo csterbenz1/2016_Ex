@@ -1,5 +1,5 @@
 ---
-title: "Kpop Simulation Results - 2023"
+title: "Kpop Simulation Results: v2 - 2023"
 output: pdf_document
 header-includes:
   - \usepackage{graphicx}
@@ -18,7 +18,9 @@ library(survey)
 
 ```{r filenames, include = F}
 #r5 non-linear 1k sims:
-r5_nonlin_file = "/Users/Ciara_1/Dropbox/kpop/2023/sims/res_kpopTRUElambdaminFALSEmanFALSE_noise1_on2023-04-18_nsims1000.RData"
+#r5_nonlin_file = "/Users/Ciara_1/Dropbox/kpop/2023/sims/res_kpopTRUElambdaminFALSEmanFALSE_noise1_on2023-04-18_nsims1000.RData"
+
+r5_nonlin_file = "/Users/Ciara_1/Downloads/res_kpopTRUElambdaminFALSEmanFALSE_noise1_on2023-06-07_nsims528.RData"
 #load data
 path_data= "/Users/Ciara_1/Dropbox/kpop/Updated/application/data/"
 ### Load Target Data
@@ -44,7 +46,7 @@ all_SE_coverage <- function(sims, adjust_bias = FALSE, drop_NA = F, truth = NULL
     est <- lapply(sims, `[[`, 1) %>% bind_rows()
     if(adjust_bias) {
         temp = est[grepl(methods, colnames(est))]
-        avg_bias = colMeans(temp) - truth
+        avg_bias = colMeans(temp, na.rm = drop_NA) - truth
         # avg_bias
         # la %>% group_by(estimator) %>% summarise(unique(avg_bias)/100)
         # avg_bias
@@ -59,7 +61,6 @@ all_SE_coverage <- function(sims, adjust_bias = FALSE, drop_NA = F, truth = NULL
     SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
     est_c = est[grepl(methods, colnames(est))]
     SEs = SEs[grepl(methods, colnames(SEs))]
-    
     
     if(drop_NA) {
         n_drop = NULL
@@ -174,6 +175,7 @@ empirical_SEs <- function(sims, eval_kpop = T, return_svy_package = F, na_rm = F
 
 
 ```{r r5_nonlin, echo = F}
+cat("Loading file:", r5_nonlin_file)
 load(r5_nonlin_file)
 
 #Selection Model:
@@ -253,7 +255,7 @@ gg_p_include_outcome = ggplot(gg_dat) +
 ## Non-Linear Selection Model 3: (Born w/interaction)
 
 \begin{align*}
-p(S=1) &= logit^{-1}\Big( PID(3way) + Age(4way)+ Gender + Educ(3way) + Race(4way) \\ 
+p(S=1) &= logit^{-1}\Big( PID(3way) + Age(4way)+ Gender + Educ(6way) + Race(4way) \\ 
 &+ BornAgain + PID(3way)*Age(4way) + BornAgain*Age(4way)\Big)
 \end{align*}
 
@@ -270,21 +272,13 @@ selection_prob_kable %>%
   kable_styling(latex_options = "hold_position")
 ```
 
-Looking visually at the selection probabilities by party id, we see clear non-linearity, with a favoratism toward republican and indepdendent voters
-
-```{r, echo = F, fig.width=10, fig.height=8}
-gg_p_include_pid
-```
-
 \clearpage
-
 ## Non-Linear Outcome: 
-
 
 To keep things straight forward, the outcome model is identical to the selection model. In other words, again we have:
 
 \begin{align*}
-p(Vote=D) &= PID(3way) + Age(4way)+ Gender + Educ(3way) + Race(4way) \\
+p(Vote=D) &= PID(3way) + Age(4way)+ Gender + Educ(6way) + Race(4way) \\
 &+ BornAgain + PID(3way)*Age(4way) + BornAgain*Age(4way)
 \end{align*}
 
@@ -303,36 +297,18 @@ cat(paste0("Target= ", round(mean(outcome),4)*100,
 ```
 
 
+\clearpage
 # Results: 
-
-## Post-Stratification Dropped Cells
-
-Even with the fairly limited complexity of the outcome and selection models, post-stratification is forced to drop a significant number of units, $\approx20%$, in the population due to empty cells/missing strata in the sample.
-
-```{r ps_drop_m3, echo = F}
-good = which(lapply(sims, function (x) return(class(x))) == "list")
-temp = sims[good]
-ps_dropped <- lapply(temp, `[[`, 5) %>% bind_rows()
-
-cat(paste0("PS must drop an average of ", round(mean(ps_dropped$dropped_cells),2),
-           " (sd=", round(sd(ps_dropped$dropped_cells)), ")",
-           " which is ", round(100*(mean(ps_dropped$dropped_cells)/nrow(cces)),2),"% of the population\n"))
-```
-
 
 ## Bias
 
-Recall the true model includes: pid, gender, age buckets, 3way education and race. So it looks like our automated MF routine **"kpop_mf"** is potentially looking like the best recommendation?
+Recall the true model includes: pid, gender, age buckets, 6way education, race, and boran again status.
 
-
-
-
-- **"post_stratification"** applies ps on the true model (pid, education (3way), gender, age (4way), race, bornagain)
-- **"post_stratification (reduc)"** not relevant any more to model (pid, gender, age (3way= X), race, region (X), income(3way = X) bornagain, edu x white (3way = X)
+- **"post_stratification"** applies ps on the true model (pid, education (6way), gender, age (4way), race, bornagain)
 - **"rake_truth"** calibrates on the true model (pid, education (6way), gender, age (3way), race, bornagain)
 - **"kpop Converged"** refers to default kpop with the full data, but forcing ebalance convergence. 
 
-The other kpop methods have constraints appended to match the variables in each of the raking methods with names referring accordingly. **kpop+MF (XX)** appends "XX" variables directly while **kpop aMF** is the automated mean first approach.
+The other kpop methods have constraints appended to match the variables in each of the raking methods with names referring accordingly. **kpop+MF (XX)** appends "XX" variables directly while **kpop aMF** is the automated mean first approach which uses the svd of all X.
 
 - **"Demos"** appends age_buckets (4way), gender, race (4way), region (4way), and pid (3way) **"Demos+Edu"** adds education (6way) to these (NB: note that this "demos" model is almost the true model, but adds region and misses 3way education so it's interesting it seems to do so well)
 - **"All"** appends all available variables including age buckets, gender, race, region, pid, education, income (5way), religion (5way), born-again (binary), and church attendance (4way).
@@ -340,6 +316,7 @@ The other kpop methods have constraints appended to match the variables in each 
 
 
 ```{r r5_res, echo=F}
+good = which(lapply(sims, function (x) return(class(x))) == "list")
 #box plot of estimates
 est <- lapply(sims[good], `[[`, 1) %>% bind_rows()
 plot = est
@@ -436,9 +413,9 @@ table_r5 = plot_lasso_margin_r5 %>%
     mutate(estimator_name = gsub("\n", " ", estimator_name)) %>%
     group_by(estimator_name) %>%
     summarize(
-        Bias = mean(margin - margin_sim),
+        Bias = mean(margin - margin_sim, na.rm = T),
         #SE_boot= sd(margin),
-        MSE = mean((margin - margin_sim)^2)
+        MSE = mean((margin - margin_sim)^2, na.rm = T)
     ) %>% arrange(-abs(Bias))
 
 dplyr_sux = table_r5 %>% filter(estimator_name == "Unweighted") %>% dplyr::select(Bias) %>% pull()
@@ -446,6 +423,8 @@ table_r5 = table_r5 %>% mutate("Bias Reduction" = 1- Bias / dplyr_sux)
 table_r5 = as.data.frame(table_r5)
 rownames(table_r5) = table_r5$estimator_name
 table_r5 = table_r5[,-1]
+
+cat("Note that Raking on the True Model fails to converge ", sum(is.na(est$rake_truth))/nrow(est)*100, "percent of the time")
 
 #SE coverage
 SE_coverage = all_SE_coverage(sims[good], truth = mean(outcome), adjust_bias = T, drop_NA = T)
@@ -499,6 +478,26 @@ kable(table_r5_paper, format = "latex", booktabs = T, digits = 3,
 ```
 
 
+\clearpage
+
+### Box Plot of Estimates by Method
+
+
+```{r eval =F, include = F, fig.width=8, fig.height=6}
+
+gg_out_r5
+ggsave("/Users/Ciara_1/Dropbox/kpop/2023/sims/plots/sims_all_methods_boxplot.pdf",
+      width = 8.5, height = 4.5)
+
+gg_out_r5_paper
+ggsave("/Users/Ciara_1/Dropbox/kpop/2023/sims/plots/sims_paper_methods_boxplot.pdf",
+      width = 8.5, height = 4.5)
+
+```
+
+```{r echo=F,fig.width=8, fig.height=6}
+gg_out_r5
+```
 
 ### Margins: Average Weighted Mean Absolute Error 
 
@@ -531,7 +530,7 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
       recode_race + recode_region + recode_pid_3way + recode_educ_3way +
       recode_income_3way + recode_relig_6way + recode_born + recode_attndch_bin
     
-    margins <- lapply(sims, `[`, 8)
+    margins <- lapply(sims, `[`, 7)
     margins = margins[good]
     margins <- as.data.frame(margins) 
     #we centered agesq and agecubed in the sims
@@ -576,11 +575,11 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                                      colnames(margins))] %>% rowMeans(),
       post_stratification = margins[,grepl("margins.post_stratification",
                                         colnames(margins))] %>% rowMeans(),
-      post_strat_reduc = margins[,grepl("margins.post_strat_reduc",
-                                        colnames(margins))] %>% rowMeans(),
-      post_strat_all = margins[,grepl("margins.post_strat_all",
-                                        colnames(margins))] %>% rowMeans(),
-      rake_truth = margins[,grepl("margins.rake_truth", colnames(margins))] %>% rowMeans())
+      # post_strat_reduc = margins[,grepl("margins.post_strat_reduc",
+      #                                   colnames(margins))] %>% rowMeans(),
+      # post_strat_all = margins[,grepl("margins.post_strat_all",
+      #                                colnames(margins))] %>% rowMeans(),
+      rake_truth = margins[,grepl("margins.rake_truth", colnames(margins))] %>% rowMeans(na.rm = T))
     
     rownames(margins_base) <-  gsub("recode_", "", rownames(margins_base))
         
@@ -612,8 +611,8 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                                             rake_demos_weduc = cces - rake_demos_weduc,
                                             rake_all = cces - rake_all,
                                             post_stratification = cces - post_stratification,
-                                            post_strat_reduc = cces - post_strat_reduc,
-                                            post_strat_all = cces - post_strat_all,
+                                            #post_strat_reduc = cces - post_strat_reduc,
+                                            #post_strat_all = cces - post_strat_all,
                                             rake_truth = cces - rake_truth)
     rownames(margins_diff) <- rownames(margins_total)
     
@@ -647,10 +646,10 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                         rake_demos_weduc = mean(abs(rake_demos_weduc)), 
                         kpop_all = mean(abs(kpop_all)),
                         rake_all = mean(abs(rake_all)), 
-                        #post_stratification =mean(abs(post_stratification)),
-                        post_strat_reduc =mean(abs(post_strat_reduc)),
+                        post_stratification =mean(abs(post_stratification)),
+                        #post_strat_reduc =mean(abs(post_strat_reduc)),
                         #post_strat_all =mean(abs(post_strat_all)),
-                        rake_truth = mean(abs(rake_truth)))
+                        rake_truth = mean(abs(rake_truth), na.rm = T))
         
         } else {
           #combining the factored age bins into a weighted L1 distance
@@ -676,10 +675,10 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                         rake_demos_weduc = mean(abs(rake_demos_weduc)), 
                         kpop_all = mean(abs(kpop_all)),
                         rake_all = mean(abs(rake_all)), 
-                        #post_stratification =mean(abs(post_stratification)),
-                        post_strat_reduc =mean(abs(post_strat_reduc)),
+                        post_stratification =mean(abs(post_stratification)),
+                        #post_strat_reduc =mean(abs(post_strat_reduc)),
                         #post_strat_all =mean(abs(post_strat_all)),
-                        rake_truth = mean(abs(rake_truth)))
+                        rake_truth = mean(abs(rake_truth), na.rm = T))
         
         }
     wmabserr_nooutcomes <- wmabserr %>%
@@ -706,14 +705,14 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
         })
     
     truth_aes <-  sapply(wmabserr_nooutcomes$var, function(x) {
-            ifelse(grepl(x, as.character(selection_model)[2]) | x %in% c("agesq", "agecubed"), "gray", "black")
+            ifelse(grepl(x, as.character(selection_model)[2]), "gray", "black")
         })
     ps_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
             ifelse(grepl(x, as.character(formula_ps)[2]), "gray", "black") })
-    ps_reduc_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
-            ifelse(grepl(x, as.character(formula_ps_reduc)[2]) & x!= "race" , "gray", "black") })
-    ps_all_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
-            ifelse(grepl(x, as.character(formula_ps_all)[2]), "gray", "black") })
+    # ps_reduc_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+    #         ifelse(grepl(x, as.character(formula_ps_reduc)[2]) & x!= "race" , "gray", "black") })
+    # ps_all_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
+    #         ifelse(grepl(x, as.character(formula_ps_all)[2]), "gray", "black") })
     
     kpop_demos_aes <- noedu_aes
     kpop_demos_wedu_aes <- wedu_aes
@@ -748,7 +747,8 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                                       "Mean Calib:\n(D+Edu)",
                                       "kpop + MF:\n(All)",
                                       "Mean Calib:\n(All)",
-                                      "Post-Strat\n(Reduc)",
+                                      #"Post-Strat\n(Reduc)",
+                                      "Post-Strat",
                                       "Mean Calib:\n(True Model)"))
     
     #drop age cubed and age factor rows which are last two rows
@@ -772,8 +772,8 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
                                 color =kpop_all_aes[-c((nrow(kable_prep)-1):nrow(kable_prep))]) %>%
                         column_spec(which(colnames(wmabserr_nooutcomes) == "rake_truth"),
                                 color =truth_aes[-c((nrow(kable_prep)-1):nrow(kable_prep))]) %>% 
-                        column_spec(which(colnames(wmabserr_nooutcomes) == "post_strat_reduc"),
-                                                  color =ps_reduc_aes[-c((nrow(kable_prep)-1):nrow(kable_prep))])
+                        column_spec(which(colnames(wmabserr_nooutcomes) == "post_stratification"),
+                                                  color =ps_aes[-c((nrow(kable_prep)-1):nrow(kable_prep))])
     
     out = list(kable_margins = kable_margins,
                wmabserr = wmabserr,
@@ -784,7 +784,7 @@ sim_margins <- function(sims_file, pop_weighted_avg = TRUE) {
 
 
 margins = sim_margins(sims_file = r5_nonlin_file)
-margins$kable_margins
+margins$kable_margins %>% landscape(margin = NULL)
 
 #other margins/outcomes
 # kable_om <- kable(wmabserr %>% 
@@ -802,37 +802,21 @@ margins$kable_margins
 
 
 
+
+
+
 \clearpage
-
-### Box Plot of Estimates by Method
-
-```{r echo=F,fig.width=8, fig.height=6}
-gg_out_r5
-```
-
-
-```{r eval =F, include = F, fig.width=8, fig.height=6}
-
-gg_out_r5
-ggsave("/Users/Ciara_1/Dropbox/kpop/2023/sims/plots/sims_all_methods_boxplot.pdf",
-      width = 8.5, height = 4.5)
-
-gg_out_r5_paper
-ggsave("/Users/Ciara_1/Dropbox/kpop/2023/sims/plots/sims_paper_methods_boxplot.pdf",
-      width = 8.5, height = 4.5)
-
-```
 
 ### SE Distributions:
 
-Distribution of our 1000 SE estimates by weighting method and SE estimator:
+Distribution of SE estimates by weighting method and SE estimator:
 
 ```{r SE_dist, echo = F}
 
 ##### LA SEs
 #1. look at SEs:
-est <- lapply(sims, `[[`, 1) %>% bind_rows()
-SEs <- lapply(sims, `[[`, 2) %>% bind_rows()
+est <- lapply(sims[good], `[[`, 1) %>% bind_rows()
+SEs <- lapply(sims[good], `[[`, 2) %>% bind_rows()
 methods = "rake|kpop|unweighted"
 SEs = SEs[grepl(methods, colnames(SEs))]
 r5_emp_SEs = suppressWarnings(empirical_SEs(sims = sims[good], na_rm = T))
@@ -851,7 +835,7 @@ SE_chad= SEs[grepl("SE_chad$", colnames(SEs))]%>%
 tot = cbind(SE_fixed, SE_linear[,2], SE_quasi[,2], SE_chad[,2])
 
 cols = grepl("kpop|unweighted|rake", colnames(est))
-SE_boot =  t(as.matrix(apply(est, 2, sd)))
+SE_boot =  t(as.matrix(apply(est, 2, sd, na.rm = T)))
 SE_boot = SE_boot[, cols]
 Boot = data.frame(estimator=names(SE_boot),
                   SE_Boot = c(SE_boot))
@@ -864,7 +848,8 @@ gg_t2 = ggplot(sub2) +
     geom_vline(aes(xintercept =SE_Boot),
                data = Boot %>% filter(grepl(method, estimator)| estimator == "kpop")) +
     annotate(geom = "label",
-             x= .005,
+             #x= .005,
+             x = 0.010,
              y=Inf, vjust = 1.4,
              color = "Black",
              parse = T,
@@ -883,11 +868,15 @@ gg_t2
 
 ### Weights Diagnostics
 
-The following table shows the average moments of the weights by method across 1000 simulations. Note that \textbf{"Effective SS"} refers to the effective sample size, but is not well referenced against a set sample size since we this varied across simulutions because we used bernoulli draws. The average sample size should be $\sum(p(S=1)) = 513.1844$ and which empirically was on average 512.337. \textbf{"sum 90perc"} is the number of units required to sum to $90%$ of the total sum of the weights when weights are ordered from largest to smallest. In other words, summing from the largest weights to the smallest, we require this number of units to get to $90%$ of the totall sum of the weights.
+The following table shows the average moments of the weights by method across 1000 simulations. Note that \textbf{"Effective SS"} refers to the effective sample size, but is not well referenced against a set sample size since we this varied across simulutions because we used bernoulli draws. The average sample size should be $\sum(p(S=1))$ (printed below). \textbf{"sum 90perc"} is the number of units required to sum to $90%$ of the total sum of the weights when weights are ordered from largest to smallest. In other words, summing from the largest weights to the smallest, we require this number of units to get to $90%$ of the totall sum of the weights.
+
+```{r, echo = F}
+cat("sum(p(S=1)) is:", sum(p_include), "empirically, our simulated samples have average n:", mean(est$n))
+```
 
 ```{r weights, echo = F, cache = T}
-weights = lapply(sims,`[[`, 3)
-b_vec = unique(weights %>% bind_rows() %>% select(b) %>% pull())
+weights = lapply(sims[good],`[[`, 3)
+b_vec = unique(weights %>% bind_rows() %>% dplyr::select(b) %>% pull())
 #length(b_vec)
 #for each sim: get weights summay
 summary_w = lapply(weights, function(nsim) {
@@ -945,11 +934,48 @@ kable(final_sum, digits = 3, format = "latex", booktabs = T,
 
 
 \clearpage
+
+
+### Dimensions of K
+
+```{r, echo = F}
+k_avg = cbind(k_avg = colMeans(est[,grepl("numdims", colnames(est))]),
+              k_sd = apply(est[,grepl("numdims", colnames(est))],2, sd))
+rownames(k_avg) = c("Kpop", "Kpop+Conv", "Kpop+aMF", "Kpop+MF(Demos)", "Kpop+MF(Demos+Edu)", "Kpop+MF(all)")
+
+kable(k_avg,3, format = "latex", booktabs = T,
+                       caption = paste("Avgerage Dimensions of K w/ R2=",
+                      round(R2_outcome,2), "Outcome Model") )%>% kable_styling(latex_options = "hold_position")
+
+```
+
+
+
+
+## Post-Stratification Dropped Cells
+
+Even with the fairly limited complexity of the outcome and selection models, post-stratification is forced to drop a significant number of units, in the population due to empty cells/missing strata in the sample.
+
+```{r ps_drop_m3, echo = F}
+
+temp = sims[good]
+ps_dropped <- lapply(temp, `[[`, 5) %>% bind_rows()
+
+cat(paste0("PS must drop an average of ", round(mean(ps_dropped$dropped_cells),2),
+           " (sd=", round(sd(ps_dropped$dropped_cells)), ")",
+           " which is ", round(100*(mean(ps_dropped$dropped_cells)/nrow(cces)),2),"% of the population\n"))
+```
+
+
+\clearpage
+
+<!---
 # Into the Weeds: 
 
 Before we subset SEs into top 75% largest and bottom 25% smallest. I've dropped that in again here, but the results are consistent with what we were seeing before.
 
-```{r la_se, echo = F}
+```{r la_se, echo = F, }
+sims = sims[good]
 ######## Subset Big and Small SEs
 kpop_all_SE = SEs[, grepl("kpop_mf", colnames(SEs))]
 #lets get those in the top 75% percentile
@@ -957,10 +983,10 @@ kpop_all_SE = SEs[, grepl("kpop_mf", colnames(SEs))]
 kpop_mf_chad = kpop_all_SE$kpop_mf_SE_chad %>% sort()
 big_SE = which(kpop_all_SE$kpop_mf_SE_chad %in% kpop_mf_chad[round(length(kpop_mf_chad)*.75):length(good)])
 #subset sims by 75%+ SEs vs rest
+#big_SE = big_SE[big_SE %in% good]
+#n_big_SE = good[!(good %in% big_SE)]
 b_SE = sims[big_SE]
 s_SE = sims[-big_SE]
-
-
 
 ########## Look at samples
 samp_check <- lapply(b_SE, `[[`, 6) %>% bind_rows()
@@ -1056,6 +1082,8 @@ avg_w_s = avg_w_s[, -1]
 ```
 
 
+
+<!--
 ### Closer Look at Standard Errors: 
 
 
@@ -1074,7 +1102,7 @@ We see that, yes the larger SEs have samples which have slightly more strata wit
 \clearpage
 #### Dimensions of K
 
-What about the dimensions of K that are balanced on? We see, that the simulations with larger SEs balance on fewer dimensions of K on average, and have a lower variance in this selection. This makes sense as weights that balance on a greater number of dimensions of U account for more variance in the outcome yielding smaller SEs.
+What about the dimensions of K that are balanced on?
 
 ```{r k_se, echo = F}
 kable(k_avg,3, format = "latex", booktabs = T,
@@ -1116,9 +1144,10 @@ Below is the original plot showing a longer right tail of SEs. The other plots a
 Taking a closer look at the large weights specifically, looking at the distirbution of max weights, again, we're not seeing anything all too different between samples taht yield SEs in the top 25 percentile and not.
 \clearpage
 
-```{r se_plot, echo = F, fig.width=12, fig.height=8}
+```{r se_plot, echo = F, include = F, fig.width=12, fig.height=8}
 gg_allweights
 gg_allweights_zoom
 gg_max_weights
 
 ```
+ --> 

@@ -51,6 +51,8 @@ out$est$bb*out$est$bbr
 
 #2. check kernel is the same in both
 load("/Users/Ciara_1/Dropbox/kpop/2023/application/weights/DEBUG_full_kbal_obj_2023-04-06.Rdata")
+kbal_est$K[1:10,1:10]
+kbal_est$onehot_data[1:10, 1:10]
 kbal_est$w[1:10]
 new_w[1:10]
 orig_w[1:10]
@@ -123,13 +125,16 @@ kbal_data_sampled <- c(rep(1, nrow(pew)), rep(0, nrow(cces[subset,])))
 
 #categorical kernel + b range:
 #get raw counts:
+kbal_data[1:10, 1:3]
+kbal_est$onehot_data[1:10, 1:3]
+
 K <- makeK(kbal_data, b=2, useasbases = kbal_data_sampled,
            linkernel = FALSE, scale = FALSE)
 
 raw_counts <- -log(K)
 #check this:
-# K[1:3, 1:3]
-# exp(-sum((kbal_data[1, ] - kbal_data[2,])^2)/2)
+K[1:3, 1:3]
+exp(-sum((kbal_data[1, ] - kbal_data[2,])^2)/2)
 # exp(-sum((kbal_data[2, ] - kbal_data[3,])^2)/2)
 # raw_counts[1:3 ,1:3]
 # sum((kbal_data[1, ] - kbal_data[2,])^2)
@@ -158,12 +163,61 @@ res = optimize(var_K, n_d, length(diag(K)),
 
 
 b_maxvar <- res$maximum
+b_maxvar
 K <- makeK(kbal_data, b=b_maxvar*2, useasbases = kbal_data_sampled,
            linkernel = FALSE, scale = FALSE)
+res$objective
+var(as.vector(K))
 #yep
 kbal_est$K[1:5, 1:5]
 K[1:5, 1:5]
+exp(-sum((kbal_data[1, ] - kbal_data[2,])^2)/b_maxvar)
+exp(-sum((kbal_data[1, ] - kbal_data[2,])^2)/(b_maxvar*2))
 
+raw_counts[1:10]
+K_b1 <- makeK(kbal_data, b=1,
+           useasbases = kbal_data_sampled,
+           linkernel = FALSE, scale = FALSE)
+raw_counts_b1 <- -log(K_b1)
+raw_counts_b1[1:10] == 2*raw_counts[1:10]
+
+n_d_b1 <- data.frame(diff = c(raw_counts_b1)) %>% group_by(diff) %>% summarise(n())
+res = optimize(var_K, n_d_b1, length(diag(K)),
+               interval=c(0,2000), maximum=TRUE)
+
+res$maximum
+res$objective
+
+kbal_est$K[1:5, 1:5]
+K_b1_bestb <- makeK(kbal_data, b=res$maximum,
+              useasbases = kbal_data_sampled,
+              linkernel = FALSE, scale = FALSE)
+K_b1_bestb[1:10, 1:10]
+
+K_b1_bestb <- makeK(kbal_est$onehot_data, b=res$maximum,
+                    useasbases = kbal_data_sampled,
+                    linkernel = FALSE, scale = FALSE)
+K_b1_bestb[1:10, 1:10]
+
+
+### sqrt(2)
+kbal_data_sqrt2 = kbal_est$onehot_data*sqrt(1/2)
+K_bsqrt2 <- makeK(kbal_data_sqrt2, b=1,
+                    useasbases = kbal_data_sampled,
+                    linkernel = FALSE, scale = FALSE)
+raw_counts_sqrt2 = -log(K_bsqrt2)
+n_d_b1_sqrt <- data.frame(diff = c(raw_counts_sqrt2)) %>% group_by(diff) %>% summarise(n())
+res_sqrt = optimize(var_K, n_d_b1_sqrt, length(diag(K)),
+               interval=c(0,2000), maximum=TRUE)
+
+res_sqrt$maximum
+res_sqrt$objective
+
+K_maxvar_sqrt = makeK(kbal_data_sqrt2, b=res_sqrt$maximum,
+                      useasbases = kbal_data_sampled,
+                      linkernel = FALSE, scale = FALSE)
+K_maxvar_sqrt[1:10, 1:10]
+kbal_est$K[1:10,1:10]
 
 #### compare ests:
 
@@ -177,3 +231,89 @@ out$est$kpop_demos_wedu.mean
 out$est$kpop_all.mean
 
  
+
+
+#makeK with b = 2 to compensate for double counts -> so that's single counts then we get maxvarK b for single counts
+#but we have K with odubles so we need to multiply it by two:
+#alternatively try K-1 wiht bmaxvar and it should be the same
+K_1 <- makeK(kbal_data, b=1, useasbases = kbal_data_sampled,
+             linkernel = FALSE, scale = FALSE)
+#we have sqrt(2) factor in allx so that when we square it inside the the kernel, we divide double counts correctly
+
+
+#so the following should be the same:
+#1. K double counts with one hot encoding + b = 2 
+#2. K with sqrt(2) doubel counts + b = 1
+#3. K coming out of kbal() 
+
+
+#2.
+#so since we put sqrt 2 in data, the optimal b will be twice the size so to match the true run we need to 
+#divide that b by two
+K1_sqrt = makeK(kbal_data*sqrt(2), b=kbal_est$b/2, useasbases = kbal_data_sampled,
+           linkernel = FALSE, scale = FALSE)
+#3. this still works even though we we are double one hot encoidng making quadruple counts, we just increase the b by a factor of 2 as one can see
+K2 = kbal(kbal_data, sampled = kbal_data_sampled, cat_data = T, linkernel = T)
+K2$b
+kbal_est$b
+#1. xby 2 kbal_est$b bc the kbal_data here is already one hot encoded so it's redundantly one-hot encoding which means we get 4 counts and we need to multiply b by 2 to match the original output
+K2_indep = makeK(kbal_data, b=2*kbal_est$b, useasbases = kbal_data_sampled,
+                 linkernel = FALSE, scale = FALSE)
+
+
+K1_sqrt[1:5, 1:5]
+
+K2_indep[1:5, 1:5]
+K2$K[1:5, 1:5]
+kbal_est$K[1:5, 1:5]
+
+
+#this is just me figuring out the double one hot encoding commented above
+#why are they not one-hot encoding the same way
+# kbal_est$onehot_data[1:10,1:2]
+# K2$onehot_data[1:10,1:2]
+# #but this corresponds to their b values being different
+# K2$b
+# kbal_est$b
+# ncol(kbal_est$onehot_data)
+# ncol(K2$onehot_data)
+# #oh shit ofc bc i passed K2 alreadty one hot encoded data... so yeah it still works when you double everything that's good
+
+
+#fix this and do everyhting without the double one hot:
+
+kbal_data_raw <- bind_rows(pew %>% dplyr::select(recode_age_bucket,
+                                             recode_female,
+                                             recode_race,
+                                             recode_region,
+                                             recode_pid_3way,
+                                             recode_educ,
+                                             
+                                             recode_income_5way,
+                                             recode_relig_6way,
+                                             recode_born,
+                                             recode_attndch_4way),
+                       cces[subset, ] %>% dplyr::select(recode_age_bucket,
+                                                        recode_female,
+                                                        recode_race,
+                                                        recode_region,
+                                                        recode_pid_3way,
+                                                        recode_educ,
+                                                        recode_income_5way,
+                                                        recode_relig_6way,
+                                                        recode_born,
+                                                        recode_attndch_4way)) 
+
+#2.can't replicate teh sqrt(.5 ) thing here bc of the annoying one hot but see b_tinkering to see it work
+one_hot_kbal_data = one_hot(kbal_data_raw)
+K1_sqrt = makeK(one_hot_kbal_data, b=sqrt(0.5), useasbases = kbal_data_sampled,
+                linkernel = FALSE, scale = FALSE)
+K1_sqrt[1:5, 1:5]
+#3. 
+K2_corr = kbal(kbal_data_raw, sampled = kbal_data_sampled, cat_data = T, linkernel = T)
+K2_corr$K[1:5, 1:5]
+kbal_est$K[1:5, 1:5]
+K2_corr$b
+kbal_est$b
+
+

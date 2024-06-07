@@ -3,7 +3,7 @@ library(openai)
 
 
 #### set up global api key
-Sys.setenv(OPENAI_API_KEY= "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")
+Sys.setenv(OPENAI_API_KEY= "WHOOPS DONT UPLOAD TO GIT DUMBDUMB")
 
 
 

@@ -1,5 +1,5 @@
 ---
-title: "2016 Application - March 2023"
+title:  "2016 Application Results"
 author: "Ciara Sterbenz"
 date: '2023-04-03'
 output:
@@ -8,10 +8,10 @@ editor_options:
   chunk_output_type: console
 ---
 
-
 ```{r setup, include = F, echo = F}
 #rm(list = ls())
-knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = "H", out.extra = "")
 set.seed(9345876)
 
 ### Packages
@@ -23,18 +23,21 @@ library(kableExtra)
 #loading the updated data:
 path_data= "/Users/Ciara_1/Dropbox/kpop/2023/application/data/"
 path_weights = "/Users/Ciara_1/Dropbox/kpop/2023/application/weights/"
-#old weights
 weights_file = "app_update_june2023-06-28.Rdata"
 allB_weights_file = "/Users/Ciara_1/Downloads/app_allBPOPW_2023-07-01.Rdata"
+#flag for whether weighting estimators weight to the weighted CCES population or not
+#(the above weight files are with population weights only and kpop would need to be rerun without them so this must remain true with the attached weight files)
 POPW = TRUE
-TEST = FALSE
 ```
 
 
-```{r load_dat, echo = F}
-cces <- readRDS(paste0(path_data, "cces_lasso_061021.rds"))
-pew <- readRDS(paste0(path_data, "pew_lasso_061021.rds"))
+NB: can use manually generated data from data_prep_rep.R which should be named "cces_prepared.rds" and "pew_prepared.rds." Below uses the original prepared data "cces_prepared_orig.rds" and "pe_prepared_orig.rds" used by the authors.
 
+```{r load_dat, echo = F}
+working_path = getwd()
+path_data= paste0(working_path, "/generated_data/")
+cces <- readRDS(paste0(path_data, "cces_prepared_orig.rds"))
+pew <- readRDS(paste0(path_data, "pew_prepared_orig.rds"))
 ```
 
 
@@ -92,7 +95,6 @@ formula_rake_all_vars <- ~recode_age_bucket + recode_female +
     recode_race + recode_region + recode_pid_3way + recode_educ +
     recode_income_5way + recode_relig_6way + recode_born + recode_attndch_4way
 
-#CHECK THIS FORMULA XXXXXX
 formula_ps_reduc <- ~recode_age_3way + 
     recode_female + 
     recode_race + 
@@ -102,7 +104,6 @@ formula_ps_reduc <- ~recode_age_3way +
     recode_born +
     recode_educ_wh_3way 
 
-##### 9/8/23: try ps on acutally all variables (10)
 formula_ps_all <- ~recode_age_bucket +
     recode_female +
     recode_race +
@@ -113,7 +114,6 @@ formula_ps_all <- ~recode_age_bucket +
     recode_educ +
     recode_relig_6way +
      recode_attndch_4way
-
 formula_retrospective <- ~recode_age_bucket:recode_pid_3way + 
     recode_female:recode_pid_3way+ recode_race_reg_wh_educ:recode_pid_3way
 
@@ -130,17 +130,12 @@ cces <- bind_cols(cces, cces %>%
                          unite("strata_all", all.vars(formula_ps_all)) %>%
                       dplyr::select(strata_reduc, strata_all))
 
-cces = cces %>% mutate(recode_edu_wh_6way = case_when(recode_race == "White" ~ recode_educ,
-                                                      TRUE ~ "No split"))
-
 pew <- bind_cols(pew, pew %>% 
                      unite("strata_reduc", all.vars(formula_ps_reduc), 
                            remove = FALSE) %>%
                      unite("strata_all", all.vars(formula_ps_all)) %>%
                      dplyr::select(strata_reduc, strata_all))
 
-pew = pew %>% mutate(recode_edu_wh_6way = case_when(recode_race == "White" ~ recode_educ,
-                                                      TRUE ~ "No split"))
 #make targets
 create_targets <- function (target_design, target_formula) {
     target_mf <- model.frame(target_formula, model.frame(target_design))
@@ -154,7 +149,9 @@ create_targets <- function (target_design, target_formula) {
 
 # Weights Diagnostics
 
-```{r weights, echo = F}
+Produces Figure C.2 and Table C.4 in Appendix C.
+
+```{r weights, echo = F, include = F, warning= F, messages =F}
 load(paste0(path_weights,weights_file))
 
 cces_awt <- svydesign(~1, weights = ~commonweight_vv_post, data = cces)
@@ -268,7 +265,8 @@ rownames(numerical_dist_w) <- c("kpop",
                    "mean calibration: (all)",
                    "post-stratification: (reduced)")
 
-kable(numerical_dist_w, format = "latex", booktabs = TRUE, #digits =2,
+#table C.4 in appendix C
+weights_dist_table = kable(numerical_dist_w, format = "latex", booktabs = TRUE, #digits =2,
       col.names = c("Variance", "Max", "Min", "IQR", "Effective SS (Kish)",
                     "No. Units to 90% Sum of Total"),
       caption = "Numerical Summary of Distribution of Survey Weights"
@@ -313,11 +311,10 @@ dist_w <- ggplot(weights_gg) +
     geom_vline(aes(xintercept = top_90, color = Method)) +
     facet_grid(rows = vars(binary_method),  scales = "free_x", space = "free_x") +
     scale_color_brewer(palette="Paired") +
-    #ylim(0,.1) + 
     xlim(0,7) + 
     theme_bw()
-dist_w
-#ggsave(dist_w, file = "/Users/Ciara_1/Dropbox/kpop/2023/application/plots/dist_w_full.pdf", height = 6, width = 10)
+#plot C.2 in Appendix C
+#dist_w
 #ggsave(dist_w, file = "/Users/Ciara_1/Dropbox/kpop/2023/application/plots/dist_w_close.pdf", height = 6, width = 10)
 
 
@@ -327,9 +324,18 @@ sort(apply(weights_bmaxvar, 2, function(x) cor(na.omit(x), pew$diff_cces_on_pew[
 ```
 
 
+Table C.4  and Figure C.2 in Appendix C.4
+```{r table_c4, echo = F, warning= F, messages =F}
+weights_dist_table
+dist_w
+
+```
+
 # L1 and BiasBound
 
-```{r L1_bb, echo = F}
+Produces Table C.5 in Appendix C
+
+```{r L1_bb, echo = F, include =F}
 l1 = t(as.matrix(out$est[,grepl("l1", colnames(out$est))]))
 bbr= t(as.matrix(out$est[,grepl("bbr", colnames(out$est))]))
 bbopt = t(as.matrix(out$est[,grepl("bb", colnames(out$est)) & !grepl("bbr", colnames(out$est))]))
@@ -348,11 +354,15 @@ colnames(l1_bb_out)= c("L1 Original", "L1 Optimal", "Biasbound Original",
                        "Biasbound Optimal", "Biasbound Ratio")
                        
 l1_bb_out = l1_bb_out[-which(rownames(l1_bb_out) %in% c("kpop conv", "kpop+amf")),]
-kable(l1_bb_out, format = "latex", booktabs = TRUE, digits =4,
+#Table C.5 in appendix C
+kable_l1 = kable(l1_bb_out, format = "latex", booktabs = TRUE, digits =4,
       caption = "L1 and Biasbound Results for all kpop Methods in 2016 Election Application"
       )
 ```
 
+```{r l1_table, echo =F}
+kable_l1
+```
 
 
 # Results: Main Plots + Margins
@@ -362,16 +372,16 @@ main_res_plot <- function(target = "modeled vote choice",
                           weights_file,
                           specify_nonkpop = c("cces orig", "cces mod", 
                                               "unweighted",
-                                              #"pew unweighted",
-                                              "rake demos_noeduc", "rake demos_wedu", "rake all_vars",
+                                              "rake demos_noeduc", 
+                                              "rake demos_weduc",
+                                              "rake all_vars",
                                              "post strat_reduc",
-                                             #"post strat_all",
+                                             #post strat_all"
                                              "rake retrospective"),
                           specify_kpop = c("kpop", 
-                                           #"kpop conv", 
-                                           #"kpop_amf", #(same as kpop all_mf)
                                            "kpop demos_mf", "kpop demos_wedu_mf","kpop all_mf"), 
                           margins_formula = NULL,
+                          margins_formula_cces = NULL,
                           eval_margins = TRUE,
                           margins_pop_weighted_avg = TRUE,
                           margins_var_order = NULL) {
@@ -408,7 +418,6 @@ main_res_plot <- function(target = "modeled vote choice",
     b = out$est$b_out
     kpop_w <- out$weights$kpop_w
     kpop_conv_w <- out$weights$kpop_w_conv
-    kpop_mf_w <- out$weights$kpop_mf_w
     kpop_demos_w <- out$weights$kpop_demos_w
     kpop_demos_wedu_w <- out$weights$kpop_demos_wedu_w
     kpop_all_w <- out$weights$kpop_all_w
@@ -419,7 +428,7 @@ main_res_plot <- function(target = "modeled vote choice",
     cces_svy <- svydesign(ids = ~1, weights = ~commonweight_vv_post,
                       data = cces)
 
-     targets_rake_demos_noeduc <- create_targets(cces_svy,
+    targets_rake_demos_noeduc <- create_targets(cces_svy,
                                                     formula_rake_demos_noeduc)
      targets_rake_demos_weduc <- create_targets(cces_svy, formula_rake_demos_weduc)
      targets_rake_all_vars <- create_targets(cces_svy, 
@@ -502,9 +511,6 @@ main_res_plot <- function(target = "modeled vote choice",
 
     kpop_conv <- svydesign(~1, data = pew,
                                weights = kpop_conv_w)
-    
-    kpop_mf <-  svydesign(~1, data = pew,
-                              weights = kpop_mf_w)
 
     kpop_demos <-  svydesign(~1, data = pew,
                           weights = kpop_demos_w)
@@ -520,33 +526,33 @@ main_res_plot <- function(target = "modeled vote choice",
         if(is.null(margins_formula)) {
                 margins_formula <- ~recode_vote_2016 +
                     mod_cces_on_pew_pD + mod_cces_on_pew_pR + mod_cces_on_pew_pO +
-                    mod_pew_on_pew_pD + mod_pew_on_pew_pR + mod_pew_on_pew_pO + 
                     recode_pid_3way + 
-                    recode_female + recode_race +recode_region + recode_educ +recode_relig_6way+
+                    recode_female +  recode_age_bucket + recode_race +recode_region + recode_educ +recode_relig_6way+
                     recode_born + recode_attndch_4way + recode_income_5way +
-                    recode_age_bucket+recode_age+recode_agesq+recode_agecubed+recode_age_factor+
-                    recode_race_educ_reg + recode_educ_wh_3way + 
-                    recode_educ_pid_race +
-                    recode_pid_race + 
                     recode_educ_pid +
-                    recode_midwest_edu_race +
+                    recode_pid_race + 
+                    recode_educ_pid_race +
+                    recode_race_educ_reg + 
+                    recode_educ_wh_3way + 
                     recode_midwest_wh_edu + 
+                    recode_midwest_edu_race +
                     recode_race_reg_wh_educ 
     
               margins_formula_cces <- ~recode_vote_2016 +
-                mod_cces_on_cces_pD + mod_cces_on_cces_pR + mod_cces_on_cces_pO +
-                mod_pew_on_cces_pD + mod_pew_on_cces_pR + mod_pew_on_cces_pO + 
-                recode_pid_3way + 
-                recode_female + recode_race +recode_region + recode_educ + recode_relig_6way + 
-                recode_born + recode_attndch_4way + recode_income_5way +
-                recode_age_bucket + recode_age +recode_agesq+recode_agecubed+recode_age_factor +
-                recode_race_educ_reg + recode_educ_wh_3way + 
-                recode_educ_pid_race +
-                recode_pid_race + 
-                recode_educ_pid +
-                recode_midwest_edu_race +
-                recode_midwest_wh_edu + 
-                recode_race_reg_wh_educ 
+                    mod_cces_on_cces_pD + mod_cces_on_cces_pR + mod_cces_on_cces_pO +
+                    recode_pid_3way + 
+                    recode_female +  recode_age_bucket + recode_race +recode_region + recode_educ +recode_relig_6way+
+                    recode_born + recode_attndch_4way + recode_income_5way +
+                    recode_educ_pid +
+                    recode_pid_race + 
+                    recode_educ_pid_race +
+                    recode_race_educ_reg + 
+                    recode_educ_wh_3way + 
+                    recode_midwest_wh_edu + 
+                    recode_midwest_edu_race +
+                    recode_race_reg_wh_educ
+        } else {
+            if(is.null(margins_var_order)) { stop("Must specify a row order for the margins table in \"margins_var_order\" if manually specify a margins forumla in \"margins_formula\" argument ")}
         }
         
         margins <- round(cbind(
@@ -554,7 +560,6 @@ main_res_plot <- function(target = "modeled vote choice",
             cces_margins = svymean(margins_formula_cces, cces_svy, 
                                    na.rm =  TRUE),
             kpop = svymean(margins_formula, kpop),
-            kpop_mf = svymean(margins_formula, kpop_mf),
             kpop_conv = svymean(margins_formula, kpop_conv),
             kpop_demos = svymean(margins_formula, kpop_demos),
             kpop_demos_wedu = svymean(margins_formula, kpop_demos_wedu),
@@ -567,16 +572,13 @@ main_res_plot <- function(target = "modeled vote choice",
             rake_retrospective = svymean(margins_formula, rake_retrospective)) * 100, 5)
         
         rownames(margins) <- gsub("recode_", "", rownames(margins))
-        #we multiplied the recode_age margins by 100 unnecc above bc it' just a straight mean
+        #if seek age margin: we multiplied the recode_age margins by 100 unnecc above bc it' just a straight mean
         #so let's undo that
-        margins["age",] <- margins["age",]/100 
-        margins["agesq",] <- margins["agesq",]/100
-        margins["agecubed",] <- margins["agecubed",]/100
-    
+        if(grepl("recode_age(?!_)", as.character(margins_formula_cces)[2], perl = T)) { margins["age",] <- margins["age",]/100 }
+         
         margins_diff <- as.data.frame(margins) %>% 
             mutate(pew = cces_margins - pew,
                    kpop = cces_margins - kpop,
-                   kpop_mf = cces_margins - kpop_mf,
                    kpop_conv = cces_margins - kpop_conv,
                    kpop_demos = cces_margins - kpop_demos,
                    kpop_demos_wedu =cces_margins - kpop_demos_wedu,
@@ -589,7 +591,7 @@ main_res_plot <- function(target = "modeled vote choice",
                    rake_retrospective = cces_margins- rake_retrospective)
         rownames(margins_diff) <- rownames(margins)
         
-        
+
         if(margins_pop_weighted_avg) {
             #weighting the difference by the proportion in that bin in cces
             #margins_diff is in percents, so it's the percent difference btwn the sample and the pop on each margin, we want to take the average abs value of this difference, but we dont' just want the straight average, we want it weighted by the percent in that margin in the cces
@@ -598,10 +600,8 @@ main_res_plot <- function(target = "modeled vote choice",
             #don't square cces:
             w_margins_diff[, "cces_margins"] <- margins_diff[, "cces_margins"]
             #manually fix the one level margins: then we'll just report the abs diff on these
-            w_margins_diff["age",] <- margins_diff["age",]
-            w_margins_diff["agesq",] <- margins_diff["agesq",]
-            w_margins_diff["agecubed",] <- margins_diff["agecubed",]
-    
+            if(grepl("recode_age(?!_)", as.character(margins_formula_cces)[2], perl = T)) { w_margins_diff["age",] <- margins_diff["age",] }
+            
             wmabserr <- w_margins_diff 
             #clean names
             wmabserr$var <- gsub("[A-Z].+$|[0-9][0-9]\\+?$|(?<=way).*[0-9]k?$|(?<=bucket).*[0-9]$|(?<=educ)[0-9].*$","",
@@ -611,8 +611,7 @@ main_res_plot <- function(target = "modeled vote choice",
             wmabserr <- wmabserr %>% group_by(var) %>% 
                 summarize(pew_unweighted = sum(abs(pew)), 
                                             kpop = sum(abs(kpop)),
-                                            #kpop_conv = sum(abs(kpop_conv)), 
-                                            #kpop_mf = sum(abs(kpop_mf)),
+                                            kpop_conv = sum(abs(kpop_conv)), 
                                             kpop_demos = sum(abs(kpop_demos)),
                                             rake_demos_noeduc = sum(abs(rake_demos_noeduc)),
                                             kpop_demos_wedu = sum(abs(kpop_demos_wedu)),
@@ -620,16 +619,21 @@ main_res_plot <- function(target = "modeled vote choice",
                                             kpop_all = sum(abs(kpop_all)),
                                             rake_all_vars = sum(abs(rake_all_vars)), 
                                             rake_retrospective = sum(abs(rake_retrospective)),
-                                            post_strat_reduc = sum(abs(post_strat_reduc))
-                                            #post_strat_all = sum(abs(post_strat_all)),
+                                            post_strat_reduc = sum(abs(post_strat_reduc)),
+                                            post_strat_all = sum(abs(post_strat_all))
                                             )
+            #labels
+            popw_lab = "w/ Pop Weights"
+
         
         } else {
             #get cces proportions: for weighted L1 dist on age 
-            margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
+            if(grepl("recode_age_factor", as.character(margins_formula_cces)[2], perl = T)) {
+                margins_diff[(grep("age_factor", rownames(margins_diff))), ] <-
               (margins_diff[(grep("age_factor", 
                                   rownames(margins_diff))),
                             ])* (margins[grep("age_factor", rownames(margins)), "cces_margins"]/100)*length(levels(cces$recode_age_factor))
+            }
             
             wmabserr <- margins_diff 
             wmabserr$var <- gsub("[A-Z].+$|[0-9][0-9]\\+?$|(?<=way).*[0-9]k?$|(?<=bucket).*[0-9]$|(?<=educ)[0-9].*$","",
@@ -639,8 +643,7 @@ main_res_plot <- function(target = "modeled vote choice",
             wmabserr <- wmabserr %>% 
                 group_by(var) %>% summarize(pew_unweighted = mean(abs(pew)), 
                                         kpop = mean(abs(kpop)),
-                                        #kpop_conv = mean(abs(kpop_conv)), 
-                                        #kpop_mf = mean(abs(kpop_mf)),
+                                        kpop_conv = mean(abs(kpop_conv)), 
                                         kpop_demos = mean(abs(kpop_demos)),
                                         rake_demos_noeduc = mean(abs(rake_demos_noeduc)),
                                         kpop_demos_wedu = mean(abs(kpop_demos_wedu)),
@@ -648,17 +651,16 @@ main_res_plot <- function(target = "modeled vote choice",
                                         kpop_all = mean(abs(kpop_all)),
                                         rake_all_vars = mean(abs(rake_all_vars)), 
                                         rake_retrospective = mean(abs(rake_retrospective)),
-                                        post_strat_reduc = mean(abs(post_strat_reduc))
-                                        #post_strat_all = mean(abs(post_strat_all)),
+                                        post_strat_reduc = mean(abs(post_strat_reduc)),
+                                        post_strat_all = mean(abs(post_strat_all)),
                                         )
+            #labels
+            popw_lab = "NO Pop Weights"
         }
         
-    
-        #labels
-        popw_lab = "w/ Pop Weights"
         tol_label = paste0(" tol=",as.character(tolerance))
         maxit_label = paste0( " maxit=", as.character(maxit))
-        
+
         if(margins_pop_weighted_avg) {
             caption_m = paste0("W. Margins (Difference): Unscaled K ", "b=", round(b, 2),
                            popw_lab, " Age Buckets Only (no dnk) ",
@@ -685,7 +687,8 @@ main_res_plot <- function(target = "modeled vote choice",
                                  round(b, 2), popw_lab,
                                       " Age Buckets Only (no dnk) ", tol_label, maxit_label)   
         }
-     
+        
+        #drop outcome variables if thay are in margins
         wmabserr_nooutcomes <- wmabserr %>% 
             filter(!(grepl("xgb|mod|vote", var))) %>%
             arrange(nchar(var))
@@ -695,13 +698,11 @@ main_res_plot <- function(target = "modeled vote choice",
                       "relig_6way", "attndch_4way",
                       "pid_race", "educ_pid",
                       "educ_pid_race", "race_educ_reg", "educ_wh_3way", "midwest_wh_edu",
-                      "midwest_edu_race",
-                      "agesq", "agecubed", "age_factor")
+                      "midwest_edu_race", "race_reg_wh_educ")
         }
-        
+        #reorder rows
         wmabserr_nooutcomes <- wmabserr_nooutcomes[as.numeric(sapply(margins_var_order, 
                                                                      function(x) which(wmabserr_nooutcomes$var == x))),]
-        
         #automate the aesthetics of the tables based on the formulas used
         noedu_aes <- sapply(wmabserr_nooutcomes$var, function(x) {
                 ifelse(grepl(x, as.character(formula_rake_demos_noeduc)[2]),
@@ -725,23 +726,12 @@ main_res_plot <- function(target = "modeled vote choice",
         kpop_demos_wedu_aes <- wedu_aes
         kpop_all_aes <- all_aes
         
-        #dropping cont. age:
-        ps_reduc_aes_noage = ps_reduc_aes[1:(length(ps_reduc_aes) - 3)]
-        retro_aes_noage =  retro_aes[1:(length(ps_reduc_aes) - 3)]
-        noedu_aes_noage = noedu_aes[1:(length(ps_reduc_aes) - 3)]
-        
-        wedu_aes_noage = wedu_aes[1:(length(ps_reduc_aes) - 3)]
-        all_aes_noage = all_aes[1:(length(ps_reduc_aes) - 3)]
-        kpop_demos_aes_noage = kpop_demos_aes[1:(length(ps_reduc_aes) - 3)]
-        kpop_demos_wedu_aes_noage = kpop_demos_wedu_aes[1:(length(ps_reduc_aes) - 3)]
-        kpop_all_aes_noage = kpop_all_aes[1:(length(ps_reduc_aes) - 3)]
-        
         #clean up names for latex tables
         #change name so its clear that recode_educ is 6 way and fixing some labels that are slightly off bc i apparently could not count when i named them
         wmabserr$var[wmabserr$var == "income_5way"]<- "income (6way)"
         wmabserr$var[wmabserr$var == "educ_6way"]<- "educ (6way)"
         wmabserr$var[wmabserr$var == "relig_6way"]<- "relig (5way)"
-        wmabserr$var[wmabserr$var == "educ_wh_3way"]<- "educ (3way))$\times$white"
+        wmabserr$var[wmabserr$var == "educ_wh_3way"]<- "educ (3way)$\times$white"
         wmabserr$var[wmabserr$var == "race"]<- "race/ethnicity"
         wmabserr$var[wmabserr$var == "pid_3way"]<- "pid (3way)"
         wmabserr$var[wmabserr$var == "age_bucket"]<- "age (4way)"
@@ -755,57 +745,95 @@ main_res_plot <- function(target = "modeled vote choice",
         wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "region"]<- "region (4way)"
         wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "born"]<- "born-again (bin)"
         wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "age_bucket"]<- "age (4way)"
-        wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "educ_wh_3way"]<- "educ$\\times$white"
+        wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "educ_wh_3way"]<- "educ (3way)$\\times$white"
         wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "midwest_wh_edu"]<- "midwest$\\times$white$\\times$educ"
         wmabserr_nooutcomes$var[wmabserr_nooutcomes$var == "age_factor"]<- "age (factor)"
         
         kable_prep = wmabserr_nooutcomes
         kable_prep = structure(data.frame(kable_prep[,-1]), 
                                class = "data.frame") 
-        old_colnames = colnames(wmabserr_nooutcomes)
+        old_colnames = colnames(kable_prep)
         rownames(kable_prep) = wmabserr_nooutcomes$var
         rownames(kable_prep) =  str_replace_all(rownames(kable_prep),"_", "$\\\\times$")
-        colnames(kable_prep) <- linebreak(c(#"\nVariable",
-                                          "Pew\n Orig",
-                                          "kpop",
-                                          "kpop + mf:\n(demos)",
-                                          "mean calib:\n(demos)",
-                                          "kpop + mf:\n(d+edu)",
-                                          "mean calib:\n(d+edu)",
-                                          "kpop + mf:\n(all)",
-                                          "mean calib:\n(all)",
-                                          "mean calib:\n(retro)",
-                                          "post-strat\n(reduc)"))
+        all_cols = c("Pew\n Orig",
+                     "kpop",
+                     "kpop + conv",
+                     "kpop + mf:\n(demos)",
+                     "mean calib:\n(demos)",
+                     "kpop + mf:\n(d+edu)",
+                     "mean calib:\n(d+edu)",
+                     "kpop + mf:\n(all)",
+                     "mean calib:\n(all)",
+                     "mean calib:\n(retro)",
+                     "post-strat\n(reduc)", 
+                     "post-strat\n(all)")
+        #drop methods not asked for... kind of ugle but wokrs
+        select_cols = c("pew_unweighted", gsub("_mf", "", gsub("\\s", "_",specify_kpop), specify_kpop), gsub("\\s", "_",specify_nonkpop))
+        #goes through the specified cols and finds correct col number in kable
+        find_match = sapply(select_cols, function(x) which(grepl(paste0("^",x,"$"), colnames(kable_prep)))) 
+        subset = as.numeric(find_match)
+        subset = sort(subset[(!is.na(subset))])
+        subset
+        kable_prep = kable_prep[ , subset ]
+        colnames(kable_prep)
+        #subset also the object, keeping the first col of var names
+        wmabserr_nooutcomes = wmabserr_nooutcomes[, c(1, subset+1)]
+        colnames(kable_prep) =  linebreak(all_cols[subset ])
         
-        #drop age variables
-        kable_err <- kable(kable_prep[1:(nrow(kable_prep) - 3),],
+        #make kable for margins
+        #this got ugly when adjusted for user specified methods; kable seems to need column spec +1 when you do it after
+        #creating the kable() obj versus in the same line with a pipe...
+        kable_err <- kable(kable_prep,
                                    format = "latex",
                                    caption = caption_err,
                                    booktabs = T,
                                     escape = F,
-                                   digits = 2) %>% kable_styling() %>%
-                            column_spec(which(old_colnames == "kpop_demos"),
-                                    color =kpop_demos_aes_noage) %>%
-                            column_spec(which(old_colnames ==
-                                                  "rake_demos_noeduc"),
-                                    color = noedu_aes_noage) %>%
-                            column_spec(which(old_colnames ==
-                                                  "kpop_demos_wedu"),
-                                    color = kpop_demos_wedu_aes_noage) %>%
-                            column_spec(which(old_colnames ==
-                                                  "rake_demos_weduc"),
-                                    color = wedu_aes_noage) %>%
-                            column_spec(which(old_colnames == "rake_all_vars"),
-                                    color = all_aes_noage) %>%
-                            column_spec(which(old_colnames == "kpop_all"),
-                                    color =kpop_all_aes_noage) %>%
-                            column_spec(which(old_colnames ==
-                                                  "rake_retrospective"),
-                                    color =retro_aes_noage) %>% 
-                            column_spec(which(old_colnames ==
-                                                  "post_strat_reduc"),
-                                        color =ps_reduc_aes_noage)
-    
+                                   digits = 2) %>% kable_styling() 
+        
+        if("kpop_demos" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] == "kpop_demos")+1,
+                                    color =kpop_demos_aes) 
+            } 
+        if("rake_demos_noeduc" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "rake_demos_noeduc")+1,
+                                    color = noedu_aes)
+            }
+        if("kpop_demos_wedu" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "kpop_demos_wedu")+1,
+                                    color = kpop_demos_wedu_aes)
+            }
+        if("rake_demos_weduc" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "rake_demos_weduc")+1,
+                                    color = wedu_aes)
+            }
+        if("rake_all_vars" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] == "rake_all_vars")+1,
+                                    color = all_aes)
+            }
+        if("kpop_all" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] == "kpop_all")+1,
+                                    color =kpop_all_aes)
+            } 
+        if("rake_retrospective" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "rake_retrospective")+1,
+                                    color =retro_aes)
+            } 
+        if("post_strat_reduc" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "post_strat_reduc")+1,
+                                        color =ps_reduc_aes)
+            }
+        if("post_strat_all" %in% old_colnames[subset]) {
+                            kable_err = column_spec(kable_err, which(old_colnames[subset] ==
+                                                  "post_strat_all")+1,
+                                        color =ps_all_aes)
+         }
+        
+        #outcomes
          kable_om <- kable(wmabserr %>% 
                                filter( grepl("mod|vote", var)) %>%
                                arrange(nchar(var)),
@@ -814,9 +842,9 @@ main_res_plot <- function(target = "modeled vote choice",
                                booktabs = T,
                                digits = 2)
             
-        #dropping outcomes        
-        margins_out <- margins_diff[-c(1:9),]
-        margins_out <- margins_out[!grepl("age_factor", rownames(margins_out)), ] 
+        #pass out full margins
+        margins_out = margins_diff
+        #margins_out <- margins_diff[!grepl("age_factor|mod|vote", rownames(margins_diff)), ] 
     } else {
         kable_om = NULL
         kable_err = NULL
@@ -859,9 +887,6 @@ main_res_plot <- function(target = "modeled vote choice",
                                  na.rm = TRUE),
             kpop_conv = svymean(as.formula(paste0("~", var_pew)), kpop_conv,
                                       na.rm = TRUE),
-            kpop_amf = svymean(as.formula(paste0("~", var_pew)), kpop_mf, 
-                                    na.rm = TRUE),
-            
             kpop_demos_mf =svymean(as.formula(paste0("~", var_pew)), kpop_demos,
                                   na.rm = TRUE),
             kpop_demos_wedu_mf =svymean(as.formula(paste0("~", var_pew)), 
@@ -914,8 +939,6 @@ main_res_plot <- function(target = "modeled vote choice",
                                                   kpop, na.rm = TRUE), vote_form),
                 kpop_conv =svycontrast(svymean(~recode_vote_2016,
                                                   kpop_conv, na.rm = TRUE), vote_form),
-                kpop_amf = svycontrast(svymean(~recode_vote_2016,
-                                                  kpop_mf, na.rm = TRUE), vote_form),
                 
                 kpop_demos_mf = svycontrast(svymean(~recode_vote_2016,
                                                   kpop_demos, na.rm = TRUE), vote_form),
@@ -941,11 +964,8 @@ main_res_plot <- function(target = "modeled vote choice",
         df$b <- NA
         df$b[grep("kpop", df$source) ]<- b
         df$MF <- "NA"
-        df$MF[grep("mf", df$source) & !grep("amf", df$source)] <- "MF"
+        df$MF[grep("mf", df$source)] <- "MF"
         df$MF[!grepl("mf", df$source) & grepl("kpop", df$source)]<- "No MF"
-        df$aMF <- "NA"
-        df$aMF[grep("amf", df$source)] <- "aMF"
-        df$aMF[!grepl("amf", df$source) & grepl("kpop", df$source)]<- "No aMF"
         
         df$Conv <- "NA"
         df$Conv[!grepl("conv", df$source) & 
@@ -968,7 +988,6 @@ main_res_plot <- function(target = "modeled vote choice",
                                                    "mean calibration:\n (retrospective)", 
                                                    "kpop",
                                                    "kpop conv",
-                                                   "kpop amf",
                                                    "kpop+mf:\n (demos)",
                                                    "kpop+mf:\n (demos+edu)",
                                                    "kpop+mf:\n (all)"
@@ -982,8 +1001,10 @@ main_res_plot <- function(target = "modeled vote choice",
                              var_cces = "diff_cces_on_cces",
                              var_pew = "diff_cces_on_pew")
     
-    ####### adding new SEs to vote diff outcome  XXXXX
-    #(only have updated SEs for this outcome run in app_march_23.R) bc getting SEs for all outcomes requires running regressions on this outcome with the svd dims which is large and time consuming and since in the end we present only the vote diff outcome, I updated to only add the new SEs here
+    ####### adding new SEs to vote diff outcome 
+    #NB: only have updated SEs for this outcome run in app_march_23.R
+    #getting SEs for any other outcome requires running regressions on this outcome with the svd dims which is large and time consuming and since in the end we present only the vote diff outcome,
+    #I updated to only add the new SEs to the vote diff outcome alone
     #can get the SEs for other outcomes by changing "outcome" variable in app_march_23.R and rerunning
     #or saving the svd object and rerunning SEs running after the fact
     formula_null = ~1
@@ -1036,15 +1057,20 @@ main_res_plot <- function(target = "modeled vote choice",
     #these are not in percent, to match the svy package/convenience of plotting *100
     SEs = 100*SEs
     #make source column with matching names to comp_df to merge
+   #make source column with matching names to comp_df to merge
     SEs = cbind(source = c("unweighted", "rake demos_noeduc", "rake demos_weduc", "rake all_vars",
                            "rake retrospective", 
                            "kpop", "kpop conv", "kpop amf", "kpop demos_mf", "kpop demos_wedu_mf",
                            "kpop all_mf"), SEs)
+     #present only what's requested
+    SE = SEs %>% filter(source %in% c(specify_kpop, specify_nonkpop))
     
     source_row_order = matrix(comp_df_diff$source)
     comp_df_diff = merge(comp_df_diff, SEs, by = "source", all.x = T, all.y = T)
    
-    comp_df_diff = comp_df_diff[ apply(source_row_order, 1, function(x) which(comp_df_diff$source == x)), c(1,2,3,9:12,4,5,6,7,8)]
+    comp_df_diff = comp_df_diff[ apply(source_row_order, 1, function(x) which(comp_df_diff$source == x)),
+                                 c("source", "source_name", "est", "SE_svy","SE_linear", "SE_fixed", "SE_quasi", "SE_chad", 
+                                   "b", "MF", "Conv")]
 
     comp_df_margin <- df_build("recode_vote_2016", 
                                "margin_cces_on_cces",
@@ -1208,7 +1234,7 @@ main_res_plot <- function(target = "modeled vote choice",
                                     " Weighted\n CCES\n Target", " "))
 
     #UPDATED TO SE LINEAR = linearization SEs for the main plot; old was SE_svy
-    cat("NB: plot_diff combines linearization SEs for raking, kpop, and PS with HT SEs for the unweighted pew \n")
+    cat("NB: Main Result plot \"plot_diff\" combines linearization SEs for raking, kpop, and PS with HT SEs for the unweighted pew \n")
     comp_df_plot_diff <- ggplot(comp_df_diff_plot) +
         geom_pointrange(aes(x = source_name, 
                             y = est, 
@@ -1344,7 +1370,6 @@ main_res_plot <- function(target = "modeled vote choice",
               hjust = 0, size = 2.6) +
     theme()
 
-    ### XXX ADD Final Plot with what alt SEs want to use.
     comp_df_margin_plot <- comp_df_margin %>% filter(!str_detect(source, "cces")) 
     comp_df_plot_margin <-
         ggplot() +
@@ -1484,10 +1509,6 @@ main_res_plot <- function(target = "modeled vote choice",
         theme(legend.title = element_blank() )
 
     
-   
-#     kable_cols_string = c("& Pew & kpop & kpop + mf:& mean calib: & kpop + mf: & mean calib: & kpop + mf: & mean calib:& mean calib:& PS \\
-# Variable & Orig &  & (demos) & (demos) & (d+edu) & (d+edu) & (all) & (all) & retro & reduc\\")
-    
     out <- list(plot_diff = comp_df_plot_diff,
                 plot_diff_allSEs = comp_df_plot_diff_allSEs,
                 plot_margin = comp_df_plot_margin,
@@ -1501,9 +1522,7 @@ main_res_plot <- function(target = "modeled vote choice",
                 wmabserr = wmabserr,
                 wmabserr_nooutcomes = wmabserr_nooutcomes,
                 kable_err = kable_err,
-                #kable_cols_string = kable_cols_string,
                 kable_outmom = kable_om,
-                problem = problem,
                 problem_reduc = problem_reduc,
                 problem_all = problem_all,
                 comp_df_diff = comp_df_diff,
@@ -1520,154 +1539,103 @@ main_res_plot <- function(target = "modeled vote choice",
     return(out)
 }
 
-
 ```
 
+Produces main results in section 6:
+Weighted estimates in Figure 1 and Appendix Table C.3 
+Margins on auxiliary variables in Table 4
+Standard Error Estimates by SE Estimator in Appendix Table D3.3
 
+Additional results not included in the paper:
+All margins on all available variables
+Plot comparing different SE estimators
+Plot examining modeled vote margin rather than difference
+Plots examining modeled probability of voting Democrat and Republican separately
+Plots examining weighted actual self-reported Pew likely vote choice (margin and difference)
 
+Interested replicators may also adjust the function call to request a different set of weighting estimators (additional available include kpop with forced ebalance convergence and post stratification on all variables), different margins, margins not weighted by the CCES population margins (which themselves are weighted by CCES's internal weights), or change the population target from the modeled vote difference in the weighted CCES to the actual self-reported vote difference in the weighted CCES.
 
-```{r run_res_main, echo = F}
+```{r run_res_main, echo = F, include = F}
 #run to get plot without ps all
-test = main_res_plot(weights_file = weights_file, 
-                     target = "modeled vote choice",
-                    specify_nonkpop = c("cces orig", "cces mod", 
-                                              "unweighted",
-                                              #"pew unweighted",
-                                              "rake demos_noeduc", "rake demos_weduc", "rake all_vars",
-                                             #"post stratification", 
-                                              "post strat_reduc",
-                                             #"post strat_all",
-                                             "rake retrospective"),
-                    specify_kpop = c("kpop", 
-                                     #"kpop conv", 
-                                     "kpop demos_mf", "kpop demos_wedu_mf",
-                                     "kpop all_mf")
-                  )
+#default run of function reports all methods in paper, but can adjust for fewer or more (post-stratification on all variables and kpop with forced convergence)
+results = main_res_plot(weights_file = weights_file, 
+                     target = "modeled vote choice")
 #look at results:
-test$comp_df_diff
-test$CIs_diff_plot
-test$kable_diff
-test$comp_df_diff_all
-test$kable_err
 
-#main res plot
-test$plot_diff
+##### Main Weighted Outcome Results ####
+#Main Plot Results: Figure 1 in Section 6 - weighted estimates by various methods
+results$plot_diff
 # ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/app_votediff_linSEs_svdMF_Final.pdf",
 #       width = 8.5, height = 4.5)
 
-#re-run to get kable with ps(all) included for appendix
-test2 = main_res_plot(weights_file = weights_file, 
-                     target = "modeled vote choice",
-                    specify_nonkpop = c("cces orig", "cces mod", 
-                                              "unweighted",
-                                              #"pew unweighted",
-                                              "rake demos_noeduc", "rake demos_weduc", "rake all_vars",
-                                             #"post stratification", 
-                                              "post strat_reduc",
-                                             "post strat_all",
-                                             "rake retrospective"),
-                    specify_kpop = c("kpop", 
-                                     #"kpop conv", 
-                                     "kpop demos_mf", "kpop demos_wedu_mf",
-                                     "kpop all_mf"
-                                    # "kpop amf"
-                                     ))
+#cleaned latex numerical version of this plot: Table C.3 in Appendix C
+results$kable_diff
+#dataframe that produces Figure 1 in Section 6
+results$CIs_diff_plot
 
-test2$kable_diff
-test$kable_diff_allSEs
+
+######## Margins #########
+###### Table 4: Weighted Mean Absolute Error across a number of Auxiliary Variables ####
+results$kable_err
+#this is built using the object
+results$wmabserr_nooutcomes
+#full raw margins are in the following object
+head(results$margins_diff)
+
+##### Standard Errors #####
+#kable results that produce Table D3.3 in Appendix D
+results$kable_diff_allSEs
+#this table is produced from the object: "comp_df_diff"
+results$comp_df_diff
+
+
+
+###### Additional Results
+#plot comparing all SEs 
+results$plot_diff_allSEs
+#results comparing the modeled vote margin rather than difference: p(D) - p(R)/ sum(p(D) + p(R))
+#this plot does not have updated linearization SEs for kpop, instead using very conservative HT
+results$plot_margin
+#results of only p(R) modeled outcome
+#this plot does not have updated linearization SEs for kpop, instead using very conservative HT
+results$plot_pR
+#results of only p(D) modeled outcome
+#this plot does not have updated linearization SEs for kpop, instead using very conservative HT
+results$plot_pD
+#plot of the pew respondents actual reported vote choice rather than their CCES 3way lasso multinomial model projection
+#as can be seen, all methods are severely biased, likely due to misreported vote preference or late swings
+results$plot_real_margin
+results$plot_real_diff
+
 ```
 
 
 \clearpage
 
-```{r plot_fig, echo = F, fig.align = 'center', fig.width = 14, fig.height = 9}
-#comparing differeint SE estimators
-test$plot_diff_allSEs
+Figure 1 - Weighted Estimates
 
+```{r fig_1, echo = F, fig.align = 'center', fig.width = 14, fig.height = 9}
+results$plot_diff_allSEs
 ```
 
+Appendix Table D3.3 - Numerical Results of Figure 1 
 
-
-```{r K_scree, eval = F}
-############# K Scree plots
-#loads the full Kbal results, including the svd(K) object which is large
-load("/Users/Ciara_1/Dropbox/kpop/2023/application/weights/DEBUG_full_kbal_obj_2023-04-06.Rdata")
-
-#make Kernels with different b values and take SVD
-#OR, load from .Rdata since this takes some time
-load("/Users/Ciara_1/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/Kscree_svds.Rdata")
-#NB: the factof of sqrt(1/2) is included because the onehot data has doubled counts everywhere which needs to be "undone" either in the denominator b, or in the data itself
-#in other words:
-#K orig = onehotdata + 2*kbal_est$b: label should be still be b = 5.66  
-#K b/2 = onehotdata + kbal_est$b: label should be b = 5.66/2 though
-#K b*2 = onehotdata + 4*kbal_est$b: label should be b = 5.66*2
-#K b*4 = onehotdata + 8*kbal_est$b: label should be b = 5.66*4
-#this can all equivalently be accomplished by using the correct b but including the sqrt(1/2) factor in 
-#all one hot columns; I will do that to avoid confusion if ever coming back to this:
-#K orig = sqrt(1/2)*onehotdata + kbal_est$b: label should be b = 5.66  
-#K b/2 = sqrt(1/2)*onehotdata + kbal_est$b/2: label should be b = 5.66/2 
-#K b*2 = sqrt(1/2)*onehotdata + 2*kbal_est$b: label should be b = 5.66*2
-#K b*4 = sqrt(1/2)*onehotdata + 4*kbal_est$b: label should be b = 5.66*4
-
-#Make Kernels with different b choices:
-#b = 1/2 maxvar(K)
-# K_05_b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
-#                  b=(1/2)*kbal_est$b, 
-#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
-#                    linkernel = FALSE, scale = FALSE)
-# #b = 2*maxvar(K)
-# K_2b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
-#                  b= 2*kbal_est$b, 
-#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
-#                    linkernel = FALSE, scale = FALSE)
-# #b = 4*maxvar(K)
-# K_4b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
-#                  b=4*kbal_est$b, 
-#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
-#                    linkernel = FALSE, scale = FALSE)
-# K_05_b[1:3,1:3]
-# kbal_est$K[1:3,1:3]
-# K_2b[1:3, 1:3]
-# K_4b[1:3, 1:3]
-# 
-# #the horribly time consuming part
-# dim(K_05_b)
-# K_05_b_svd <- svd(K_05_b)
-# K_2b_svd <- svd(K_2b)
-# K_4b_svd <- svd(K_4b)
-#save(K_05_b_svd,K_2b_svd,K_4b_svd, file = "./Kscree_svds.Rdata" )
-
-ggdata <- data.frame(b = c( rep(paste(round((1/2)*kbal_est$b,2), "= argmax V(K)*1/2"), 2052),
-                            rep(paste(round(kbal_est$b,2), "= argmax V(K)"), 2052),
-                            rep(paste(round(2*kbal_est$b,2), "= argmax V(K)*2"), 2052),
-                            rep(paste(round(4*kbal_est$b,2), "= argmax V(K)*4"), 2052) 
-                            ),
-                     d = c(K_05_b_svd$d/K_05_b_svd$d[1],
-                           kbal_est$svdK$d/kbal_est$svdK$d[1],
-                           K_2b_svd$d/K_2b_svd$d[1],
-                           K_4b_svd$d/ K_4b_svd$d[1]),
-                     index = rep(c(1:2052), 4))
-
-ggdata$b = factor(ggdata$b, levels = unique(ggdata$b))
-
-ggplot(ggdata) +
-  geom_line(aes(y = d, x = index, color = b)) +
-  xlim(0,50) +
- # ylim(0,1) +
-  ylab("Singular Values (Scaled)") +
-  xlab("Singular Vector") +
-  ggtitle("K Scree Plot by Choice of b (denominator of Gaussian exponent)") +
-  scale_color_discrete(name = "Choice of b") +
-  theme_bw()
-#ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/screeplot_scaled_variousb.pdf", height = 4, width = 6)
-
+```{r table_d33, echo = F}
+results$kable_diff_allSEs
 ```
 
+Table 4 - Auxiliary Variable Margins
+
+```{r table_4, echo = F}
+results$kable_err
+```
 
 
 # Plots over Range of b
 
-```{r rangeBplot}
+Results across a range of values of b are produces using a separate weights file not produced by app_kpop_run.R but an expansion which runs the same code in parallel and saves to a weights file. The resulting weights file object has a slightly different format that that produced by app_kpop_run.R as a result. Interested replicators may request this parallelized version from the authors, but given that the code is not substantively different from that in app_kpop_run.R, we have instead simply supplied the weight file to load directly and produce the following results.
+
+```{r rangeBplot, echo = F}
 
 rangeb_plot <- function(clean_nonkpop = TRUE, 
                     specify_nonkpop = NULL,
@@ -1695,13 +1663,13 @@ rangeb_plot <- function(clean_nonkpop = TRUE,
      problem_all <- unique(pew$strata_all)[!(unique(pew$strata_all) %in%
                                                    unique(cces$strata_all))]
      if(length(problem_reduc) != 0) {
-     warning(paste("NB: strata reduc present in pew not in cces (3way)will be dropped in ps:\n",
+     warning(paste("NB: strata reduc present in pew not in cces will be dropped in ps:\n",
                    "\nrepresenting", nrow(pew %>% filter(strata_reduc %in%
                                                              problem_reduc)),
                    "/", nrow(pew), "\n"), immediate. = F)
      }
      if(length(problem_all) != 0) {
-     warning(paste("NB: strata all present in pew not in cces (3way)will be dropped in ps:\n",
+     warning(paste("NB: strata all present in pew not in cces will be dropped in ps:\n",
                    "\nrepresenting", nrow(pew %>% filter(strata_all %in% problem_all)),
                    "/", nrow(pew), "\n"), immediate. = F)
      }
@@ -1710,8 +1678,6 @@ rangeb_plot <- function(clean_nonkpop = TRUE,
     pew_w_srs <-  svydesign(ids = ~1, weights = ~weight, data = pew)
 
     load(allB_weights_file)
-    #cat("loading: allB_cat_par_wTRUE_m500_t1e-06_2021-03-18.Rdata\n w/tol=", tolerance, "maxit=",maxit, 
-     #   "popw=", POPW)
     cat("loading: allB_2023_POPW_2023-07-01.Rdata\n w/tol=", tolerance, "maxit=",maxit, 
        "popw=", POPW)
     weights = lapply(cat_app, `[[`, 3)
@@ -2257,6 +2223,8 @@ rangeb_plot <- function(clean_nonkpop = TRUE,
     out <- list(orig_estimates = clean, 
                 plot_diff = comp_df_plot_diff,
                 comp_df_diff = comp_df_diff,
+                numdims_table = numdims,
+                kable_numdims = kable_numdims,
                 problem_reduc = problem_reduc,
                 problem_all = problem_all)
     return(out)
@@ -2266,16 +2234,115 @@ rangeb_plot <- function(clean_nonkpop = TRUE,
 
 ```
 
+Produces Figure C.3 and table C.6 in Appendix C.5 of kpop estimates across a range of choices of $b$.
 
-```{r run_allBplot}
+```{r run_allBplot, echo= F, include =F}
+
 allB <- rangeb_plot()
-allB$plot_diff
+
 # ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/allb_svdMF_Final.pdf",
 #       width = 8, height = 6)
-allB$orig_est %>% filter(b_out == 2)
-allB$orig_est
+#Table C.6 in Appendix C
+allB$kable_numdims
+#from object
+allB$numdims_table
+```
+
+```{r allb_figs, echo = F, fig.align = 'center', fig.width = 14, fig.height = 9}
+allB$plot_diff
+#Table C.6 in Appendix C
+allB$kable_numdims
+```
+
+
+
+# K scree plot
+
+The following loads the svd of several kernel matrices to save time. They can easily be directly reproduced using the code below, it is just time consuming to compute.
+
+
+
+```{r K_scree, eval = T, include = F}
+############# K Scree plots
+#loads the full Kbal results, including the svd(K) object which is large
+load("/Users/Ciara_1/Dropbox/kpop/2023/application/weights/DEBUG_full_kbal_obj_2023-04-06.Rdata")
+
+#make Kernels with different b values and take SVD
+#OR, load from .Rdata since this takes some time
+load("/Users/Ciara_1/Dropbox/kpop/2023/application/weights/Kscree_svds.Rdata")
+
+#NB: the factor of sqrt(1/2) is included because the onehot data has doubled counts everywhere which needs to be "undone" either in the denominator b, or in the data itself
+#in other words:
+#K orig = onehotdata + 2*kbal_est$b: label should be still be b = 5.66  
+#K b/2 = onehotdata + kbal_est$b: label should be b = 5.66/2 though
+#K b*2 = onehotdata + 4*kbal_est$b: label should be b = 5.66*2
+#K b*4 = onehotdata + 8*kbal_est$b: label should be b = 5.66*4
+#this can all equivalently be accomplished by using the correct b but including the sqrt(1/2) factor in 
+#all one hot columns; I will do that to avoid confusion if ever coming back to this:
+#K orig = sqrt(1/2)*onehotdata + kbal_est$b: label should be b = 5.66  
+#K b/2 = sqrt(1/2)*onehotdata + kbal_est$b/2: label should be b = 5.66/2 
+#K b*2 = sqrt(1/2)*onehotdata + 2*kbal_est$b: label should be b = 5.66*2
+#K b*4 = sqrt(1/2)*onehotdata + 4*kbal_est$b: label should be b = 5.66*4
+
+#Make Kernels with different b choices:
+#b = 1/2 maxvar(K)
+# K_05_b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
+#                  b=(1/2)*kbal_est$b, 
+#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# #b = 2*maxvar(K)
+# K_2b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
+#                  b= 2*kbal_est$b, 
+#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# #b = 4*maxvar(K)
+# K_4b <- makeK(sqrt(1/2)*kbal_est$onehot_data,
+#                  b=4*kbal_est$b, 
+#                  useasbases = c(rep(1, nrow(pew)), rep(0, nrow(cces))),
+#                    linkernel = FALSE, scale = FALSE)
+# K_05_b[1:3,1:3]
+# kbal_est$K[1:3,1:3]
+# K_2b[1:3, 1:3]
+# K_4b[1:3, 1:3]
+# 
+# #the horribly time consuming part
+# dim(K_05_b)
+# K_05_b_svd <- svd(K_05_b)
+# K_2b_svd <- svd(K_2b)
+# K_4b_svd <- svd(K_4b)
+#save(K_05_b_svd,K_2b_svd,K_4b_svd, file = "./Kscree_svds.Rdata" )
+
+ggdata <- data.frame(b = c( rep(paste(round((1/2)*kbal_est$b,2), "= argmax V(K)*1/2"), 2052),
+                            rep(paste(round(kbal_est$b,2), "= argmax V(K)"), 2052),
+                            rep(paste(round(2*kbal_est$b,2), "= argmax V(K)*2"), 2052),
+                            rep(paste(round(4*kbal_est$b,2), "= argmax V(K)*4"), 2052) 
+                            ),
+                     d = c(K_05_b_svd$d/K_05_b_svd$d[1],
+                           kbal_est$svdK$d/kbal_est$svdK$d[1],
+                           K_2b_svd$d/K_2b_svd$d[1],
+                           K_4b_svd$d/ K_4b_svd$d[1]),
+                     index = rep(c(1:2052), 4))
+
+ggdata$b = factor(ggdata$b, levels = unique(ggdata$b))
+
+#Figu
+k_scree_fig <- ggplot(ggdata) +
+  geom_line(aes(y = d, x = index, color = b)) +
+  xlim(0,50) +
+  ylab("Singular Values (Scaled)") +
+  xlab("Singular Vector") +
+  ggtitle("K Scree Plot by Choice of b (denominator of Gaussian exponent)") +
+  scale_color_discrete(name = "Choice of b") +
+  theme_bw()
+#ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/screeplot_scaled_variousb.pdf", height = 4, width = 6)
 
 ```
 
 
 
+Figure B.1 in Appendix B
+
+```{r k_scree_fig, echo =F, fig.align = 'center', fig.width = 14, fig.height = 9, warning=F, message=FALSE}
+ k_scree_fig 
+
+```

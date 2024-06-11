@@ -305,7 +305,7 @@ weights_gg <- weights_gg %>% mutate(top_90 = c(rep(c(sorted[sum_90perc[1],1],
                                                    sorted[sum_90perc[7],7],
                                                    sorted[sum_90perc[8],8]), each = n_samp)))
 
-
+#plot C.2 in Appendix C
 dist_w <- ggplot(weights_gg) + 
     geom_density(aes(x = weight, color = Method)) + 
     geom_vline(aes(xintercept = top_90, color = Method)) +
@@ -313,10 +313,6 @@ dist_w <- ggplot(weights_gg) +
     scale_color_brewer(palette="Paired") +
     xlim(0,7) + 
     theme_bw()
-#plot C.2 in Appendix C
-#dist_w
-#ggsave(dist_w, file = "/Users/Ciara_1/Dropbox/kpop/2023/application/plots/dist_w_close.pdf", height = 6, width = 10)
-
 
 ###quickly look at the correlation bewteen weights and the outcome to see how the var is so reduced?
 sort(apply(weights_bmaxvar, 2, function(x) cor(na.omit(x), pew$diff_cces_on_pew[!is.na(x)] ) ))
@@ -1565,8 +1561,6 @@ results = main_res_plot(weights_file = weights_file,
 ##### Main Weighted Outcome Results ####
 #Main Plot Results: Figure 1 in Section 6 - weighted estimates by various methods
 results$plot_diff
-# ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/app_votediff_linSEs_svdMF_Final.pdf",
-#       width = 8.5, height = 4.5)
 
 #cleaned latex numerical version of this plot: Table C.3 in Appendix C
 results$kable_diff
@@ -2240,8 +2234,6 @@ Produces Figure C.3 and table C.6 in Appendix C.5 of kpop estimates across a ran
 
 allB <- rangeb_plot()
 
-# ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/allb_svdMF_Final.pdf",
-#       width = 8, height = 6)
 #Table C.6 in Appendix C
 allB$kable_numdims
 #from object
@@ -2334,7 +2326,6 @@ k_scree_fig <- ggplot(ggdata) +
   ggtitle("K Scree Plot by Choice of b (denominator of Gaussian exponent)") +
   scale_color_discrete(name = "Choice of b") +
   theme_bw()
-#ggsave("/Users/Ciara_1/Dropbox/kpop/2023/application/plots/screeplot_scaled_variousb.pdf", height = 4, width = 6)
 
 ```
 

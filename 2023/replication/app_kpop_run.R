@@ -14,7 +14,9 @@ library(glmnet)
 
 #set appropriate path for prepared cces and pew data files, created in data_prep.R
 path_data= paste0(getwd(),"generated_data/" ) 
-#to improve runtime and prevent issues, saveMEM will toggle removing the large kpop result objects from the envirnoment
+#path where weights will be saved
+path_save = paste0(getwd(), "/weights/")
+#to improve runtime and prevent issues, saveMEM will toggle removing the large kpop result objects from the environment
 #after the main results have been extracted
 saveMEM = TRUE
 
@@ -470,6 +472,6 @@ out$residuals = rbind(b = b_out,
 
 ###################################### 
 #save output
-# save(out, tolerance, maxit, POPW,min_num_dims, max_num_dims, increment,TEST,
-#      file = paste0(path, "app_update_", 
-#                    Sys.Date(), ".Rdata"))
+save(out, tolerance, maxit, POPW,min_num_dims, max_num_dims, increment,TEST,
+     file = paste0(path_save, "app_update_",
+                   Sys.Date(), ".Rdata"))

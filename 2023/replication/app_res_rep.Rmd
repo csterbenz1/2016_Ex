@@ -21,10 +21,11 @@ library(kbal)
 library(knitr)
 library(kableExtra)
 #loading the updated data:
-path_data= "/Users/Ciara_1/Dropbox/kpop/2023/application/data/"
-path_weights = "/Users/Ciara_1/Dropbox/kpop/2023/application/weights/"
+path_weights = paste0(getwd(), "/weights/")
+path_data= paste0(getwd(), "/generated_data/")
+#if rerun app_kpop_run.R to save new weights, change filename here
 weights_file = "app_update_june2023-06-28.Rdata"
-allB_weights_file = "/Users/Ciara_1/Downloads/app_allBPOPW_2023-07-01.Rdata"
+allB_weights_file = "app_allBPOPW_2023-07-01.Rdata"
 #flag for whether weighting estimators weight to the weighted CCES population or not
 #(the above weight files are with population weights only and kpop would need to be rerun without them so this must remain true with the attached weight files)
 POPW = TRUE

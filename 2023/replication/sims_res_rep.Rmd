@@ -14,8 +14,6 @@ header-includes:
 \label{app:simulations}
 
 
-NB: This is the file used to produce the final sims results using sims_23_prev_svdX_serires_ISI.R run (without "_ISI") on the ISI cluster on Oct 4, 2023.
-
 In Section \ref{subsec:sim_intro} we briefly described our simulation study. While \textit{kpop} achieves good balance and low bias estimates in our application,  we employ a simulation setting to more fully investigate performance on both bias and variability. To construct a realistic simulation, we employ the same setting above, but specify the selection and outcome models to have direct control over the mechanism of bias. 
 
 ```{r libs, include =F, message=FALSE, warning= F}
@@ -28,10 +26,11 @@ library(survey)
 
 ```{r filenames, include = F}
 #r5 non-linear 1k sims:
-r5_nonlin_file = "/Users/Ciara_1/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/2023/sims/res_kpopTRUE_noise1_on2023-10-04_nsims1000.RData"
+path_weights = paste0(getwd(), "/weights/")
+#r^2=.5 non-linear 1k sims file
+r5_nonlin_file = "sims_kpop_2023-10-04_nsims1000.RData"
+#originally named: "res_kpopTRUE_noise1_on2023-10-04_nsims1000.RData" run on the ISI cluster with file sims_23_prev_svdX_series.R
 
-#load data
-path_data= "/Users/Ciara_1/Documents/Cloud Documents/Hazlett:Hartman RA/2016 Election/2016_Ex/2023/replication/generated_data/"
 ### Load Target Data
 cces <- readRDS(paste0(path_data, "cces_prepared_orig.rds"))
 ```
@@ -177,7 +176,7 @@ empirical_SEs <- function(sims, eval_kpop = T, na_rm = F) {
 
 
 ```{r r5_nonlin, echo = F}
-load(r5_nonlin_file)
+load(paste0(path_weights, r5_nonlin_file))
 
 #Selection Model:
 selection_coefs_kable = data.frame(coefs)
@@ -316,8 +315,8 @@ The resulting bias across a full range of methods is displayed in the table belo
 
 ```{r r5_res, echo=F}
 #box plot of estimates
-est <-sims[1]$sims
-
+est <- sims[1]$sims
+est
 plot = est
 margin_sim = mean(outcome)*100
 plot_lasso_margin_r5 <- plot %>% 
@@ -547,12 +546,12 @@ for(i in 1:length(b_vec)) {
     sum_90perc <- matrix(NA, ncol(sorted), nrow =1 )
     #old school nested loop, but it's slow so let's go backward
     for(j in 1:ncol(sorted)) {
-        for(i in nrow(sorted):1) {
+        for(k in nrow(sorted):1) {
             #cat("i=", i, "sum=", sum(sorted[c(1:i), j]), "\n")
-            if( sum(sorted[c(1:i), j]) <.9*n_samp) {
+            if( sum(sorted[c(1:k), j]) <.9*n_samp) {
                 #having the stop index be how many units we need to be just over the 90% line
                 #that means we stop at the first unit to get us under the 90% line, we need to add one to
-                sum_90perc[1,j] = i+1
+                sum_90perc[1,j] = k+1
                 #cat("stopping at", i)
                 break
             }

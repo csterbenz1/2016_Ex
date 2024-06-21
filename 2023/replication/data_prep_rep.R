@@ -44,16 +44,16 @@ west_states = c("California", "Oregon", "Washington", "Hawaii", "New Mexico",
 ################################################################################
 
 cat("Loading raw Election data\n")
-if(!file.exists(paste0(working_path, "/generated_data/1976-2020-president.dta"))) {
-    if (!file.exists(paste0(working_path, "/generated_data"))) {
-        dir.create(file.path(paste0(working_path, "/generated_data")))
+if(!file.exists(paste0(working_path, "/data/1976-2020-president.dta"))) {
+    if (!file.exists(paste0(working_path, "/data"))) {
+        dir.create(file.path(paste0(working_path, "/data")))
     }
     cat("Downloading Election Data from dataverse and writing to local bin \n")
     writeBin(get_file_by_name(
         filename = "1976-2020-president.tab",
         dataset  = "doi:10.7910/DVN/42MVDX",
         server   = "dataverse.harvard.edu"
-    ), paste0(working_path, "/generated_data/1976-2020-president.dta"))
+    ), paste0(working_path, "/data/1976-2020-president.dta"))
 }
 election_2016 <- tryCatch(read.dta(paste0(working_path, "/generated_data/1976-2020-president.dta")), 
                           error = function(e) NA)
@@ -437,17 +437,17 @@ pew <- pew %>%
 
 cat("Loading raw CCES data\n")
 if(!file.exists(paste0(working_path, "/generated_data/CCES16_Common_Content.dta"))) {
-    if (!file.exists(paste0(working_path, "/generated_data"))) {
-        dir.create(file.path(paste0(working_path, "/generated_data")))
+    if (!file.exists(paste0(working_path, "/data"))) {
+        dir.create(file.path(paste0(working_path, "/data")))
     }
     cat("Downloading CCES Data from dataverse and writing to local bin (large, may take some time) \n")
     writeBin(get_file_by_name(
         filename = "CCES16_Common_OUTPUT_Feb2018_VV.tab",
         dataset  = "doi:10.7910/DVN/GDF6Z0",
         server   = "dataverse.harvard.edu"
-    ), paste0(working_path, "/generated_data/CCES16_Common_Content.dta"))
+    ), paste0(working_path, "/data/CCES16_Common_Content.dta"))
 }
-cces <- read.dta(paste0(working_path, "/generated_data/CCES16_Common_Content.dta"))
+cces <- read.dta(paste0(working_path, "/data/CCES16_Common_Content.dta"))
 
 # Common Content Weight -- commonweight_vv_post (post wave with vote validation)
 ### Drop invalid cases
